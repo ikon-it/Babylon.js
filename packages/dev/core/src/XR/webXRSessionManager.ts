@@ -74,6 +74,10 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      */
     public onXRSessionInit: Observable<XRSession> = new Observable<XRSession>();
     /**
+     * Fires when the xr session is moved to another scene (in persistent mode)
+     */
+    public onXRSessionMoved: Observable<XRSession> = new Observable<XRSession>();
+    /**
      * Underlying xr session
      */
     public session: XRSession;
@@ -149,6 +153,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         if (this.inXRSession) {
             // now simulate that event for the new stuff
             this.onXRSessionInit.notifyObservers(this.session);
+            this.onXRSessionMoved.notifyObservers(this.session);
         }
     }
 

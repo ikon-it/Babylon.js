@@ -57,6 +57,7 @@ export class WebXRInput implements IDisposable {
     private _frameObserver: Nullable<Observer<any>>;
     private _sessionEndedObserver: Nullable<Observer<any>>;
     private _sessionInitObserver: Nullable<Observer<any>>;
+    private _sessionMovedObserver: Nullable<Observer<any>>;
     /**
      * Event when a controller has been connected/added
      */
@@ -95,6 +96,13 @@ export class WebXRInput implements IDisposable {
 
         this._sessionInitObserver = this.xrSessionManager.onXRSessionInit.add((session) => {
             session.addEventListener("inputsourceschange", this._onInputSourcesChange);
+        });
+
+        this._sessionMovedObserver = this.xrSessionManager.onXRSessionMoved.add((session) => {
+            // Get controllers from the current session after moving to a new scene in persistent mode
+            if (this.controllers.length === 0) {
+                this._addAndRemoveControllers(Object.values(session.inputSources), []);
+            }
         });
 
         this._frameObserver = this.xrSessionManager.onXRFrameObservable.add((frame) => {
@@ -169,6 +177,7 @@ export class WebXRInput implements IDisposable {
         });
         this.xrSessionManager.onXRFrameObservable.remove(this._frameObserver);
         this.xrSessionManager.onXRSessionInit.remove(this._sessionInitObserver);
+        this.xrSessionManager.onXRSessionMoved.remove(this._sessionMovedObserver);
         this.xrSessionManager.onXRSessionEnded.remove(this._sessionEndedObserver);
         this.onControllerAddedObservable.clear();
         this.onControllerRemovedObservable.clear();
