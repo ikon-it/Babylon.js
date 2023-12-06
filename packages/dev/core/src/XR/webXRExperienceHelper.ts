@@ -1,5 +1,6 @@
 import type { Nullable } from "../types";
 import { Observable } from "../Misc/observable";
+import type { Observer } from "../Misc/observable";
 import type { IDisposable } from "../scene";
 import { Scene } from "../scene";
 import type { Camera } from "../Cameras/camera";
@@ -39,6 +40,7 @@ export class WebXRExperienceHelper implements IDisposable {
     private _supported = false;
     private _spectatorMode = false;
     private _lastTimestamp = 0;
+    private _sessionEndedObserver: Nullable<Observer<any>>;
     /**
      * assigned either in the constructor or _moveXRToScene when persistent
      */
@@ -131,7 +133,10 @@ export class WebXRExperienceHelper implements IDisposable {
             this._adjustScene();
 
             // need to set what to do when leaving
-            this.sessionManager.onXRSessionEnded.addOnce(() => {
+            if (this._sessionEndedObserver) {
+                this.sessionManager.onXRSessionEnded.remove(this._sessionEndedObserver);
+            }
+            this._sessionEndedObserver = this.sessionManager.onXRSessionEnded.addOnce(() => {
                 this._onSessionEnded();
             });
         }
@@ -232,31 +237,8 @@ export class WebXRExperienceHelper implements IDisposable {
                 this.onInitialXRPoseSetObservable.notifyObservers(this.camera);
             }
 
-            this.sessionManager.onXRSessionEnded.addOnce(() => {
-                // when using the back button and not the exit button (default on mobile), the session is ending but the EXITING state was not set
-                if (this.state !== WebXRState.EXITING_XR) {
-                    this._setState(WebXRState.EXITING_XR);
-                }
-                // Reset camera rigs output render target to ensure sessions render target is not drawn after it ends
-                this.camera.rigCameras.forEach((c) => {
-                    c.outputRenderTarget = null;
-                });
-
-                // Restore scene settings
-                this._scene.autoClear = this._originalSceneAutoClear;
-                this._scene.activeCamera = this._nonVRCamera;
-                if (this._attachedToElement && this._nonVRCamera) {
-                    this._nonVRCamera.attachControl(!!this._nonVRCamera.inputs.noPreventDefault);
-                }
-                if (sessionMode !== "immersive-ar" && this.camera.compensateOnFirstFrame) {
-                    if ((<any>this._nonVRCamera).setPosition) {
-                        (<any>this._nonVRCamera).setPosition(this.camera.position);
-                    } else {
-                        this._nonVRCamera!.position.copyFrom(this.camera.position);
-                    }
-                }
-
-                this._setState(WebXRState.NOT_IN_XR);
+            this._sessionEndedObserver = this.sessionManager.onXRSessionEnded.addOnce(() => {
+                this._onSessionEnded();
             });
 
             // Wait until the first frame arrives before setting state to in xr

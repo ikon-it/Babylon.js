@@ -163,12 +163,12 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         }
 
         this.onXRFrameObservable.clear();
-        this.onXRSessionEnded.clear();
         this.onXRReferenceSpaceChanged.clear();
         this.onXRSessionInit.clear();
 
         if (!this.persistent || all) {
             this.engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
+            this.onXRSessionEnded.clear();
         }
     }
 
