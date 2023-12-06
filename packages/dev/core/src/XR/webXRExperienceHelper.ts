@@ -144,6 +144,7 @@ export class WebXRExperienceHelper implements IDisposable {
     public dispose(all: boolean = false) {
         if (!this.persistent || all) {
             this.exitXRAsync();
+            this.onStateChangedObservable.clear();
         }
 
         if (this.featuresManager) {
@@ -153,7 +154,6 @@ export class WebXRExperienceHelper implements IDisposable {
             this.camera.dispose();
         }
 
-        this.onStateChangedObservable.clear();
         this.onInitialXRPoseSetObservable.clear();
 
         // downstream classes are persistance aware, and will only nuke the right stuff
