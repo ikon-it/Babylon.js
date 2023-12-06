@@ -14,6 +14,7 @@ import type { WebXRManagedOutputCanvasOptions } from "./webXRManagedOutputCanvas
 import type { IWebXRTeleportationOptions } from "./features/WebXRControllerTeleportation";
 import { WebXRMotionControllerTeleportation } from "./features/WebXRControllerTeleportation";
 import { Logger } from "../Misc/logger";
+import type { Engine } from "../Engines/engine";
 
 /**
  * Options for the default xr helper
@@ -93,6 +94,14 @@ export class WebXRDefaultExperienceOptions {
  */
 export class WebXRDefaultExperience {
     /**
+     * The options of the experience
+     */
+    public options: WebXRDefaultExperienceOptions;
+    /**
+     * Indicates whether persistent mode is activated or not
+     */
+    public persistent = false;
+    /**
      * Base experience
      */
     public baseExperience: WebXRExperienceHelper;
@@ -122,7 +131,7 @@ export class WebXRDefaultExperience {
      */
     public nearInteraction: WebXRNearInteraction;
 
-    private constructor() {}
+    private constructor() { }
 
     /**
      * Creates the default xr experience
@@ -132,94 +141,22 @@ export class WebXRDefaultExperience {
      */
     public static CreateAsync(scene: Scene, options: WebXRDefaultExperienceOptions = {}) {
         const result = new WebXRDefaultExperience();
+        result.options = options;
         scene.onDisposeObservable.addOnce(() => {
             result.dispose();
         });
-        // init the UI right after construction
-        if (!options.disableDefaultUI) {
-            const uiOptions: WebXREnterExitUIOptions = {
-                renderTarget: result.renderTarget,
-                ...(options.uiOptions || {}),
-            };
-            if (options.optionalFeatures) {
-                if (typeof options.optionalFeatures === "boolean") {
-                    uiOptions.optionalFeatures = ["hit-test", "anchors", "plane-detection", "hand-tracking"];
-                } else {
-                    uiOptions.optionalFeatures = options.optionalFeatures;
-                }
-            }
-            result.enterExitUI = new WebXREnterExitUI(scene, uiOptions);
-        }
 
         // Create base experience
         return WebXRExperienceHelper.CreateAsync(scene)
             .then((xrHelper) => {
                 result.baseExperience = xrHelper;
-
-                if (options.ignoreNativeCameraTransformation) {
-                    result.baseExperience.camera.compensateOnFirstFrame = false;
-                }
-
-                // Add controller support
-                result.input = new WebXRInput(xrHelper.sessionManager, xrHelper.camera, {
-                    controllerOptions: {
-                        renderingGroupId: options.renderingGroupId,
-                    },
-                    ...(options.inputOptions || {}),
-                });
-
-                if (!options.disablePointerSelection) {
-                    // Add default pointer selection
-                    const pointerSelectionOptions = {
-                        ...options.pointerSelectionOptions,
-                        xrInput: result.input,
-                        renderingGroupId: options.renderingGroupId,
-                    };
-
-                    result.pointerSelection = <WebXRControllerPointerSelection>(
-                        result.baseExperience.featuresManager.enableFeature(
-                            WebXRControllerPointerSelection.Name,
-                            options.useStablePlugins ? "stable" : "latest",
-                            <IWebXRControllerPointerSelectionOptions>pointerSelectionOptions
-                        )
-                    );
-
-                    if (!options.disableTeleportation) {
-                        // Add default teleportation, including rotation
-                        result.teleportation = <WebXRMotionControllerTeleportation>result.baseExperience.featuresManager.enableFeature(
-                            WebXRMotionControllerTeleportation.Name,
-                            options.useStablePlugins ? "stable" : "latest",
-                            <IWebXRTeleportationOptions>{
-                                floorMeshes: options.floorMeshes,
-                                xrInput: result.input,
-                                renderingGroupId: options.renderingGroupId,
-                                ...options.teleportationOptions,
-                            }
-                        );
-                        result.teleportation.setSelectionFeature(result.pointerSelection);
-                    }
-                }
-
-                if (!options.disableNearInteraction) {
-                    // Add default pointer selection
-                    result.nearInteraction = <WebXRNearInteraction>result.baseExperience.featuresManager.enableFeature(
-                        WebXRNearInteraction.Name,
-                        options.useStablePlugins ? "stable" : "latest",
-                        <IWebXRNearInteractionOptions>{
-                            xrInput: result.input,
-                            farInteractionFeature: result.pointerSelection,
-                            renderingGroupId: options.renderingGroupId,
-                            useUtilityLayer: true,
-                            enableNearInteractionOnAllControllers: true,
-                            ...options.nearInteractionOptions,
-                        }
-                    );
-                }
+                result._initializeScene();
 
                 // Create the WebXR output target
                 result.renderTarget = result.baseExperience.sessionManager.getWebXRRenderTarget(options.outputCanvasOptions);
 
                 if (!options.disableDefaultUI) {
+                    result._addUI(scene.getEngine());
                     // Create ui for entering/exiting xr
                     return result.enterExitUI.setHelperAsync(result.baseExperience, result.renderTarget);
                 } else {
@@ -237,19 +174,176 @@ export class WebXRDefaultExperience {
     }
 
     /**
+     * Creates the default xr experience for multi scene
+     * @param engine
+     * @param options options for basic configuration
+     * @returns resulting WebXRDefaultExperience
+     */
+    public static CreatePersistentAsync(engine: Engine, options: WebXRDefaultExperienceOptions = {}): Promise<WebXRDefaultExperience> {
+        const result = new WebXRDefaultExperience();
+        result.options = options;
+        result.persistent = true;
+
+        // Create base experience, passing an engine, which also sets downstream to persistent
+        return WebXRExperienceHelper.CreateAsync(engine)
+            .then((xrHelper) => {
+                result.baseExperience = xrHelper;
+
+                // Create the WebXR output target
+                result.renderTarget = result.baseExperience.sessionManager.getWebXRRenderTarget(result.options.outputCanvasOptions);
+
+                if (!options.disableDefaultUI) {
+                    result._addUI(engine);
+                    // Create ui for entering/exiting xr
+                    return result.enterExitUI.setHelperAsync(xrHelper, result.renderTarget);
+                } else {
+                    return;
+                }
+            })
+            .then(() => {
+                return result;
+            })
+            .catch((error) => {
+                Logger.Error("Error initializing XR");
+                Logger.Error(error);
+                return result;
+            });
+    }
+
+    /**
+     * Broken out from CreateAsync(), so that also can be called as well from CreatePersistentAsync.
+     * @param engine needed for the WebXREnterExitUI constructor
+     */
+    private _addUI(engine: Engine): void {
+        // init the UI right after construction
+        if (!this.options.disableDefaultUI) {
+            const uiOptions: WebXREnterExitUIOptions = {
+                renderTarget: this.renderTarget,
+                ...(this.options.uiOptions || {}),
+            };
+
+            if (this.options.optionalFeatures) {
+                if (typeof this.options.optionalFeatures === "boolean") {
+                    uiOptions.optionalFeatures = ["hit-test", "anchors", "plane-detection", "hand-tracking"];
+                } else {
+                    uiOptions.optionalFeatures = this.options.optionalFeatures;
+                }
+            }
+
+            this.enterExitUI = new WebXREnterExitUI(engine, uiOptions);
+        }
+    }
+
+    /**
+     * Broken out from CreateAsync().
+     * This must be performed for every scene, so also called from moveXRToScene().
+     */
+    private _initializeScene(): void {
+        if (this.options.ignoreNativeCameraTransformation) {
+            this.baseExperience.camera.compensateOnFirstFrame = false;
+        }
+
+        // Add controller support
+        this.input = new WebXRInput(this.baseExperience.sessionManager, this.baseExperience.camera, {
+            controllerOptions: {
+                renderingGroupId: this.options.renderingGroupId,
+            },
+            ...(this.options.inputOptions || {}),
+        });
+
+        if (!this.options.disablePointerSelection) {
+            // Add default pointer selection
+            const pointerSelectionOptions = {
+                ...this.options.pointerSelectionOptions,
+                xrInput: this.input,
+                renderingGroupId: this.options.renderingGroupId,
+            };
+
+            this.pointerSelection = <WebXRControllerPointerSelection>(
+                this.baseExperience.featuresManager.enableFeature(
+                    WebXRControllerPointerSelection.Name,
+                    this.options.useStablePlugins ? "stable" : "latest",
+                    <IWebXRControllerPointerSelectionOptions>pointerSelectionOptions
+                )
+            );
+
+            if (!this.options.disableTeleportation) {
+                // added persistance check; there are no floorMeshes at the engine level
+                // disabled actually means not enabled; can always be done at moveXRToScene() time
+                if (this.persistent) throw 'Teleport option not suitable to define at engine level for persistent mode';
+
+                // Add default teleportation, including rotation
+                this.teleportation = <WebXRMotionControllerTeleportation>this.baseExperience.featuresManager.enableFeature(
+                    WebXRMotionControllerTeleportation.Name,
+                    this.options.useStablePlugins ? "stable" : "latest",
+                    <IWebXRTeleportationOptions>{
+                        floorMeshes: this.options.floorMeshes,
+                        xrInput: this.input,
+                        renderingGroupId: this.options.renderingGroupId,
+                        ...this.options.teleportationOptions,
+                    }
+                );
+                this.teleportation.setSelectionFeature(this.pointerSelection);
+            }
+        }
+
+        if (!this.options.disableNearInteraction) {
+            // Add default pointer selection
+            this.nearInteraction = <WebXRNearInteraction>this.baseExperience.featuresManager.enableFeature(
+                WebXRNearInteraction.Name,
+                this.options.useStablePlugins ? "stable" : "latest",
+                <IWebXRNearInteractionOptions>{
+                    xrInput: this.input,
+                    farInteractionFeature: this.pointerSelection,
+                    renderingGroupId: this.options.renderingGroupId,
+                    useUtilityLayer: true,
+                    enableNearInteractionOnAllControllers: true,
+                    ...this.options.nearInteractionOptions,
+                }
+            );
+        }
+    }
+
+    /**
+     * Move or initially place the scene supplied as the one operating in XR
+     * @param nextScene- The scene XR is being moved to
+     * #param hookUp- A callback, which holds all the features which need initialized
+     * in the scene.
+     *
+     */
+    public moveXRToScene(nextScene: Scene, hookUp: (defExperience: WebXRDefaultExperience) => void): void {
+        // sanity check
+        if (!this.persistent) throw 'DefaultExperience must be instanced with CreatePersistentAsync() to move XR';
+
+        // call a persistence aware dispose
+        this.dispose(false);
+
+        // perform creation of the nextthis.baseExperience.camera & this.baseExperience.featureManager
+        this.baseExperience._moveXRToScene(nextScene);
+
+        // re-initialize for the next scene
+        this._initializeScene();
+
+        // let session manager know new scene & what features / code needs to run on SessionInit
+        this.baseExperience.sessionManager.moveXRToScene(nextScene, this, hookUp);
+    }
+
+    /**
      * Disposes of the experience helper
      */
-    public dispose() {
+    public dispose(all: boolean = true) {
+        const shouldClear = !this.persistent || all;
+
         if (this.baseExperience) {
-            this.baseExperience.dispose();
+            this.baseExperience.dispose(all);
         }
         if (this.input) {
             this.input.dispose();
         }
-        if (this.enterExitUI) {
+        if (this.enterExitUI && shouldClear) {
             this.enterExitUI.dispose();
         }
-        if (this.renderTarget) {
+        if (this.renderTarget && shouldClear) {
             this.renderTarget.dispose();
         }
     }

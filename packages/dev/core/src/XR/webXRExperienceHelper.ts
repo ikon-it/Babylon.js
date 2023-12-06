@@ -1,6 +1,7 @@
 import type { Nullable } from "../types";
 import { Observable } from "../Misc/observable";
-import type { IDisposable, Scene } from "../scene";
+import type { IDisposable } from "../scene";
+import { Scene } from "../scene";
 import type { Camera } from "../Cameras/camera";
 import { WebXRSessionManager } from "./webXRSessionManager";
 import { WebXRCamera } from "./webXRCamera";
@@ -10,6 +11,7 @@ import { WebXRFeatureName, WebXRFeaturesManager } from "./webXRFeaturesManager";
 import { Logger } from "../Misc/logger";
 import { UniversalCamera } from "../Cameras/universalCamera";
 import { Quaternion, Vector3 } from "../Maths/math.vector";
+import type { Engine } from "../Engines/engine";
 
 /**
  * Options for setting up XR spectator camera.
@@ -37,7 +39,15 @@ export class WebXRExperienceHelper implements IDisposable {
     private _supported = false;
     private _spectatorMode = false;
     private _lastTimestamp = 0;
+    /**
+     * assigned either in the constructor or _moveXRToScene when persistent
+     */
+    private _scene: Scene;
 
+    /**
+     * Indicates whether persistent mode is activated or not
+     */
+    public persistent = false;
     /**
      * Camera used to render xr content
      */
@@ -65,25 +75,32 @@ export class WebXRExperienceHelper implements IDisposable {
 
     /**
      * Creates a WebXRExperienceHelper
-     * @param _scene The scene the helper should be created in
+     * @param sceneOrEngine The scene or engine the helper should be created in
+     * This also sets whether operating in persistent or single scene mode
      */
-    private constructor(private _scene: Scene) {
-        this.sessionManager = new WebXRSessionManager(_scene);
-        this.camera = new WebXRCamera("webxr", _scene, this.sessionManager);
-        this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
+    private constructor(sceneOrEngine: Scene | Engine) {
+        this.sessionManager = new WebXRSessionManager(sceneOrEngine);
 
-        _scene.onDisposeObservable.addOnce(() => {
-            this.dispose();
-        });
+        if (sceneOrEngine instanceof Scene) {
+            this._scene = sceneOrEngine;
+            this.camera = new WebXRCamera("webxr", this._scene, this.sessionManager);
+            this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
+
+            this._scene.onDisposeObservable.addOnce(() => {
+                this.dispose();
+            });
+        } else {
+            this.persistent = true;
+        }
     }
 
     /**
      * Creates the experience helper
-     * @param scene the scene to attach the experience helper to
+     * @param sceneOrEngine the scene or engine to attach the experience helper to
      * @returns a promise for the experience helper
      */
-    public static CreateAsync(scene: Scene): Promise<WebXRExperienceHelper> {
-        const helper = new WebXRExperienceHelper(scene);
+    public static CreateAsync(sceneOrEngine: Scene | Engine): Promise<WebXRExperienceHelper> {
+        const helper = new WebXRExperienceHelper(sceneOrEngine);
         return helper.sessionManager
             .initializeAsync()
             .then(() => {
@@ -98,15 +115,51 @@ export class WebXRExperienceHelper implements IDisposable {
     }
 
     /**
-     * Disposes of the experience helper
+     * Intended to be called by WebXRDefaultExperience.moveXRToScene().
+     * No call to dispose() here; was called in WebXRDefaultExperience.dispose()
+     * @param nextScene the next scene to pass the XR session to
      */
-    public dispose() {
-        this.exitXRAsync();
-        this.camera.dispose();
+    public _moveXRToScene(nextScene: Scene): void {
+        this._scene = nextScene;
+
+        this.camera = new WebXRCamera("webxr", this._scene, this.sessionManager);
+        this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
+
+        //when already in an XR Session, enterXRAsync, is not going to runs so: 
+        if (this.sessionManager.inXRSession) {
+            // this will switch the cameras
+            this._adjustScene();
+
+            // need to set what to do when leaving
+            this.sessionManager.onXRSessionEnded.addOnce(() => {
+                this._onSessionEnded();
+            });
+        }
+    }
+
+    /**
+     * Disposes of the experience helper
+     * @param all indicates, even if persistent, to dispose everything
+     */
+    public dispose(all: boolean = false) {
+        if (!this.persistent || all) {
+            this.exitXRAsync();
+        }
+
+        if (this.featuresManager) {
+            this.featuresManager.dispose();
+        }
+        if (this.camera) {
+            this.camera.dispose();
+        }
+
         this.onStateChangedObservable.clear();
         this.onInitialXRPoseSetObservable.clear();
-        this.sessionManager.dispose();
+
+        // downstream classes are persistance aware, and will only nuke the right stuff
+        this.sessionManager.dispose(all);
         this._spectatorCamera?.dispose();
+
         if (this._nonVRCamera) {
             this._scene.activeCamera = this._nonVRCamera;
         }
@@ -255,6 +308,62 @@ export class WebXRExperienceHelper implements IDisposable {
             this._spectatorMode = false;
             this._switchSpectatorMode();
         }
+    }
+
+    /**
+     * broken out from enterXRAsync(), could possibly reduce replication by calling
+     * this from there too
+     */
+    private _adjustScene() {
+        // Cache pre xr scene settings
+        this._originalSceneAutoClear = this._scene.autoClear;
+        this._nonVRCamera = this._scene.activeCamera;
+        this._attachedToElement = !!this._nonVRCamera?.inputs?.attachedToElement;
+        this._nonVRCamera?.detachControl();
+
+        this._scene.activeCamera = this.camera;
+        // do not compensate when AR session is used
+        if (this.sessionManager.sessionMode !== "immersive-ar") {
+            this._nonXRToXRCamera();
+        } else {
+            // Kept here, TODO - check if needed
+            this._scene.autoClear = false;
+            this.camera.compensateOnFirstFrame = false;
+            // reset the camera's position to the origin
+            this.camera.position.set(0, 0, 0);
+            this.camera.rotationQuaternion.set(0, 0, 0, 1);
+        }
+    }
+
+    /**
+     * broken out from enterXRAsync(), could possibly reduce replication by calling
+     * this from there too
+     */
+    private _onSessionEnded(): void {
+        // when using the back button and not the exit button (default on mobile), the session is ending but the EXITING state was not set
+        if (this.state !== WebXRState.EXITING_XR) {
+            this._setState(WebXRState.EXITING_XR);
+        }
+        // Reset camera rigs output render target to ensure sessions render target is not drawn after it ends
+        this.camera.rigCameras.forEach((c) => {
+            c.outputRenderTarget = null;
+        });
+
+        // Restore scene settings
+        this._scene.autoClear = this._originalSceneAutoClear;
+        this._scene.activeCamera = this._nonVRCamera;
+        if (this._attachedToElement && this._nonVRCamera) {
+            this._nonVRCamera.attachControl(!!this._nonVRCamera.inputs.noPreventDefault);
+        }
+        if (this.sessionManager.sessionMode !== "immersive-ar" && this.camera.compensateOnFirstFrame) {
+            if ((<any>this._nonVRCamera).setPosition) {
+                (<any>this._nonVRCamera).setPosition(this.camera.position);
+            } else {
+                this._nonVRCamera!.position.copyFrom(this.camera.position);
+            }
+        }
+
+        this._setState(WebXRState.NOT_IN_XR);
     }
 
     private _switchSpectatorMode(options?: WebXRSpectatorModeOption): void {

@@ -1,10 +1,12 @@
 import type { Nullable } from "../types";
 import { Observable } from "../Misc/observable";
-import type { IDisposable, Scene } from "../scene";
 import type { WebXRExperienceHelper } from "./webXRExperienceHelper";
 import type { WebXRRenderTarget } from "./webXRTypes";
 import { WebXRState } from "./webXRTypes";
 import { Tools } from "../Misc/tools";
+import type { Engine } from "../Engines/engine";
+import type { IDisposable } from "../scene";
+import { Scene } from "../scene";
 /**
  * Button which can be used to enter a different mode of XR
  */
@@ -22,14 +24,14 @@ export class WebXREnterExitUIButton {
         public sessionMode: XRSessionMode,
         /** Reference space type */
         public referenceSpaceType: XRReferenceSpaceType
-    ) {}
+    ) { }
 
     /**
      * Extendable function which can be used to update the button's visuals when the state changes
      * @param activeButton the current active button in the UI
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public update(activeButton: Nullable<WebXREnterExitUIButton>) {}
+    public update(activeButton: Nullable<WebXREnterExitUIButton>) { }
 }
 
 /**
@@ -85,6 +87,7 @@ export class WebXREnterExitUI implements IDisposable {
     private _buttons: Array<WebXREnterExitUIButton> = [];
     private _helper: WebXRExperienceHelper;
     private _renderTarget?: WebXRRenderTarget;
+    private _engine: Engine;
     /**
      * The HTML Div Element to which buttons are added.
      */
@@ -102,14 +105,20 @@ export class WebXREnterExitUI implements IDisposable {
     /**
      * Construct a new EnterExit UI class
      *
-     * @param _scene babylon scene object to use
+     * @param sceneOrEngine The engine to use
      * @param options (read-only) version of the options passed to this UI
      */
     public constructor(
-        private _scene: Scene,
+        sceneOrEngine: Scene | Engine,
         /** version of the options passed to this UI */
         public options: WebXREnterExitUIOptions
     ) {
+        if (sceneOrEngine instanceof Scene) {
+            this._engine = sceneOrEngine.getEngine();
+        } else {
+            this._engine = sceneOrEngine;
+        }
+
         this.overlay = document.createElement("div");
         this.overlay.classList.add("xr-button-overlay");
 
@@ -157,10 +166,10 @@ export class WebXREnterExitUI implements IDisposable {
             this._updateButtons(null);
         }
 
-        const renderCanvas = _scene.getEngine().getInputElement();
+        const renderCanvas = this._engine.getInputElement();
         if (renderCanvas && renderCanvas.parentNode) {
             renderCanvas.parentNode.appendChild(this.overlay);
-            _scene.onDisposeObservable.addOnce(() => {
+            this._engine.onDisposeObservable.addOnce(() => {
                 this.dispose();
             });
         }
@@ -238,7 +247,7 @@ export class WebXREnterExitUI implements IDisposable {
      * Disposes of the XR UI component
      */
     public dispose() {
-        const renderCanvas = this._scene.getEngine().getInputElement();
+        const renderCanvas = this._engine.getInputElement();
         if (renderCanvas && renderCanvas.parentNode && renderCanvas.parentNode.contains(this.overlay)) {
             renderCanvas.parentNode.removeChild(this.overlay);
         }

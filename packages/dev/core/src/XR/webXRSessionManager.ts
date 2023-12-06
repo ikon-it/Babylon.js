@@ -2,7 +2,8 @@ import { Logger } from "../Misc/logger";
 import type { Observer } from "../Misc/observable";
 import { Observable } from "../Misc/observable";
 import type { Nullable } from "../types";
-import type { IDisposable, Scene } from "../scene";
+import type { IDisposable } from "../scene";
+import { Scene } from "../scene";
 import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import type { WebXRRenderTarget } from "./webXRTypes";
 import { WebXRManagedOutputCanvas, WebXRManagedOutputCanvasOptions } from "./webXRManagedOutputCanvas";
@@ -13,13 +14,13 @@ import type { WebXRLayerWrapper } from "./webXRLayerWrapper";
 import { NativeXRLayerWrapper, NativeXRRenderTarget } from "./native/nativeXRRenderTarget";
 import { WebXRWebGLLayerWrapper } from "./webXRWebGLLayer";
 import type { ThinEngine } from "../Engines/thinEngine";
+import type { WebXRDefaultExperience } from "./webXRDefaultExperience";
 
 /**
  * Manages an XRSession to work with Babylon's engine
  * @see https://doc.babylonjs.com/features/featuresDeepDive/webXR/webXRSessionManagers
  */
 export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextureProvider {
-    private _engine: Nullable<Engine>;
     private _referenceSpace: XRReferenceSpace;
     private _baseLayerWrapper: Nullable<WebXRLayerWrapper>;
     private _baseLayerRTTProvider: Nullable<WebXRLayerRenderTargetTextureProvider>;
@@ -27,6 +28,19 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
     private _sessionMode: XRSessionMode;
     private _onEngineDisposedObserver: Nullable<Observer<ThinEngine>>;
 
+    /**
+     * The engine the WebXR session is attached to
+     */
+    public engine: Engine;
+    /**
+     * The scene that is currently played within the WebXR session.
+     * Needed by features, not this class itself
+     */
+    public scene: Scene;
+    /**
+     * Indicates whether persistent mode is activated or not
+     */
+    public persistent = false;
     /**
      * The base reference space from which the session started. good if you want to reset your
      * reference space
@@ -79,19 +93,20 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
 
     /**
      * Constructs a WebXRSessionManager, this must be initialized within a user action before usage
-     * @param scene The scene which the session should be created for
+     * @param sceneOrEngine The scene or engine the helper should be created in
+     * This also sets whether operating in persistent or single scene mode
      */
-    constructor(
-        /** The scene which the session should be created for */
-        public scene: Scene
-    ) {
-        this._engine = scene.getEngine();
-        this._onEngineDisposedObserver = this._engine.onDisposeObservable.addOnce(() => {
-            this._engine = null;
-        });
-        scene.onDisposeObservable.addOnce(() => {
-            this.dispose();
-        });
+    constructor(sceneOrEngine: Scene | Engine) {
+        if (sceneOrEngine instanceof Scene) {
+            this.scene = sceneOrEngine;
+            this.engine = sceneOrEngine.getEngine();
+            sceneOrEngine.onDisposeObservable.addOnce(() => {
+                this.dispose();
+            });
+        } else {
+            this.engine = sceneOrEngine;
+            this.persistent = true;
+        }
     }
 
     /**
@@ -118,20 +133,43 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
     }
 
     /**
+     * Intended to be called by WebXRDefaultExperience.moveXRToScene().
+     * Dispose has already been called; so all the observables have already been cleared out
+     * @param nextScene the next scene to pass the XR session to
+     * @param defExperience a reference to the existing WebXRDefaultExperience
+     * @param hookUp A callback, which holds all the features which need initialized in the scene.
+     */
+    public moveXRToScene(nextScene: Scene, defExperience: WebXRDefaultExperience, hookUp: (defExperience: WebXRDefaultExperience) => void): void {
+        this.scene = nextScene;
+
+        // all the old sessionInit observers are now gone; time to make some new ones
+        hookUp(defExperience);
+
+        // the first scene will have to be user initiated; inside here will be taken care of there.
+        if (this.inXRSession) {
+            // now simulate that event for the new stuff
+            this.onXRSessionInit.notifyObservers(this.session);
+        }
+    }
+
+    /**
      * Disposes of the session manager
      * This should be called explicitly by the dev, if required.
      */
-    public dispose() {
+    public dispose(all: boolean = true) {
         // disposing without leaving XR? Exit XR first
-        if (this.inXRSession) {
+        if (this.inXRSession && (!this.persistent || all)) {
             this.exitXRAsync();
         }
+
         this.onXRFrameObservable.clear();
         this.onXRSessionEnded.clear();
         this.onXRReferenceSpaceChanged.clear();
         this.onXRSessionInit.clear();
-        this._engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
-        this._engine = null;
+
+        if (!this.persistent || all) {
+            this.engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
+        }
     }
 
     /**
@@ -183,12 +221,11 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      * @returns a WebXR render target to which the session can render
      */
     public getWebXRRenderTarget(options?: WebXRManagedOutputCanvasOptions): WebXRRenderTarget {
-        const engine = this.scene.getEngine();
         if (this._xrNavigator.xr.native) {
             return new NativeXRRenderTarget(this);
         } else {
-            options = options || WebXRManagedOutputCanvasOptions.GetDefaults(engine);
-            options.canvasElement = options.canvasElement || engine.getRenderingCanvas() || undefined;
+            options = options || WebXRManagedOutputCanvasOptions.GetDefaults(this.engine);
+            options.canvasElement = options.canvasElement || this.engine.getRenderingCanvas() || undefined;
             return new WebXRManagedOutputCanvas(this, options);
         }
     }
@@ -229,16 +266,16 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
                     // Notify frame observers
                     this.onXRSessionEnded.notifyObservers(null);
 
-                    if (this._engine) {
+                    if (this.engine) {
                         // make sure dimensions object is restored
-                        this._engine.framebufferDimensionsObject = null;
+                        this.engine.framebufferDimensionsObject = null;
 
                         // Restore frame buffer to avoid clear on xr framebuffer after session end
-                        this._engine.restoreDefaultFramebuffer();
+                        this.engine.restoreDefaultFramebuffer();
 
                         // Need to restart render loop as after the session is ended the last request for new frame will never call callback
-                        this._engine.customAnimationFrameRequester = null;
-                        this._engine._renderLoop();
+                        this.engine.customAnimationFrameRequester = null;
+                        this.engine._renderLoop();
                     }
 
                     // Dispose render target textures.
@@ -276,15 +313,15 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      * Starts rendering to the xr layer
      */
     public runXRRenderLoop() {
-        if (!this.inXRSession || !this._engine) {
+        if (!this.inXRSession || !this.engine) {
             return;
         }
 
         // Tell the engine's render loop to be driven by the xr session's refresh rate and provide xr pose information
-        this._engine.customAnimationFrameRequester = {
+        this.engine.customAnimationFrameRequester = {
             requestAnimationFrame: (callback: FrameRequestCallback) => this.session.requestAnimationFrame(callback),
             renderFunction: (timestamp: number, xrFrame: Nullable<XRFrame>) => {
-                if (!this.inXRSession || !this._engine) {
+                if (!this.inXRSession || !this.engine) {
                     return;
                 }
                 // Store the XR frame and timestamp in the session manager
@@ -292,22 +329,22 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
                 this.currentTimestamp = timestamp;
                 if (xrFrame) {
                     this.inXRFrameLoop = true;
-                    this._engine.framebufferDimensionsObject = this._baseLayerRTTProvider?.getFramebufferDimensions() || null;
+                    this.engine.framebufferDimensionsObject = this._baseLayerRTTProvider?.getFramebufferDimensions() || null;
                     this.onXRFrameObservable.notifyObservers(xrFrame);
-                    this._engine._renderLoop();
-                    this._engine.framebufferDimensionsObject = null;
+                    this.engine._renderLoop();
+                    this.engine.framebufferDimensionsObject = null;
                     this.inXRFrameLoop = false;
                 }
             },
         };
 
-        this._engine.framebufferDimensionsObject = this._baseLayerRTTProvider?.getFramebufferDimensions() || null;
+        this.engine.framebufferDimensionsObject = this._baseLayerRTTProvider?.getFramebufferDimensions() || null;
 
         // Stop window's animation frame and trigger sessions animation frame
         if (typeof window !== "undefined" && window.cancelAnimationFrame) {
-            window.cancelAnimationFrame(this._engine._frameHandler);
+            window.cancelAnimationFrame(this.engine._frameHandler);
         }
-        this._engine._renderLoop();
+        this.engine._renderLoop();
     }
 
     /**
