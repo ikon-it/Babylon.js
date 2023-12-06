@@ -149,11 +149,12 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         // all the old sessionInit observers are now gone; time to make some new ones
         hookUp(defExperience);
 
+        this.onXRSessionMoved.notifyObservers(this.session);
+
         // the first scene will have to be user initiated; inside here will be taken care of there.
         if (this.inXRSession) {
             // now simulate that event for the new stuff
             this.onXRSessionInit.notifyObservers(this.session);
-            this.onXRSessionMoved.notifyObservers(this.session);
         }
     }
 

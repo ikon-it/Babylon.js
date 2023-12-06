@@ -100,7 +100,7 @@ export class WebXRInput implements IDisposable {
 
         this._sessionMovedObserver = this.xrSessionManager.onXRSessionMoved.add((session) => {
             // Get controllers from the current session after moving to a new scene in persistent mode
-            if (this.controllers.length === 0) {
+            if (session?.inputSources?.length > 0 && this.controllers.length === 0) {
                 this._addAndRemoveControllers(Object.values(session.inputSources), []);
             }
         });

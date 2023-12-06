@@ -180,6 +180,14 @@ export class WebXRDefaultExperience {
      * @returns resulting WebXRDefaultExperience
      */
     public static CreatePersistentAsync(engine: Engine, options: WebXRDefaultExperienceOptions = {}): Promise<WebXRDefaultExperience> {
+        // Add default values for persistent mode.
+        if (Object.keys(options).length === 0) {
+            options = {
+                disableTeleportation: true,
+                disableNearInteraction: true,
+            };
+        }
+
         const result = new WebXRDefaultExperience();
         result.options = options;
         result.persistent = true;
@@ -306,10 +314,9 @@ export class WebXRDefaultExperience {
 
     /**
      * Move or initially place the scene supplied as the one operating in XR
-     * @param nextScene- The scene XR is being moved to
-     * #param hookUp- A callback, which holds all the features which need initialized
+     * @param nextScene The scene XR is being moved to
+     * @param hookUp A callback, which holds all the features which need initialized
      * in the scene.
-     *
      */
     public moveXRToScene(nextScene: Scene, hookUp: (defExperience: WebXRDefaultExperience) => void): void {
         // sanity check
@@ -318,7 +325,7 @@ export class WebXRDefaultExperience {
         // call a persistence aware dispose
         this.dispose(false);
 
-        // perform creation of the nextthis.baseExperience.camera & this.baseExperience.featureManager
+        // perform creation of the next this.baseExperience.camera & this.baseExperience.featureManager
         this.baseExperience.moveXRToScene(nextScene);
 
         // re-initialize for the next scene

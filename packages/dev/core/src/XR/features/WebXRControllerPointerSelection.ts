@@ -258,6 +258,14 @@ export class WebXRControllerPointerSelection extends WebXRAbstractFeature {
     ) {
         super(_xrSessionManager);
         this._scene = this._xrSessionManager.scene;
+
+        // Update the scene's reference as soon as the persistent session
+        // is moved to the first scene
+        if (this._xrSessionManager.persistent) {
+            this._xrSessionManager.onXRSessionMoved.addOnce((_) => {
+                this._scene = this._xrSessionManager.scene;
+            });
+        }
     }
 
     /**
