@@ -319,7 +319,7 @@ export class WebXRDefaultExperience {
         this.dispose(false);
 
         // perform creation of the nextthis.baseExperience.camera & this.baseExperience.featureManager
-        this.baseExperience._moveXRToScene(nextScene);
+        this.baseExperience.moveXRToScene(nextScene);
 
         // re-initialize for the next scene
         this._initializeScene();

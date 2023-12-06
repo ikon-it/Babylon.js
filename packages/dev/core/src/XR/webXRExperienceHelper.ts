@@ -121,7 +121,7 @@ export class WebXRExperienceHelper implements IDisposable {
      * No call to dispose() here; was called in WebXRDefaultExperience.dispose()
      * @param nextScene the next scene to pass the XR session to
      */
-    public _moveXRToScene(nextScene: Scene): void {
+    public moveXRToScene(nextScene: Scene): void {
         this._scene = nextScene;
 
         this.camera = new WebXRCamera("webxr", this._scene, this.sessionManager);
