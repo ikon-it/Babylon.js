@@ -74,7 +74,7 @@ const updateSinceTag = (version) => {
 
 async function runTagsUpdate() {
     await runCommand(
-        `npx lerna version ${config.versionDefinition} --yes --no-push --conventional-prerelease --force-publish --no-private --no-git-tag-version ${
+        `npx lerna version ${config.versionDefinition} --yes --no-push --conventional-prerelease --conventional-bump-prerelease --force-publish --no-private --no-git-tag-version ${
             config.preid ? "--preid " + config.preid : ""
         }`
     );

@@ -1,0 +1,21 @@
+0 silly argv {
+0 silly argv   _: [ 'version' ],
+0 silly argv   yes: true,
+0 silly argv   y: true,
+0 silly argv   push: false,
+0 silly argv   'conventional-prerelease': true,
+0 silly argv   conventionalPrerelease: true,
+0 silly argv   'force-publish': true,
+0 silly argv   forcePublish: true,
+0 silly argv   private: false,
+0 silly argv   'git-tag-version': false,
+0 silly argv   gitTagVersion: false,
+0 silly argv   preid: 'ikon',
+0 silly argv   lernaVersion: '7.0.2',
+0 silly argv   '$0': 'node_modules\\lerna\\dist\\cli.js',
+0 silly argv   bump: 'prerelease'
+0 silly argv }
+1 notice cli v7.0.2
+2 verbose packageConfigs Explicit "packages" configuration found in lerna.json. Resolving packages using the configured glob(s): ["packages/**/*"]
+3 verbose rootPath C:\git\ikon\Babylon.js
+4 error
