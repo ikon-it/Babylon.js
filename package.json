@@ -96,7 +96,10 @@
     "lint:fix": "eslint ./packages/**/src/**/*.{ts,tsx,js,json} --fix",
     "update-all-dependencies": "npm update -ws",
     "prepare-snapshot": "npm run build:snapshot -w @tools/babylon-server && build-tools -c ps",
-    "start": "concurrently --kill-others -m 2 -n dev-watch,cdn-server \"npm run watch:dev:skip-compile\" \"npm run serve -w @tools/babylon-server\""
+    "start": "concurrently --kill-others -m 2 -n dev-watch,cdn-server \"npm run watch:dev:skip-compile\" \"npm run serve -w @tools/babylon-server\"",
+    "hyve-01-update-version": "node scripts/updateVersion.js 'xr-session-migration'",
+    "hyve-02-build": "npm run build -ws",
+    "hyve-03-pack": "npm pack -ws -pack-destination=\"../Ikon.Hyve360/src/Ikon.Hyve.UiComponents.Layouts/LayoutScene/babylon-packages\""
   },
   "engines": {
     "node": ">=14.0.0 <21.0.0",
