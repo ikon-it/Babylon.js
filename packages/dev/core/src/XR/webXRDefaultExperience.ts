@@ -318,7 +318,7 @@ export class WebXRDefaultExperience {
      * @param hookUp A callback, which holds all the features which need initialized
      * in the scene.
      */
-    public moveXRToScene(nextScene: Scene, hookUp: (defExperience: WebXRDefaultExperience) => void): void {
+    public async moveXRToScene(nextScene: Scene, hookUp: (defExperience: WebXRDefaultExperience) => void): Promise<void> {
         // sanity check
         if (!this.persistent) throw 'DefaultExperience must be instanced with CreatePersistentAsync() to move XR';
 
@@ -326,7 +326,7 @@ export class WebXRDefaultExperience {
         this.dispose(false);
 
         // perform creation of the next this.baseExperience.camera & this.baseExperience.featureManager
-        this.baseExperience.moveXRToScene(nextScene);
+        await this.baseExperience.moveXRToScene(nextScene);
 
         // re-initialize for the next scene
         this._initializeScene();
