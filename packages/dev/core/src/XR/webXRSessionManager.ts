@@ -15,6 +15,7 @@ import { NativeXRLayerWrapper, NativeXRRenderTarget } from "./native/nativeXRRen
 import { WebXRWebGLLayerWrapper } from "./webXRWebGLLayer";
 import type { ThinEngine } from "../Engines/thinEngine";
 import type { WebXRDefaultExperience } from "./webXRDefaultExperience";
+import { WebXRFeatureName } from "./webXRFeaturesManager";
 
 /**
  * Manages an XRSession to work with Babylon's engine
@@ -26,6 +27,8 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
     private _baseLayerRTTProvider: Nullable<WebXRLayerRenderTargetTextureProvider>;
     private _xrNavigator: any;
     private _sessionMode: XRSessionMode;
+    private _renderState: XRRenderStateInit;
+    private _renderTarget: Nullable<WebXRRenderTarget>;
     private _onEngineDisposedObserver: Nullable<Observer<ThinEngine>>;
 
     /**
@@ -143,8 +146,23 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      * @param defExperience a reference to the existing WebXRDefaultExperience
      * @param hookUp A callback, which holds all the features which need initialized in the scene.
      */
-    public moveXRToScene(nextScene: Scene, defExperience: WebXRDefaultExperience, hookUp: (defExperience: WebXRDefaultExperience) => void): void {
+    public async moveXRToScene(nextScene: Scene, defExperience: WebXRDefaultExperience, hookUp: (defExperience: WebXRDefaultExperience) => void): Promise<void> {
         this.scene = nextScene;
+
+        if (this.inXRSession && this._renderState) {
+            if (this._renderTarget == null) {
+                this._renderTarget = this.getWebXRRenderTarget();
+            }
+
+            const baseLayer = await this._renderTarget.initializeXRLayerAsync(this.session);
+
+            // The layers feature will have already initialized the xr session's layers on session init.
+            if (!this.enabledFeatures?.includes(WebXRFeatureName.LAYERS)) {
+                this._renderState.baseLayer = baseLayer;
+            }
+
+            this.updateRenderState(this._renderState);
+        }
 
         // all the old sessionInit observers are now gone; time to make some new ones
         hookUp(defExperience);
@@ -173,6 +191,8 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         this.onXRSessionInit.clear();
 
         if (!this.persistent || all) {
+            this._renderTarget = null;
+
             this.engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
             this.onXRSessionEnded.clear();
         }
@@ -411,10 +431,10 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      * @internal
      */
     public _setBaseLayerWrapper(baseLayerWrapper: Nullable<WebXRLayerWrapper>): void {
-        if (this.isNative) {
-            this._baseLayerRTTProvider?.dispose();
-        }
+        this._baseLayerRTTProvider?.dispose();
+
         this._baseLayerWrapper = baseLayerWrapper;
+
         this._baseLayerRTTProvider = this._baseLayerWrapper?.createRenderTargetTextureProvider(this) || null;
     }
 
@@ -430,6 +450,8 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      * @param state state to set
      */
     public updateRenderState(state: XRRenderStateInit): void {
+        this._renderState = state;
+
         if (state.baseLayer) {
             this._setBaseLayerWrapper(this.isNative ? new NativeXRLayerWrapper(state.baseLayer) : new WebXRWebGLLayerWrapper(state.baseLayer));
         }

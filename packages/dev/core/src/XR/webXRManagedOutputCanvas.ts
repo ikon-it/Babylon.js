@@ -101,6 +101,7 @@ export class WebXRManagedOutputCanvas implements WebXRRenderTarget {
 
         _xrSessionManager.onXRSessionEnded.add(() => {
             this._removeCanvas();
+            this.xrLayer = null;
         });
     }
 
@@ -118,6 +119,10 @@ export class WebXRManagedOutputCanvas implements WebXRRenderTarget {
      * @returns a promise that will resolve once the XR Layer has been created
      */
     public async initializeXRLayerAsync(xrSession: XRSession): Promise<XRWebGLLayer> {
+        if (this.xrLayer) {
+            return this.xrLayer;
+        }
+
         const createLayer = () => {
             this.xrLayer = new XRWebGLLayer(xrSession, this.canvasContext, this._options.canvasOptions);
             this._xrLayerWrapper = new WebXRWebGLLayerWrapper(this.xrLayer);

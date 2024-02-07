@@ -332,7 +332,7 @@ export class WebXRDefaultExperience {
         this._initializeScene();
 
         // let session manager know new scene & what features / code needs to run on SessionInit
-        this.baseExperience.sessionManager.moveXRToScene(nextScene, this, hookUp);
+        await this.baseExperience.sessionManager.moveXRToScene(nextScene, this, hookUp);
     }
 
     /**

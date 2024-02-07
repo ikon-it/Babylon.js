@@ -132,22 +132,6 @@ export class WebXRExperienceHelper implements IDisposable {
             // this will switch the cameras
             this._adjustScene();
 
-            const renderTarget = this.sessionManager.getWebXRRenderTarget();
-            const baseLayer = await renderTarget.initializeXRLayerAsync(this.sessionManager.session)
-
-            const xrRenderState: XRRenderStateInit = {
-                // if maxZ is 0 it should be "Infinity", but it doesn't work with the WebXR API. Setting to a large number.
-                depthFar: this.camera.maxZ || 10000,
-                depthNear: this.camera.minZ,
-            };
-
-            // The layers feature will have already initialized the xr session's layers on session init.
-            if (!this.featuresManager.getEnabledFeature(WebXRFeatureName.LAYERS)) {
-                xrRenderState.baseLayer = baseLayer;
-            }
-
-            this.sessionManager.updateRenderState(xrRenderState);
-
             // need to set what to do when leaving
             if (this._sessionEndedObserver) {
                 this.sessionManager.onXRSessionEnded.remove(this._sessionEndedObserver);
