@@ -27,7 +27,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
     private _baseLayerRTTProvider: Nullable<WebXRLayerRenderTargetTextureProvider>;
     private _xrNavigator: any;
     private _sessionMode: XRSessionMode;
-    private _renderState: XRRenderStateInit;
+    private _renderState: Nullable<XRRenderStateInit>;
     private _renderTarget: Nullable<WebXRRenderTarget>;
     private _onEngineDisposedObserver: Nullable<Observer<ThinEngine>>;
 
@@ -151,10 +151,11 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
 
         if (this.inXRSession && this._renderState) {
             if (this._renderTarget == null) {
-                this._renderTarget = this.getWebXRRenderTarget();
+                const renderTarget = this.getWebXRRenderTarget();
+                this.updateRenderTarget(renderTarget);
             }
 
-            const baseLayer = await this._renderTarget.initializeXRLayerAsync(this.session);
+            const baseLayer = await this._renderTarget?.initializeXRLayerAsync(this.session);
 
             // The layers feature will have already initialized the xr session's layers on session init.
             if (!this.enabledFeatures?.includes(WebXRFeatureName.LAYERS)) {
@@ -192,6 +193,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
 
         if (!this.persistent || all) {
             this._renderTarget = null;
+            this._renderState = null;
 
             this.engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
             this.onXRSessionEnded.clear();
@@ -443,6 +445,14 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      */
     public _getBaseLayerWrapper(): Nullable<WebXRLayerWrapper> {
         return this._baseLayerWrapper;
+    }
+
+    /**
+     * Updates the render target of the session
+     * @param renderTarget renderTarget to set
+     */
+    public updateRenderTarget(renderTarget: WebXRRenderTarget): void {
+        this._renderTarget = renderTarget;
     }
 
     /**

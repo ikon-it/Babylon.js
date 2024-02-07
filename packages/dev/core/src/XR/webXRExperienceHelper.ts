@@ -214,7 +214,9 @@ export class WebXRExperienceHelper implements IDisposable {
                 xrRenderState.baseLayer = baseLayer;
             }
 
+            this.sessionManager.updateRenderTarget(renderTarget);
             this.sessionManager.updateRenderState(xrRenderState);
+
             // run the render loop
             this.sessionManager.runXRRenderLoop();
             // Cache pre xr scene settings
