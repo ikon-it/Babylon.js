@@ -337,6 +337,7 @@ export class WebXRDefaultExperience {
 
     /**
      * Disposes of the experience helper
+     * @param all defines whether the experience should be completely disposed.
      */
     public dispose(all: boolean = true) {
         const shouldClear = !this.persistent || all;
