@@ -30,7 +30,7 @@ import type { IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
 import { GetClass } from "../Misc/typeStore";
 import { addClipPlaneUniforms, bindClipPlane, prepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
 
-import type { Scene } from "../scene";
+import { Scene } from "../scene";
 import type { Engine } from "../Engines/engine";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 
@@ -92,6 +92,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     private readonly _rawTextureWidth = 256;
 
     private _platform: IGPUParticleSystemPlatform;
+    private _rebuildingAfterContextLost = false;
 
     /**
      * Gets a boolean indicating if the GPU particles can be rendered on current browser
@@ -115,7 +116,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     public onStoppedObservable = new Observable<IParticleSystem>();
 
     private _createIndexBuffer() {
-        this._linesIndexBufferUseInstancing = this._engine.createIndexBuffer(new Uint32Array([0, 1, 1, 3, 3, 2, 2, 0, 0, 3]));
+        this._linesIndexBufferUseInstancing = this._engine.createIndexBuffer(new Uint32Array([0, 1, 1, 3, 3, 2, 2, 0, 0, 3]), undefined, "GPUParticleSystemLinesIndexBuffer");
     }
 
     /**
@@ -174,7 +175,13 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      * @returns true if the system is ready
      */
     public isReady(): boolean {
-        if (!this.emitter || (this._imageProcessingConfiguration && !this._imageProcessingConfiguration.isReady()) || !this.particleTexture || !this.particleTexture.isReady()) {
+        if (
+            !this.emitter ||
+            (this._imageProcessingConfiguration && !this._imageProcessingConfiguration.isReady()) ||
+            !this.particleTexture ||
+            !this.particleTexture.isReady() ||
+            this._rebuildingAfterContextLost
+        ) {
             return false;
         }
 
@@ -237,6 +244,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      */
     public start(delay = this.startDelay): void {
         if (!this.targetStopDuration && this._hasTargetStopDurationDependantGradient()) {
+            // eslint-disable-next-line no-throw-literal
             throw "Particle system started with a targetStopDuration dependant gradient (eg. startSizeGradients) but no targetStopDuration set";
         }
         if (delay) {
@@ -1231,7 +1239,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         }
 
         if (this._platform.isUpdateBufferCreated() && this._cachedUpdateDefines === defines) {
-            return true;
+            return this._platform.isUpdateBufferReady();
         }
 
         this._cachedUpdateDefines = defines;
@@ -1308,7 +1316,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     /**
      * @internal
      */
-    public static _GetEffectCreationOptions(isAnimationSheetEnabled = false, useLogarithmicDepth = false): string[] {
+    public static _GetEffectCreationOptions(isAnimationSheetEnabled = false, useLogarithmicDepth = false, applyFog = false): string[] {
         const effectCreationOption = ["emitterWM", "worldOffset", "view", "projection", "colorDead", "invView", "translationPivot", "eyePosition"];
         addClipPlaneUniforms(effectCreationOption);
 
@@ -1317,6 +1325,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         }
         if (useLogarithmicDepth) {
             effectCreationOption.push("logarithmicDepthConstant");
+        }
+
+        if (applyFog) {
+            effectCreationOption.push("vFogInfos");
+            effectCreationOption.push("vFogColor");
         }
 
         return effectCreationOption;
@@ -1330,6 +1343,9 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     public fillDefines(defines: Array<string>, blendMode: number = 0) {
         if (this._scene) {
             prepareStringDefinesForClipPlanes(this, this._scene, defines);
+            if (this.applyFog && this._scene.fogEnabled && this._scene.fogMode !== Scene.FOGMODE_NONE) {
+                defines.push("#define FOG");
+            }
         }
 
         if (blendMode === ParticleSystem.BLENDMODE_MULTIPLY) {
@@ -1392,7 +1408,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             )
         );
 
-        uniforms.push(...GPUParticleSystem._GetEffectCreationOptions(this._isAnimationSheetEnabled, this.useLogarithmicDepth));
+        uniforms.push(...GPUParticleSystem._GetEffectCreationOptions(this._isAnimationSheetEnabled, this.useLogarithmicDepth, this.applyFog));
 
         samplers.push("diffuseSampler", "colorGradientSampler");
 
@@ -1521,6 +1537,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         if (this._scene) {
             bindClipPlane(effect, this, this._scene);
+
+            if (this.applyFog) {
+                MaterialHelper.BindFogParameters(this._scene, undefined, effect);
+            }
         }
 
         if (defines.indexOf("#define BILLBOARDMODE_ALL") >= 0) {
@@ -1583,7 +1603,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             return;
         }
 
-        if (!this._recreateUpdateEffect()) {
+        if (!this._recreateUpdateEffect() || this._rebuildingAfterContextLost) {
             return;
         }
 
@@ -1744,6 +1764,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
                 setTimeout(checkUpdateEffect, 10);
             } else {
                 this._initialize(true);
+                this._rebuildingAfterContextLost = false;
             }
         };
 
@@ -1751,6 +1772,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         this._cachedUpdateDefines = "";
         this._platform.contextLost();
+        this._rebuildingAfterContextLost = true;
 
         checkUpdateEffect();
     }

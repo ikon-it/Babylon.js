@@ -222,8 +222,8 @@ export class MaterialHelper {
             defines["MORPHTARGETS_UV"] = manager.supportsUVs && defines["UV1"];
             defines["MORPHTARGETS_TANGENT"] = manager.supportsTangents && defines["TANGENT"];
             defines["MORPHTARGETS_NORMAL"] = manager.supportsNormals && defines["NORMAL"];
-            defines["MORPHTARGETS"] = manager.numInfluencers > 0;
-            defines["NUM_MORPH_INFLUENCERS"] = manager.numInfluencers;
+            defines["NUM_MORPH_INFLUENCERS"] = manager.numMaxInfluencers || manager.numInfluencers;
+            defines["MORPHTARGETS"] = defines["NUM_MORPH_INFLUENCERS"] > 0;
 
             defines["MORPHTARGETS_TEXTURE"] = manager.isUsingTextureForTargets;
         } else {
@@ -700,6 +700,7 @@ export class MaterialHelper {
 
         if (defines["NUM_MORPH_INFLUENCERS"]) {
             uniformsList.push("morphTargetInfluences");
+            uniformsList.push("morphTargetCount");
         }
 
         if (defines["BAKED_VERTEX_ANIMATION_TEXTURE"]) {
@@ -815,7 +816,7 @@ export class MaterialHelper {
     /**
      * Prepares the list of attributes required for baked vertex animations according to the effect defines.
      * @param attribs The current list of supported attribs
-     * @param mesh The mesh to prepare the morph targets attributes for
+     * @param mesh The mesh to prepare for baked vertex animations
      * @param defines The current Defines of the effect
      */
     public static PrepareAttributesForBakedVertexAnimation(attribs: string[], mesh: AbstractMesh, defines: any): void {
@@ -927,8 +928,8 @@ export class MaterialHelper {
      * @param effect The effect we are binding the data to
      * @param linearSpace Defines if the fog effect is applied in linear space
      */
-    public static BindFogParameters(scene: Scene, mesh: AbstractMesh, effect: Effect, linearSpace = false): void {
-        if (scene.fogEnabled && mesh.applyFog && scene.fogMode !== Scene.FOGMODE_NONE) {
+    public static BindFogParameters(scene: Scene, mesh?: AbstractMesh, effect?: Effect, linearSpace = false): void {
+        if (effect && scene.fogEnabled && (!mesh || mesh.applyFog) && scene.fogMode !== Scene.FOGMODE_NONE) {
             effect.setFloat4("vFogInfos", scene.fogMode, scene.fogStart, scene.fogEnd, scene.fogDensity);
             // Convert fog color to linear space if used in a linear space computed shader.
             if (linearSpace) {

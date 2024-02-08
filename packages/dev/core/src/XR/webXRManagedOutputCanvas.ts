@@ -83,7 +83,7 @@ export class WebXRManagedOutputCanvas implements WebXRRenderTarget {
         private _options: WebXRManagedOutputCanvasOptions = WebXRManagedOutputCanvasOptions.GetDefaults()
     ) {
         this._engine = _xrSessionManager.engine;
-        this._engine.onDisposeObservable.addOnce(() => {
+        this._engine?.onDisposeObservable.addOnce(() => {
             this._engine = null;
         });
 

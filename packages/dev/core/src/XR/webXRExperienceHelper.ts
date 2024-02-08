@@ -185,6 +185,7 @@ export class WebXRExperienceHelper implements IDisposable {
         sessionCreationOptions: XRSessionInit = {}
     ): Promise<WebXRSessionManager> {
         if (!this._supported) {
+            // eslint-disable-next-line no-throw-literal
             throw "WebXR not supported in this browser or environment";
         }
         this._setState(WebXRState.ENTERING_XR);
@@ -249,8 +250,8 @@ export class WebXRExperienceHelper implements IDisposable {
             });
             return this.sessionManager;
         } catch (e) {
-            console.log(e);
-            console.log(e.message);
+            Logger.Log(e);
+            Logger.Log(e.message);
             this._setState(WebXRState.NOT_IN_XR);
             throw e;
         }
