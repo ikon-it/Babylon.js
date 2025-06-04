@@ -2,12 +2,24 @@ import type { Nullable } from "core/types";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import type { Material } from "core/Materials/material";
 
-import type { IMaterial } from "../glTFLoaderInterfaces";
+import type { IMaterial, ITextureInfo } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IKHRMaterialsAnisotropy } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_materials_anisotropy";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_materials_anisotropy extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_materials_anisotropy"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_anisotropy)
@@ -47,16 +59,17 @@ export class KHR_materials_anisotropy implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsAnisotropy>(context, material, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsAnisotropy>(context, material, this.name, async (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
             promises.push(this._loader.loadMaterialPropertiesAsync(context, material, babylonMaterial));
             promises.push(this._loadIridescencePropertiesAsync(extensionContext, extension, babylonMaterial));
-            return Promise.all(promises).then(() => {});
+            await Promise.all(promises);
         });
     }
 
-    private _loadIridescencePropertiesAsync(context: string, properties: IKHRMaterialsAnisotropy, babylonMaterial: Material): Promise<void> {
+    private async _loadIridescencePropertiesAsync(context: string, properties: IKHRMaterialsAnisotropy, babylonMaterial: Material): Promise<void> {
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
         }
@@ -69,6 +82,7 @@ export class KHR_materials_anisotropy implements IGLTFLoaderExtension {
         babylonMaterial.anisotropy.angle = properties.anisotropyRotation ?? 0;
 
         if (properties.anisotropyTexture) {
+            (properties.anisotropyTexture as ITextureInfo).nonColorData = true;
             promises.push(
                 this._loader.loadTextureInfoAsync(`${context}/anisotropyTexture`, properties.anisotropyTexture, (texture) => {
                     texture.name = `${babylonMaterial.name} (Anisotropy Intensity)`;
@@ -77,8 +91,9 @@ export class KHR_materials_anisotropy implements IGLTFLoaderExtension {
             );
         }
 
-        return Promise.all(promises).then(() => {});
+        await Promise.all(promises);
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_materials_anisotropy(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_materials_anisotropy(loader));

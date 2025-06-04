@@ -1,5 +1,7 @@
+import type { DeepImmutable, FloatArray } from "../../types";
 import type { INative, INativeDataStream } from "./nativeInterfaces";
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 declare const _native: INative;
 
 /** @internal */
@@ -85,7 +87,7 @@ export class NativeDataStream {
      * Writes a float32 array to the stream
      * @param values the values to write
      */
-    public writeFloat32Array(values: Float32Array): void {
+    public writeFloat32Array(values: DeepImmutable<FloatArray>): void {
         this._flushIfNecessary(1 + values.length);
         this._uint32s[this._position++] = values.length;
         this._float32s.set(values, this._position);

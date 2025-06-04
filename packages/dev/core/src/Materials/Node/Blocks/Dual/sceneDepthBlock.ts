@@ -11,6 +11,8 @@ import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Deco
 import type { Effect } from "../../../effect";
 
 import type { NodeMaterial } from "../../nodeMaterial";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { Constants } from "core/Engines/constants";
 
 /**
  * Block used to retrieve the depth (zbuffer) of the scene
@@ -25,6 +27,7 @@ export class SceneDepthBlock extends NodeMaterialBlock {
      * Defines if the depth renderer should be setup in non linear mode
      */
     @editableInPropertyPage("Use non linear depth", PropertyTypeForEdition.Boolean, "ADVANCED", {
+        embedded: true,
         notifiers: {
             activatePreviewCommand: true,
             callback: (scene, block) => {
@@ -97,7 +100,7 @@ export class SceneDepthBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "SceneDepthBlock";
     }
 
@@ -119,11 +122,11 @@ export class SceneDepthBlock extends NodeMaterialBlock {
      * Initialize the block and prepare the context for build
      * @param state defines the state that will be used for the build
      */
-    public initialize(state: NodeMaterialBuildState) {
+    public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("textureSampler");
     }
 
-    public get target() {
+    public override get target() {
         if (!this.uv.isConnected) {
             return NodeMaterialBlockTargets.VertexAndFragment;
         }
@@ -141,7 +144,7 @@ export class SceneDepthBlock extends NodeMaterialBlock {
         return depthRenderer.getDepthMap();
     }
 
-    public bind(effect: Effect, nodeMaterial: NodeMaterial) {
+    public override bind(effect: Effect, nodeMaterial: NodeMaterial) {
         const texture = this._getTexture(nodeMaterial.getScene());
 
         effect.setTexture(this._samplerName, texture);
@@ -156,14 +159,18 @@ export class SceneDepthBlock extends NodeMaterialBlock {
             if (!uvInputOwnerBlock.isAttribute) {
                 state._emitUniformFromString(
                     uvInput.associatedVariableName,
-                    "vec" + (uvInput.type === NodeMaterialBlockConnectionPointTypes.Vector3 ? "3" : uvInput.type === NodeMaterialBlockConnectionPointTypes.Vector4 ? "4" : "2")
+                    uvInput.type === NodeMaterialBlockConnectionPointTypes.Vector3
+                        ? NodeMaterialBlockConnectionPointTypes.Vector3
+                        : uvInput.type === NodeMaterialBlockConnectionPointTypes.Vector4
+                          ? NodeMaterialBlockConnectionPointTypes.Vector4
+                          : NodeMaterialBlockConnectionPointTypes.Vector2
                 );
             }
         }
 
         this._mainUVName = "vMain" + uvInput.associatedVariableName;
 
-        state._emitVaryingFromString(this._mainUVName, "vec2");
+        state._emitVaryingFromString(this._mainUVName, NodeMaterialBlockConnectionPointTypes.Vector2);
 
         state.compilationString += `${this._mainUVName} = ${uvInput.associatedVariableName}.xy;\n`;
 
@@ -187,17 +194,28 @@ export class SceneDepthBlock extends NodeMaterialBlock {
             if (state.target === NodeMaterialBlockTargets.Fragment) {
                 return;
             }
+            const textureReadFunc =
+                state.shaderLanguage === ShaderLanguage.GLSL
+                    ? `texture2D(${this._samplerName},`
+                    : `textureSampleLevel(${this._samplerName}, ${this._samplerName + Constants.AUTOSAMPLERSUFFIX},`;
 
-            state.compilationString += `vec4 ${this._tempTextureRead} = texture2D(${this._samplerName}, ${uvInput.associatedVariableName}.xy);\n`;
+            const complement = state.shaderLanguage === ShaderLanguage.GLSL ? "" : ", 0";
+
+            state.compilationString += `${state._declareLocalVar(this._tempTextureRead, NodeMaterialBlockConnectionPointTypes.Vector4)}=  ${textureReadFunc} ${uvInput.associatedVariableName}.xy${complement});\n`;
             return;
         }
+
+        const textureReadFunc =
+            state.shaderLanguage === ShaderLanguage.GLSL
+                ? `texture2D(${this._samplerName},`
+                : `textureSample(${this._samplerName}, ${this._samplerName + Constants.AUTOSAMPLERSUFFIX},`;
 
         if (this.uv.ownerBlock.target === NodeMaterialBlockTargets.Fragment) {
-            state.compilationString += `vec4 ${this._tempTextureRead} = texture2D(${this._samplerName}, ${uvInput.associatedVariableName}.xy);\n`;
+            state.compilationString += `${state._declareLocalVar(this._tempTextureRead, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${textureReadFunc} ${uvInput.associatedVariableName}.xy);\n`;
             return;
         }
 
-        state.compilationString += `vec4 ${this._tempTextureRead} = texture2D(${this._samplerName}, ${this._mainUVName});\n`;
+        state.compilationString += `${state._declareLocalVar(this._tempTextureRead, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${textureReadFunc} ${this._mainUVName});\n`;
     }
 
     private _writeOutput(state: NodeMaterialBuildState, output: NodeMaterialConnectionPoint, swizzle: string, vertexMode = false) {
@@ -206,19 +224,19 @@ export class SceneDepthBlock extends NodeMaterialBlock {
                 return;
             }
 
-            state.compilationString += `${this._declareOutput(output, state)} = ${this._tempTextureRead}.${swizzle};\n`;
+            state.compilationString += `${state._declareOutput(output)} = ${this._tempTextureRead}.${swizzle};\n`;
             return;
         }
 
         if (this.uv.ownerBlock.target === NodeMaterialBlockTargets.Fragment) {
-            state.compilationString += `${this._declareOutput(output, state)} = ${this._tempTextureRead}.${swizzle};\n`;
+            state.compilationString += `${state._declareOutput(output)} = ${this._tempTextureRead}.${swizzle};\n`;
             return;
         }
 
-        state.compilationString += `${this._declareOutput(output, state)} = ${this._tempTextureRead}.${swizzle};\n`;
+        state.compilationString += `${state._declareOutput(output)} = ${this._tempTextureRead}.${swizzle};\n`;
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         this._samplerName = state._getFreeVariableName(this.name + "Sampler");
@@ -253,7 +271,7 @@ export class SceneDepthBlock extends NodeMaterialBlock {
         return this;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.useNonLinearDepth = this.useNonLinearDepth;
@@ -263,7 +281,7 @@ export class SceneDepthBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         this.useNonLinearDepth = serializationObject.useNonLinearDepth;

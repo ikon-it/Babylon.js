@@ -7,17 +7,20 @@ import type { SmartArray } from "../Misc/smartArray";
 import type { Scene } from "../scene";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import { MaterialHelper } from "../Materials/materialHelper";
 import { Camera } from "../Cameras/camera";
 import { Constants } from "../Engines/constants";
 
 import "../Shaders/depth.fragment";
 import "../Shaders/depth.vertex";
 import { _WarnImport } from "../Misc/devTools";
-import { addClipPlaneUniforms, bindClipPlane, prepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
 
 import type { Material } from "../Materials/material";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { BindBonesParameters, BindMorphTargetParameters, PrepareDefinesAndAttributesForMorphTargets, PushAttributesForInstances } from "../Materials/materialHelper.functions";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { EffectFallbacks } from "core/Materials/effectFallbacks";
+import type { IEffectCreationOptions } from "core/Materials";
 
 /**
  * This represents a depth renderer in Babylon.
@@ -28,6 +31,22 @@ export class DepthRenderer {
     private _depthMap: RenderTargetTexture;
     private readonly _storeNonLinearDepth: boolean;
     private readonly _storeCameraSpaceZ: boolean;
+
+    /** Shader language used by the material */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in this material.
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
+
+    /**
+     * Force all the depth renderer to compile to glsl even on WebGPU engines.
+     * False by default. This is mostly meant for backward compatibility.
+     */
+    public static ForceGLSL = false;
 
     /** Color used to clear the depth texture. Default: (1,0,0,1) */
     public clearColor: Color4;
@@ -97,8 +116,11 @@ export class DepthRenderer {
         if (this.isPacked) {
             this.clearColor = new Color4(1.0, 1.0, 1.0, 1.0);
         } else {
-            this.clearColor = new Color4(storeCameraSpaceZ ? 1e8 : 1.0, 0.0, 0.0, 1.0);
+            this.clearColor = new Color4(storeCameraSpaceZ ? 0.0 : 1.0, 0.0, 0.0, 1.0);
         }
+
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this._initShaderSourceAsync();
 
         DepthRenderer._SceneComponentInitialization(this._scene);
 
@@ -192,7 +214,8 @@ export class DepthRenderer {
 
             // Culling
             const detNeg = effectiveMesh._getWorldMatrixDeterminant() < 0;
-            let sideOrientation = renderingMesh.overrideMaterialSideOrientation ?? material.sideOrientation;
+            let sideOrientation = material._getEffectiveOrientation(renderingMesh);
+
             if (detNeg) {
                 sideOrientation =
                     sideOrientation === Constants.MATERIAL_ClockWiseSideOrientation
@@ -262,7 +285,7 @@ export class DepthRenderer {
 
                 if (!renderingMaterial) {
                     // Alpha test
-                    if (material.needAlphaTesting()) {
+                    if (material.needAlphaTestingForMesh(effectiveMesh)) {
                         const alphaTexture = material.getAlphaTestTexture();
 
                         if (alphaTexture) {
@@ -272,29 +295,21 @@ export class DepthRenderer {
                     }
 
                     // Bones
-                    if (renderingMesh.useBones && renderingMesh.computeBonesUsingShaders && renderingMesh.skeleton) {
-                        const skeleton = renderingMesh.skeleton;
-
-                        if (skeleton.isUsingTextureForMatrices) {
-                            const boneTexture = skeleton.getTransformMatrixTexture(renderingMesh);
-                            if (!boneTexture) {
-                                return;
-                            }
-
-                            effect.setTexture("boneSampler", boneTexture);
-                            effect.setFloat("boneTextureWidth", 4.0 * (skeleton.bones.length + 1));
-                        } else {
-                            effect.setMatrices("mBones", skeleton.getTransformMatrices(renderingMesh));
-                        }
-                    }
+                    BindBonesParameters(renderingMesh, effect);
 
                     // Clip planes
-                    bindClipPlane(effect, material, scene);
+                    BindClipPlane(effect, material, scene);
 
                     // Morph targets
-                    MaterialHelper.BindMorphTargetParameters(renderingMesh, effect);
+                    BindMorphTargetParameters(renderingMesh, effect);
                     if (renderingMesh.morphTargetManager && renderingMesh.morphTargetManager.isUsingTextureForTargets) {
                         renderingMesh.morphTargetManager._bind(effect);
+                    }
+
+                    // Baked vertex animations
+                    const bvaManager = subMesh.getMesh().bakedVertexAnimationManager;
+                    if (bvaManager && bvaManager.isEnabled) {
+                        bvaManager.bind(effect, hardwareInstancedRendering);
                     }
 
                     // Points cloud rendering
@@ -344,6 +359,21 @@ export class DepthRenderer {
         };
     }
 
+    private _shadersLoaded = false;
+    private async _initShaderSourceAsync(forceGLSL = false) {
+        const engine = this._scene.getEngine();
+
+        if (engine.isWebGPU && !forceGLSL && !DepthRenderer.ForceGLSL) {
+            this._shaderLanguage = ShaderLanguage.WGSL;
+
+            await Promise.all([import("../ShadersWGSL/depth.vertex"), import("../ShadersWGSL/depth.fragment")]);
+        } else {
+            await Promise.all([import("../Shaders/depth.vertex"), import("../Shaders/depth.fragment")]);
+        }
+
+        this._shadersLoaded = true;
+    }
+
     /**
      * Creates the depth rendering effect and checks if the effect is ready.
      * @param subMesh The submesh to be used to render the depth map of
@@ -351,6 +381,10 @@ export class DepthRenderer {
      * @returns if the depth renderer is ready to render the depth map
      */
     public isReady(subMesh: SubMesh, useInstances: boolean): boolean {
+        if (!this._shadersLoaded) {
+            return false;
+        }
+
         const engine = this._scene.getEngine();
         const mesh = subMesh.getMesh();
         const scene = mesh.getScene();
@@ -370,21 +404,28 @@ export class DepthRenderer {
 
         const attribs = [VertexBuffer.PositionKind];
 
+        let uv1 = false;
+        let uv2 = false;
+        const color = false;
+
         // Alpha test
-        if (material && material.needAlphaTesting() && material.getAlphaTestTexture()) {
+        if (material.needAlphaTestingForMesh(mesh) && material.getAlphaTestTexture()) {
             defines.push("#define ALPHATEST");
             if (mesh.isVerticesDataPresent(VertexBuffer.UVKind)) {
                 attribs.push(VertexBuffer.UVKind);
                 defines.push("#define UV1");
+                uv1 = true;
             }
             if (mesh.isVerticesDataPresent(VertexBuffer.UV2Kind)) {
                 attribs.push(VertexBuffer.UV2Kind);
                 defines.push("#define UV2");
+                uv2 = true;
             }
         }
 
         // Bones
-        if (mesh.useBones && mesh.computeBonesUsingShaders) {
+        const fallbacks = new EffectFallbacks();
+        if (mesh.useBones && mesh.computeBonesUsingShaders && mesh.skeleton) {
             attribs.push(VertexBuffer.MatricesIndicesKind);
             attribs.push(VertexBuffer.MatricesWeightsKind);
             if (mesh.numBoneInfluencers > 4) {
@@ -392,33 +433,35 @@ export class DepthRenderer {
                 attribs.push(VertexBuffer.MatricesWeightsExtraKind);
             }
             defines.push("#define NUM_BONE_INFLUENCERS " + mesh.numBoneInfluencers);
-            defines.push("#define BonesPerMesh " + (mesh.skeleton ? mesh.skeleton.bones.length + 1 : 0));
+            if (mesh.numBoneInfluencers > 0) {
+                fallbacks.addCPUSkinningFallback(0, mesh);
+            }
 
-            const skeleton = subMesh.getRenderingMesh().skeleton;
-
-            if (skeleton?.isUsingTextureForMatrices) {
+            const skeleton = mesh.skeleton;
+            if (skeleton.isUsingTextureForMatrices) {
                 defines.push("#define BONETEXTURE");
+            } else {
+                defines.push("#define BonesPerMesh " + (skeleton.bones.length + 1));
             }
         } else {
             defines.push("#define NUM_BONE_INFLUENCERS 0");
         }
 
         // Morph targets
-        const morphTargetManager = (mesh as Mesh).morphTargetManager;
-        let numMorphInfluencers = 0;
-        if (morphTargetManager) {
-            numMorphInfluencers = morphTargetManager.numMaxInfluencers || morphTargetManager.numInfluencers;
-            if (numMorphInfluencers > 0) {
-                defines.push("#define MORPHTARGETS");
-                defines.push("#define NUM_MORPH_INFLUENCERS " + numMorphInfluencers);
-
-                if (morphTargetManager.isUsingTextureForTargets) {
-                    defines.push("#define MORPHTARGETS_TEXTURE");
-                }
-
-                MaterialHelper.PrepareAttributesForMorphTargetsInfluencers(attribs, mesh, numMorphInfluencers);
-            }
-        }
+        const numMorphInfluencers = mesh.morphTargetManager
+            ? PrepareDefinesAndAttributesForMorphTargets(
+                  mesh.morphTargetManager,
+                  defines,
+                  attribs,
+                  mesh,
+                  true, // usePositionMorph
+                  false, // useNormalMorph
+                  false, // useTangentMorph
+                  uv1, // useUVMorph
+                  uv2, // useUV2Morph
+                  color // useColorMorph
+              )
+            : 0;
 
         // Points cloud rendering
         if (material.pointsCloud) {
@@ -428,9 +471,18 @@ export class DepthRenderer {
         // Instances
         if (useInstances) {
             defines.push("#define INSTANCES");
-            MaterialHelper.PushAttributesForInstances(attribs);
+            PushAttributesForInstances(attribs);
             if (subMesh.getRenderingMesh().hasThinInstances) {
                 defines.push("#define THIN_INSTANCES");
+            }
+        }
+
+        // Baked vertex animations
+        const bvaManager = mesh.bakedVertexAnimationManager;
+        if (bvaManager && bvaManager.isEnabled) {
+            defines.push("#define BAKED_VERTEX_ANIMATION_TEXTURE");
+            if (useInstances) {
+                attribs.push("bakedVertexAnimationSettingsInstanced");
             }
         }
 
@@ -450,7 +502,7 @@ export class DepthRenderer {
         }
 
         // Clip planes
-        prepareStringDefinesForClipPlanes(material, scene, defines);
+        PrepareStringDefinesForClipPlanes(material, scene, defines);
 
         // Get correct effect
         const drawWrapper = subMesh._getDrawWrapper(undefined, true)!;
@@ -470,13 +522,32 @@ export class DepthRenderer {
                 "morphTargetCount",
                 "morphTargetTextureInfo",
                 "morphTargetTextureIndices",
+                "bakedVertexAnimationSettings",
+                "bakedVertexAnimationTextureSizeInverted",
+                "bakedVertexAnimationTime",
+                "bakedVertexAnimationTexture",
             ];
-            addClipPlaneUniforms(uniforms);
+            const samplers = ["diffuseSampler", "morphTargets", "boneSampler", "bakedVertexAnimationTexture"];
+
+            AddClipPlaneUniforms(uniforms);
 
             drawWrapper.setEffect(
-                engine.createEffect("depth", attribs, uniforms, ["diffuseSampler", "morphTargets", "boneSampler"], join, undefined, undefined, undefined, {
-                    maxSimultaneousMorphTargets: numMorphInfluencers,
-                }),
+                engine.createEffect(
+                    "depth",
+                    <IEffectCreationOptions>{
+                        attributes: attribs,
+                        uniformsNames: uniforms,
+                        uniformBuffersNames: [],
+                        samplers: samplers,
+                        defines: join,
+                        fallbacks: fallbacks,
+                        onCompiled: null,
+                        onError: null,
+                        indexParameters: { maxSimultaneousMorphTargets: numMorphInfluencers },
+                        shaderLanguage: this._shaderLanguage,
+                    },
+                    engine
+                ),
                 join
             );
         }

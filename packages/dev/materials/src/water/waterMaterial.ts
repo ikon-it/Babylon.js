@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { serializeAsVector2, serializeAsTexture, serialize, expandToProperty, serializeAsColor3, SerializationHelper } from "core/Misc/decorators";
+import { serializeAsVector2, serializeAsTexture, serialize, expandToProperty, serializeAsColor3 } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import { Matrix, Vector2, Vector3 } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
 import { Plane } from "core/Maths/math.plane";
@@ -12,9 +13,8 @@ import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
 import type { IEffectCreationOptions } from "core/Materials/effect";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import type { IImageProcessingConfigurationDefines } from "core/Materials/imageProcessingConfiguration";
+import type { IImageProcessingConfigurationDefines } from "core/Materials/imageProcessingConfiguration.defines";
 import { ImageProcessingConfiguration } from "core/Materials/imageProcessingConfiguration";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { MaterialFlags } from "core/Materials/materialFlags";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -29,7 +29,23 @@ import "./water.fragment";
 import "./water.vertex";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
 import { CreateGround } from "core/Meshes/Builders/groundBuilder";
-import { addClipPlaneUniforms, bindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import {
+    BindBonesParameters,
+    BindFogParameters,
+    BindLights,
+    BindLogDepth,
+    HandleFallbacksForShadows,
+    PrepareAttributesForBones,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForLights,
+    PrepareDefinesForMisc,
+    PrepareUniformsAndSamplersList,
+} from "core/Materials/materialHelper.functions";
+
+import "core/Rendering/boundingBoxRenderer";
 
 class WaterMaterialDefines extends MaterialDefines implements IImageProcessingConfigurationDefines {
     public BUMP = false;
@@ -65,8 +81,7 @@ class WaterMaterialDefines extends MaterialDefines implements IImageProcessingCo
     public VIGNETTE = false;
     public VIGNETTEBLENDMODEMULTIPLY = false;
     public VIGNETTEBLENDMODEOPAQUE = false;
-    public TONEMAPPING = false;
-    public TONEMAPPING_ACES = false;
+    public TONEMAPPING = 0;
     public CONTRAST = false;
     public EXPOSURE = false;
     public COLORCURVES = false;
@@ -232,7 +247,7 @@ export class WaterMaterial extends PushMaterial {
     /**
      * Gets a boolean indicating that current material needs to register RTT
      */
-    public get hasRenderTargetTextures(): boolean {
+    public override get hasRenderTargetTextures(): boolean {
         return true;
     }
 
@@ -324,19 +339,19 @@ export class WaterMaterial extends PushMaterial {
         return !(this._refractionRTT && this._refractionRTT.refreshRate === 0);
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1.0;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -377,9 +392,9 @@ export class WaterMaterial extends PushMaterial {
             }
         }
 
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
+        PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
 
         if (defines._areMiscDirty) {
             defines.FRESNELSEPARATE = this._fresnelSeparate;
@@ -389,7 +404,7 @@ export class WaterMaterial extends PushMaterial {
         }
 
         // Lights
-        defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, true, this._maxSimultaneousLights, this._disableLighting);
+        defines._needNormals = PrepareDefinesForLights(scene, mesh, defines, true, this._maxSimultaneousLights, this._disableLighting);
 
         // Image processing
         if (defines._areImageProcessingDirty && this._imageProcessingConfiguration) {
@@ -404,7 +419,7 @@ export class WaterMaterial extends PushMaterial {
         }
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, true);
+        PrepareDefinesForAttributes(mesh, defines, true, true);
 
         // Configure this
         this._mesh = mesh;
@@ -432,7 +447,7 @@ export class WaterMaterial extends PushMaterial {
                 fallbacks.addFallback(0, "LOGARITHMICDEPTH");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
+            HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
 
             if (defines.NUM_BONE_INFLUENCERS > 0) {
                 fallbacks.addCPUSkinningFallback(0, mesh);
@@ -457,8 +472,8 @@ export class WaterMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.ColorKind);
             }
 
-            MaterialHelper.PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
+            PrepareAttributesForInstances(attribs, defines);
 
             // Legacy browser patch
             const shaderName = "water";
@@ -508,9 +523,9 @@ export class WaterMaterial extends PushMaterial {
                 ImageProcessingConfiguration.PrepareSamplers(samplers, defines);
             }
 
-            addClipPlaneUniforms(uniforms);
+            AddClipPlaneUniforms(uniforms);
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -548,7 +563,7 @@ export class WaterMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <WaterMaterialDefines>subMesh.materialDefines;
@@ -567,7 +582,7 @@ export class WaterMaterial extends PushMaterial {
         this._activeEffect.setMatrix("viewProjection", scene.getTransformMatrix());
 
         // Bones
-        MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
+        BindBonesParameters(mesh, this._activeEffect);
 
         if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
@@ -578,7 +593,7 @@ export class WaterMaterial extends PushMaterial {
                 this._activeEffect.setMatrix("normalMatrix", this.bumpTexture.getTextureMatrix());
             }
             // Clip plane
-            bindClipPlane(effect, this, scene);
+            BindClipPlane(effect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
@@ -587,7 +602,7 @@ export class WaterMaterial extends PushMaterial {
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -600,7 +615,7 @@ export class WaterMaterial extends PushMaterial {
         }
 
         if (scene.lightsEnabled && !this.disableLighting) {
-            MaterialHelper.BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
+            BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
         }
 
         // View
@@ -609,10 +624,10 @@ export class WaterMaterial extends PushMaterial {
         }
 
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         // Log. depth
-        MaterialHelper.BindLogDepth(defines, this._activeEffect, scene);
+        BindLogDepth(defines, this._activeEffect, scene);
 
         // Water
         if (MaterialFlags.ReflectionTextureEnabled) {
@@ -657,6 +672,15 @@ export class WaterMaterial extends PushMaterial {
         this._refractionRTT.wrapU = Constants.TEXTURE_MIRROR_ADDRESSMODE;
         this._refractionRTT.wrapV = Constants.TEXTURE_MIRROR_ADDRESSMODE;
         this._refractionRTT.ignoreCameraViewport = true;
+
+        let boundingBoxRendererEnabled = false;
+        this._refractionRTT.onBeforeRenderObservable.add(() => {
+            boundingBoxRendererEnabled = scene.getBoundingBoxRenderer().enabled;
+            scene.getBoundingBoxRenderer().enabled = false;
+        });
+        this._refractionRTT.onAfterRenderObservable.add(() => {
+            scene.getBoundingBoxRenderer().enabled = boundingBoxRendererEnabled;
+        });
 
         this._reflectionRTT = new RenderTargetTexture(name + "_reflection", { width: renderTargetSize.x, height: renderTargetSize.y }, scene, false, true);
         this._reflectionRTT.wrapU = Constants.TEXTURE_MIRROR_ADDRESSMODE;
@@ -732,7 +756,7 @@ export class WaterMaterial extends PushMaterial {
         };
     }
 
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         const results = [];
 
         if (this.bumpTexture && this.bumpTexture.animations && this.bumpTexture.animations.length > 0) {
@@ -748,7 +772,7 @@ export class WaterMaterial extends PushMaterial {
         return results;
     }
 
-    public getActiveTextures(): BaseTexture[] {
+    public override getActiveTextures(): BaseTexture[] {
         const activeTextures = super.getActiveTextures();
 
         if (this._bumpTexture) {
@@ -758,7 +782,7 @@ export class WaterMaterial extends PushMaterial {
         return activeTextures;
     }
 
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -770,7 +794,7 @@ export class WaterMaterial extends PushMaterial {
         return false;
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         if (this.bumpTexture) {
             this.bumpTexture.dispose();
         }
@@ -800,11 +824,11 @@ export class WaterMaterial extends PushMaterial {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): WaterMaterial {
+    public override clone(name: string): WaterMaterial {
         return SerializationHelper.Clone(() => new WaterMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.WaterMaterial";
 
@@ -818,12 +842,12 @@ export class WaterMaterial extends PushMaterial {
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "WaterMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): WaterMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): WaterMaterial {
         const mat = SerializationHelper.Parse(() => new WaterMaterial(source.name, scene), source, scene, rootUrl);
         mat._waitingRenderList = source.renderList;
 

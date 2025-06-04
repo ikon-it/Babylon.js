@@ -6,8 +6,11 @@ import type { Nullable } from "../../types";
 import type { RenderTargetWrapper } from "../renderTargetWrapper";
 import { WebGLRenderTargetWrapper } from "../WebGL/webGLRenderTargetWrapper";
 import type { WebGLHardwareTexture } from "../WebGL/webGLHardwareTexture";
+import { HasStencilAspect } from "core/Materials/Textures/textureHelper.functions";
 
 import { Constants } from "../constants";
+
+import "../AbstractEngine/abstractEngine.texture";
 
 /**
  * Type used to define a texture size (either with a number or with a rect width and height)
@@ -15,8 +18,9 @@ import { Constants } from "../constants";
  */
 export type RenderTargetTextureSize = TextureSize;
 
-declare module "../../Engines/thinEngine" {
-    export interface ThinEngine {
+declare module "../../Engines/abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
         /**
          * Creates a new render target texture
          * @param size defines the size of the texture
@@ -24,16 +28,6 @@ declare module "../../Engines/thinEngine" {
          * @returns a new render target wrapper ready to render texture
          */
         createRenderTargetTexture(size: TextureSize, options: boolean | RenderTargetCreationOptions): RenderTargetWrapper;
-
-        /**
-         * Creates a depth stencil texture.
-         * This is only available in WebGL 2 or with the depth texture extension available.
-         * @param size The size of face edge in the texture.
-         * @param options The options defining the texture.
-         * @param rtWrapper The render target wrapper for which the depth/stencil texture must be created
-         * @returns The texture
-         */
-        createDepthStencilTexture(size: TextureSize, options: DepthTextureCreationOptions, rtWrapper: RenderTargetWrapper): InternalTexture;
 
         /**
          * Updates the sample count of a render target texture
@@ -49,6 +43,9 @@ declare module "../../Engines/thinEngine" {
 
         /** @internal */
         _createHardwareRenderTargetWrapper(isMulti: boolean, isCube: boolean, size: TextureSize): RenderTargetWrapper;
+
+        /** @internal */
+        _setupDepthStencilTexture(internalTexture: InternalTexture, size: TextureSize, bilinearFiltering: boolean, comparisonFunction: number, samples?: number): void;
     }
 }
 
@@ -89,7 +86,7 @@ ThinEngine.prototype.createRenderTargetTexture = function (this: ThinEngine, siz
     rtWrapper._depthStencilBuffer = this._setupFramebufferDepthAttachments(generateStencilBuffer, generateDepthBuffer, width, height);
 
     // No need to rebind on every frame
-    if (texture && !texture.is2DArray) {
+    if (texture && !texture.is2DArray && !texture.is3D) {
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture._hardwareTexture!.underlyingResource, 0);
     }
 
@@ -102,24 +99,34 @@ ThinEngine.prototype.createRenderTargetTexture = function (this: ThinEngine, siz
 
     rtWrapper.setTextures(texture);
 
-    this.updateRenderTargetTextureSampleCount(rtWrapper, samples);
+    if (!colorAttachment) {
+        this.updateRenderTargetTextureSampleCount(rtWrapper, samples);
+    } else {
+        rtWrapper._samples = colorAttachment.samples;
+        if (colorAttachment.samples > 1) {
+            const msaaRenderBuffer = (colorAttachment._hardwareTexture as WebGLHardwareTexture).getMSAARenderBuffer(0);
+
+            rtWrapper._MSAAFramebuffer = gl.createFramebuffer();
+
+            this._bindUnboundFramebuffer(rtWrapper._MSAAFramebuffer);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, msaaRenderBuffer);
+            this._bindUnboundFramebuffer(null);
+        }
+    }
 
     return rtWrapper;
 };
 
-ThinEngine.prototype.createDepthStencilTexture = function (size: TextureSize, options: DepthTextureCreationOptions, rtWrapper: RenderTargetWrapper): InternalTexture {
-    if (options.isCube) {
-        const width = (<{ width: number; height: number }>size).width || <number>size;
-        return this._createDepthStencilCubeTexture(width, options);
-    } else {
-        return this._createDepthStencilTexture(size, options, rtWrapper);
-    }
-};
-
-ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, options: DepthTextureCreationOptions): InternalTexture {
+ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, options: DepthTextureCreationOptions, rtWrapper: WebGLRenderTargetWrapper): InternalTexture {
     const gl = this._gl;
-    const layers = (<{ width: number; height: number; layers?: number }>size).layers || 0;
-    const target = layers !== 0 ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D;
+    const layers = (<{ width: number; height: number; depth?: number; layers?: number }>size).layers || 0;
+    const depth = (<{ width: number; height: number; depth?: number; layers?: number }>size).depth || 0;
+    let target: number = gl.TEXTURE_2D;
+    if (layers !== 0) {
+        target = gl.TEXTURE_2D_ARRAY;
+    } else if (depth !== 0) {
+        target = gl.TEXTURE_3D;
+    }
     const internalTexture = new InternalTexture(this, InternalTextureSource.DepthStencil);
     internalTexture.label = options.label;
     if (!this._caps.depthTextureExtension) {
@@ -139,7 +146,6 @@ ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, o
     this._setupDepthStencilTexture(
         internalTexture,
         size,
-        internalOptions.generateStencil,
         internalOptions.comparisonFunction === 0 ? false : internalOptions.bilinearFiltering,
         internalOptions.comparisonFunction,
         internalOptions.samples
@@ -154,7 +160,7 @@ ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, o
             internalOptions.depthTextureFormat !== Constants.TEXTUREFORMAT_DEPTH32_FLOAT &&
             internalOptions.depthTextureFormat !== Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8
         ) {
-            Logger.Error("Depth texture format is not supported.");
+            Logger.Error(`Depth texture ${internalOptions.depthTextureFormat} format is not supported.`);
             return internalTexture;
         }
         internalTexture.format = internalOptions.depthTextureFormat;
@@ -162,40 +168,15 @@ ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, o
         internalTexture.format = internalOptions.generateStencil ? Constants.TEXTUREFORMAT_DEPTH24_STENCIL8 : Constants.TEXTUREFORMAT_DEPTH24;
     }
 
-    const hasStencil =
-        internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24UNORM_STENCIL8 ||
-        internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24_STENCIL8 ||
-        internalTexture.format === Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8;
-
-    let type: GLenum = gl.UNSIGNED_INT;
-    if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH16) {
-        type = gl.UNSIGNED_SHORT;
-    } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24UNORM_STENCIL8 || internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24_STENCIL8) {
-        type = gl.UNSIGNED_INT_24_8;
-    } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH32_FLOAT) {
-        type = gl.FLOAT;
-    } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8) {
-        type = gl.FLOAT_32_UNSIGNED_INT_24_8_REV;
-    }
-
-    const format: GLenum = hasStencil ? gl.DEPTH_STENCIL : gl.DEPTH_COMPONENT;
-    let internalFormat = format;
-    if (this.webGLVersion > 1) {
-        if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH16) {
-            internalFormat = gl.DEPTH_COMPONENT16;
-        } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24) {
-            internalFormat = gl.DEPTH_COMPONENT24;
-        } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24UNORM_STENCIL8 || internalTexture.format === Constants.TEXTUREFORMAT_DEPTH24_STENCIL8) {
-            internalFormat = gl.DEPTH24_STENCIL8;
-        } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH32_FLOAT) {
-            internalFormat = gl.DEPTH_COMPONENT32F;
-        } else if (internalTexture.format === Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8) {
-            internalFormat = gl.DEPTH32F_STENCIL8;
-        }
-    }
+    const hasStencil = HasStencilAspect(internalTexture.format);
+    const type = this._getWebGLTextureTypeFromDepthTextureFormat(internalTexture.format);
+    const format = hasStencil ? gl.DEPTH_STENCIL : gl.DEPTH_COMPONENT;
+    const internalFormat = this._getInternalFormatFromDepthTextureFormat(internalTexture.format, true, hasStencil);
 
     if (internalTexture.is2DArray) {
         gl.texImage3D(target, 0, internalFormat, internalTexture.width, internalTexture.height, layers, 0, format, type, null);
+    } else if (internalTexture.is3D) {
+        gl.texImage3D(target, 0, internalFormat, internalTexture.width, internalTexture.height, depth, 0, format, type, null);
     } else {
         gl.texImage2D(target, 0, internalFormat, internalTexture.width, internalTexture.height, 0, format, type, null);
     }
@@ -204,11 +185,32 @@ ThinEngine.prototype._createDepthStencilTexture = function (size: TextureSize, o
 
     this._internalTexturesCache.push(internalTexture);
 
+    if (rtWrapper._depthStencilBuffer) {
+        gl.deleteRenderbuffer(rtWrapper._depthStencilBuffer);
+        rtWrapper._depthStencilBuffer = null;
+    }
+
+    this._bindUnboundFramebuffer(rtWrapper._MSAAFramebuffer ?? rtWrapper._framebuffer);
+
+    rtWrapper._generateStencilBuffer = hasStencil;
+    rtWrapper._depthStencilTextureWithStencil = hasStencil;
+
+    rtWrapper._depthStencilBuffer = this._setupFramebufferDepthAttachments(
+        rtWrapper._generateStencilBuffer,
+        rtWrapper._generateDepthBuffer,
+        rtWrapper.width,
+        rtWrapper.height,
+        rtWrapper.samples,
+        internalTexture.format
+    );
+
+    this._bindUnboundFramebuffer(null);
+
     return internalTexture;
 };
 
 ThinEngine.prototype.updateRenderTargetTextureSampleCount = function (rtWrapper: Nullable<WebGLRenderTargetWrapper>, samples: number): number {
-    if (this.webGLVersion < 2 || !rtWrapper || !rtWrapper.texture) {
+    if (this.webGLVersion < 2 || !rtWrapper) {
         return 1;
     }
 
@@ -231,10 +233,10 @@ ThinEngine.prototype.updateRenderTargetTextureSampleCount = function (rtWrapper:
         rtWrapper._MSAAFramebuffer = null;
     }
 
-    const hardwareTexture = rtWrapper.texture._hardwareTexture as WebGLHardwareTexture;
-    hardwareTexture.releaseMSAARenderBuffers();
+    const hardwareTexture = rtWrapper.texture?._hardwareTexture as Nullable<WebGLHardwareTexture>;
+    hardwareTexture?.releaseMSAARenderBuffers();
 
-    if (samples > 1 && typeof gl.renderbufferStorageMultisample === "function") {
+    if (rtWrapper.texture && samples > 1 && typeof gl.renderbufferStorageMultisample === "function") {
         const framebuffer = gl.createFramebuffer();
 
         if (!framebuffer) {
@@ -258,22 +260,74 @@ ThinEngine.prototype.updateRenderTargetTextureSampleCount = function (rtWrapper:
             throw new Error("Unable to create multi sampled framebuffer");
         }
 
-        hardwareTexture.addMSAARenderBuffer(colorRenderbuffer);
-    } else {
-        this._bindUnboundFramebuffer(rtWrapper._framebuffer);
+        hardwareTexture?.addMSAARenderBuffer(colorRenderbuffer);
     }
 
-    rtWrapper.texture.samples = samples;
+    this._bindUnboundFramebuffer(rtWrapper._MSAAFramebuffer ?? rtWrapper._framebuffer);
+
+    if (rtWrapper.texture) {
+        rtWrapper.texture.samples = samples;
+    }
+
     rtWrapper._samples = samples;
+
+    const depthFormat = rtWrapper._depthStencilTexture ? rtWrapper._depthStencilTexture.format : undefined;
+
     rtWrapper._depthStencilBuffer = this._setupFramebufferDepthAttachments(
         rtWrapper._generateStencilBuffer,
         rtWrapper._generateDepthBuffer,
-        rtWrapper.texture.width,
-        rtWrapper.texture.height,
-        samples
+        rtWrapper.width,
+        rtWrapper.height,
+        samples,
+        depthFormat
     );
 
     this._bindUnboundFramebuffer(null);
 
     return samples;
+};
+
+ThinEngine.prototype._setupDepthStencilTexture = function (
+    internalTexture: InternalTexture,
+    size: TextureSize,
+    bilinearFiltering: boolean,
+    comparisonFunction: number,
+    samples = 1
+) {
+    const width = (<{ width: number; height: number; layers?: number }>size).width ?? <number>size;
+    const height = (<{ width: number; height: number; layers?: number }>size).height ?? <number>size;
+    const layers = (<{ width: number; height: number; depth?: number; layers?: number }>size).layers || 0;
+    const depth = (<{ width: number; height: number; depth?: number; layers?: number }>size).depth || 0;
+
+    internalTexture.baseWidth = width;
+    internalTexture.baseHeight = height;
+    internalTexture.width = width;
+    internalTexture.height = height;
+    internalTexture.is2DArray = layers > 0;
+    internalTexture.depth = layers || depth;
+    internalTexture.isReady = true;
+    internalTexture.samples = samples;
+    internalTexture.generateMipMaps = false;
+    internalTexture.samplingMode = bilinearFiltering ? Constants.TEXTURE_BILINEAR_SAMPLINGMODE : Constants.TEXTURE_NEAREST_SAMPLINGMODE;
+    internalTexture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
+    internalTexture._comparisonFunction = comparisonFunction;
+
+    const gl = this._gl;
+    const target = this._getTextureTarget(internalTexture);
+    const samplingParameters = this._getSamplingParameters(internalTexture.samplingMode, false);
+    gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, samplingParameters.min);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // TEXTURE_COMPARE_FUNC/MODE are only availble in WebGL2.
+    if (this.webGLVersion > 1) {
+        if (comparisonFunction === 0) {
+            gl.texParameteri(target, gl.TEXTURE_COMPARE_FUNC, Constants.LEQUAL);
+            gl.texParameteri(target, gl.TEXTURE_COMPARE_MODE, gl.NONE);
+        } else {
+            gl.texParameteri(target, gl.TEXTURE_COMPARE_FUNC, comparisonFunction);
+            gl.texParameteri(target, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+        }
+    }
 };

@@ -4,7 +4,6 @@ import { DataStorage } from "core/Misc/dataStorage";
 import type { Observer } from "core/Misc/observable";
 import type { Nullable } from "core/types";
 import { NodeMaterialModes } from "core/Materials/Node/Enums/nodeMaterialModes";
-import { ParticleSystem } from "core/Particles/particleSystem";
 
 import doubleSided from "./svgs/doubleSided.svg";
 import depthPass from "./svgs/depthPass.svg";
@@ -12,29 +11,38 @@ import omni from "./svgs/omni.svg";
 import directionalRight from "./svgs/directionalRight.svg";
 import directionalLeft from "./svgs/directionalLeft.svg";
 import background from "./svgs/icon-ibl.svg";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
+import { BlendModeOptions } from "shared-ui-components/constToOptionsMaps";
 
 interface IPreviewAreaComponentProps {
     globalState: GlobalState;
-    width: number;
+    onMounted?: () => void;
 }
 
 export class PreviewAreaComponent extends React.Component<IPreviewAreaComponentProps, { isLoading: boolean }> {
     private _onIsLoadingChangedObserver: Nullable<Observer<boolean>>;
     private _onResetRequiredObserver: Nullable<Observer<boolean>>;
+    private _consoleRef: React.RefObject<HTMLDivElement>;
 
     constructor(props: IPreviewAreaComponentProps) {
         super(props);
         this.state = { isLoading: true };
+        this._consoleRef = React.createRef();
 
-        this._onIsLoadingChangedObserver = this.props.globalState.onIsLoadingChanged.add((state) => this.setState({ isLoading: state }));
+        this._onIsLoadingChangedObserver = this.props.globalState.onIsLoadingChanged.add((state) => {
+            this.setState({ isLoading: state });
+        });
 
         this._onResetRequiredObserver = this.props.globalState.onResetRequiredObservable.add(() => {
             this.forceUpdate();
         });
     }
 
-    componentWillUnmount() {
+    override componentDidMount() {
+        this.props.onMounted?.();
+    }
+
+    override componentWillUnmount() {
         this.props.globalState.onIsLoadingChanged.remove(this._onIsLoadingChangedObserver);
         this.props.globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
     }
@@ -74,26 +82,55 @@ export class PreviewAreaComponent extends React.Component<IPreviewAreaComponentP
         this.forceUpdate();
     }
 
-    render() {
-        const blendModeOptions = [
-            { label: "Add", value: ParticleSystem.BLENDMODE_ADD },
-            { label: "Multiply", value: ParticleSystem.BLENDMODE_MULTIPLY },
-            { label: "Multiply Add", value: ParticleSystem.BLENDMODE_MULTIPLYADD },
-            { label: "OneOne", value: ParticleSystem.BLENDMODE_ONEONE },
-            { label: "Standard", value: ParticleSystem.BLENDMODE_STANDARD },
-        ];
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    async processPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+        if (!e.ctrlKey || !this.props.globalState.pickingTexture) {
+            this._consoleRef.current?.classList.add("hidden");
+            return;
+        }
 
+        const data = (await this.props.globalState.pickingTexture.readPixels()!) as Float32Array;
+        const size = this.props.globalState.pickingTexture.getSize();
+        const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+
+        const x = (((e.clientX - rect.left) / rect.width) * size.width) | 0;
+        const y = (size.height - 1 - ((e.clientY - rect.top) / rect.height) * size.height) | 0;
+
+        if ((x > 0 && y > 0 && x < size.width && y < size.height, rect.top)) {
+            const pixelLocation = (y * size.width + x) * 4;
+
+            this._consoleRef.current!.innerText = `R:${data[pixelLocation].toFixed(2)}, G:${data[pixelLocation + 1].toFixed(2)}, B:${data[pixelLocation + 2].toFixed(2)}, A:${data[pixelLocation + 3].toFixed(2)}`;
+            this._consoleRef.current!.classList.remove("hidden");
+        }
+
+        e.preventDefault();
+    }
+
+    onKeyUp(e: React.KeyboardEvent<HTMLCanvasElement>) {
+        this._consoleRef.current?.classList.add("hidden");
+        e.preventDefault();
+    }
+
+    override render() {
         return (
             <>
-                <div id="preview" style={{ height: this.props.width + "px" }}>
-                    <canvas onPointerOver={this._onPointerOverCanvas} onPointerOut={this._onPointerOutCanvas} id="preview-canvas" />
+                <div id="preview">
+                    <canvas
+                        onPointerOver={this._onPointerOverCanvas}
+                        onPointerOut={this._onPointerOutCanvas}
+                        id="preview-canvas"
+                        onKeyUp={(evt) => this.onKeyUp(evt)}
+                        // eslint-disable-next-line @typescript-eslint/no-misused-promises
+                        onPointerMove={async (evt) => await this.processPointerMove(evt)}
+                    />
                     {<div className={"waitPanel" + (this.state.isLoading ? "" : " hidden")}>Please wait, loading...</div>}
+                    <div id="preview-color-picker" className="hidden" ref={this._consoleRef} />
                 </div>
                 {this.props.globalState.mode === NodeMaterialModes.Particle && (
                     <div id="preview-config-bar" className="extended">
-                        <OptionsLineComponent
+                        <OptionsLine
                             label="Blend mode"
-                            options={blendModeOptions}
+                            options={BlendModeOptions}
                             target={this.props.globalState}
                             propertyName="particleSystemBlendMode"
                             noDirectUpdate={true}

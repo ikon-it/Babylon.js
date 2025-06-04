@@ -3,13 +3,15 @@ import { ReflectionProbe } from "../Probes/reflectionProbe";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { CustomProceduralTexture } from "../Materials/Textures/Procedurals/customProceduralTexture";
-import { DumpTools } from "./dumpTools";
+import { DumpData } from "./dumpTools";
 import type { Vector3 } from "../Maths/math.vector";
 import "../Shaders/equirectangularPanorama.fragment";
 
 /**
  * Interface containing options related to equirectangular capture of the current scene
  */
+// Should have "I" prefix but we are keeping it as is for backward compatibility
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface EquiRectangularCaptureOptions {
     /**
      * This option relates to smallest dimension of the given equirectangular capture
@@ -43,6 +45,8 @@ export interface EquiRectangularCaptureOptions {
  * @param options This refers to the options for a given equirectangular capture
  * @returns the requested capture's pixel-data or auto downloads the file if options.filename is specified
  */
+// Should end with "Async" and start with "C" but we are keeping it as is for backward compatibility
+// eslint-disable-next-line no-restricted-syntax, @typescript-eslint/naming-convention
 export async function captureEquirectangularFromScene(scene: Scene, options: EquiRectangularCaptureOptions): Promise<ArrayBufferView | null> {
     const probe: ReflectionProbe = options.probe ?? new ReflectionProbe("tempProbe", options.size, scene);
     const wasProbeProvided = !!options.probe;
@@ -59,7 +63,7 @@ export async function captureEquirectangularFromScene(scene: Scene, options: Equ
     probe.cubeTexture.render();
     const dumpTexture = new CustomProceduralTexture("tempProceduralTexture", "equirectangularPanorama", { width: options.size * 2, height: options.size }, scene);
     dumpTexture.setTexture("cubeMap", probe.cubeTexture);
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
         dumpTexture.onGeneratedObservable.addOnce(() => {
             const pixelDataPromise = dumpTexture.readPixels();
             if (!pixelDataPromise) {
@@ -70,13 +74,14 @@ export async function captureEquirectangularFromScene(scene: Scene, options: Equ
                 }
                 return;
             }
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
             pixelDataPromise.then((pixelData) => {
                 dumpTexture.dispose();
                 if (!wasProbeProvided) {
                     probe.dispose();
                 }
                 if (options.filename) {
-                    DumpTools.DumpData(options.size * 2, options.size, pixelData, undefined, "image/png", options.filename);
+                    DumpData(options.size * 2, options.size, pixelData, undefined, "image/png", options.filename);
                     resolve(null);
                 } else {
                     resolve(pixelData);

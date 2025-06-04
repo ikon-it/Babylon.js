@@ -1,5 +1,5 @@
 import type { Scene } from "../../scene";
-import { Quaternion, Vector3 } from "../../Maths/math.vector";
+import { Quaternion, TmpVectors, Vector3 } from "../../Maths/math.vector";
 import { Mesh } from "../mesh";
 import { Buffer } from "../../Buffers/buffer";
 import type { Nullable } from "../../types";
@@ -60,7 +60,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
      * @param _pathOptions used internaly when parsing a serialized GreasedLineRibbonMesh
      */
     constructor(
-        public readonly name: string,
+        public override readonly name: string,
         scene: Scene,
         _options: GreasedLineMeshOptions,
         _pathOptions?: { options: GreasedLineMeshOptions; pathCount: number }[]
@@ -107,7 +107,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
      * "GreasedLineRibbonMesh"
      * @returns "GreasedLineRibbonMesh"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "GreasedLineRibbonMesh";
     }
 
@@ -177,7 +177,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
         this._initGreasedLine();
 
         let indiceOffset = 0;
-        let directionPlanes: Vector3[];
+        let directionPlanes: Vector3[] | undefined = undefined;
         for (let i = 0, c = 0; i < this._pathsOptions.length; i++) {
             const { options: pathOptions, pathCount } = this._pathsOptions[i];
             const subPoints = points.slice(c, c + pathCount);
@@ -186,13 +186,15 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
                 indiceOffset = this._preprocess(GreasedLineTools.ToVector3Array(subPoints) as Vector3[][], indiceOffset, pathOptions);
             } else {
                 if (pathOptions.ribbonOptions?.directionsAutoMode === GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_NONE) {
-                    if (!pathOptions.ribbonOptions!.directions) {
+                    if (!pathOptions.ribbonOptions.directions) {
                         // eslint-disable-next-line no-throw-literal
                         throw "In GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_NONE 'GreasedLineMeshOptions.ribbonOptions.directions' must be defined.";
                     }
-                    directionPlanes = GreasedLineRibbonMesh._GetDirectionPlanesFromDirectionsOption(subPoints.length, pathOptions.ribbonOptions!.directions);
+                    directionPlanes = GreasedLineRibbonMesh._GetDirectionPlanesFromDirectionsOption(subPoints.length, pathOptions.ribbonOptions.directions);
                 }
-                subPoints.forEach((p, idx) => {
+                for (let idx = 0; idx < subPoints.length; idx++) {
+                    const p = subPoints[idx];
+
                     const pathArray = GreasedLineRibbonMesh._ConvertToRibbonPath(
                         p,
                         pathOptions.ribbonOptions!,
@@ -200,13 +202,13 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
                         directionPlanes ? directionPlanes[idx] : directionPlanes
                     );
                     indiceOffset = this._preprocess(pathArray, indiceOffset, pathOptions);
-                });
+                }
             }
         }
 
         if (!this._lazy) {
             this._createVertexBuffers();
-            this.refreshBoundingInfo();
+            !this.doNotSyncBoundingInfo && this.refreshBoundingInfo();
         }
     }
 
@@ -237,7 +239,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
         }
 
         const v: number[] = [1, 0, numOfPaths];
-        const doubleSided = options.ribbonOptions?.facesMode === GreasedLineRibbonFacesMode.FACES_MODE_DOUBLE_SIDED ?? false;
+        const doubleSided = options.ribbonOptions?.facesMode === GreasedLineRibbonFacesMode.FACES_MODE_DOUBLE_SIDED;
 
         const closePath = options.ribbonOptions?.pointsMode === GreasedLineRibbonPointsMode.POINTS_MODE_PATHS && options.ribbonOptions.closePath;
         if (numOfPaths > 2) {
@@ -300,8 +302,15 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
             throw "No 'GreasedLineMeshOptions.widths' table is specified.";
         }
 
+        const vertexPositions = Array.isArray(this._vertexPositions) ? this._vertexPositions : Array.from(this._vertexPositions);
+        this._vertexPositions = vertexPositions;
+        const uvs = Array.isArray(this._uvs) ? this._uvs : Array.from(this._uvs);
+        this._uvs = uvs;
+        const indices = Array.isArray(this._indices) ? this._indices : Array.from(this._indices);
+        this._indices = indices;
+
         for (const p of positions) {
-            this._vertexPositions.push(p);
+            vertexPositions.push(p);
         }
 
         let pathArrayCopy = pathArray;
@@ -323,7 +332,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
             for (let pi = 0; pi < pathArrayLength; pi++) {
                 const counter = previousCounters[pi] + this._vSegmentLengths[pi][i] / this._vTotalLengths[pi];
                 this._counters.push(counter);
-                this._uvs.push(counter, v);
+                uvs.push(counter, v);
 
                 previousCounters[pi] = counter;
                 v += this._uSegmentLengths[i][pi] / this._uTotalLengths[i];
@@ -350,7 +359,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
 
         if (ribbonVertexData.indices) {
             for (let i = 0; i < ribbonVertexData.indices.length; i++) {
-                this._indices.push(ribbonVertexData.indices[i] + indiceOffset);
+                indices.push(ribbonVertexData.indices[i] + indiceOffset);
             }
         }
         indiceOffset += positions.length / 3;
@@ -376,12 +385,21 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
                 directionPlane = GreasedLineRibbonMesh._GetDirectionFromPoints(pointVectors[0], pointVectors[1], null);
             }
 
+            if (ribbonInfo.directionsAutoMode === GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_FACE_TO && !(ribbonInfo.directions instanceof Vector3)) {
+                // eslint-disable-next-line no-throw-literal
+                throw "In GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_FACE_TO 'GreasedLineMeshOptions.ribbonOptions.directions' must be a Vector3.";
+            }
+
+            TmpVectors.Vector3[1] = ribbonInfo.directions instanceof Vector3 ? ribbonInfo.directions : GreasedLineRibbonMesh.DIRECTION_XZ;
             for (let i = 0; i < pointVectors.length - (directionPlane ? 0 : 1); i++) {
                 const p1 = pointVectors[i];
                 const p2 = pointVectors[i + 1];
 
                 if (directionPlane) {
-                    direction = <Vector3>directionPlane;
+                    direction = directionPlane;
+                } else if (ribbonInfo.directionsAutoMode === GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_FACE_TO) {
+                    p2.subtractToRef(p1, TmpVectors.Vector3[0]);
+                    direction = Vector3.CrossToRef(TmpVectors.Vector3[0], TmpVectors.Vector3[1], TmpVectors.Vector3[2]).normalize();
                 } else if (ribbonInfo.directionsAutoMode === GreasedLineRibbonAutoDirectionMode.AUTO_DIRECTIONS_FROM_ALL_SEGMENTS) {
                     direction = GreasedLineRibbonMesh._GetDirectionFromPoints(p1, p2, direction);
                 } else {
@@ -432,7 +450,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
      * @param newParent new parent node
      * @returns cloned line
      */
-    public clone(name: string = `${this.name}-cloned`, newParent?: Nullable<Node>) {
+    public override clone(name: string = `${this.name}-cloned`, newParent?: Nullable<Node>) {
         const lineOptions = this._createLineOptions();
         const deepCopiedLineOptions: any = {};
         const pathOptionsCloned: any = [];
@@ -453,7 +471,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
      * Serializes this GreasedLineRibbonMesh
      * @param serializationObject object to write serialization to
      */
-    public serialize(serializationObject: any): void {
+    public override serialize(serializationObject: any): void {
         super.serialize(serializationObject);
         serializationObject.type = this.getClassName();
 
@@ -467,7 +485,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
      * @param scene the scene to create the GreasedLineRibbonMesh in
      * @returns the created GreasedLineRibbonMesh
      */
-    public static Parse(parsedMesh: any, scene: Scene): Mesh {
+    public static override Parse(parsedMesh: any, scene: Scene): Mesh {
         const lineOptions = <GreasedLineMeshOptions>parsedMesh.lineOptions;
         const name = <string>parsedMesh.name;
         const pathOptions = parsedMesh.pathOptions;
@@ -475,7 +493,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
         return result;
     }
 
-    protected _initGreasedLine() {
+    protected override _initGreasedLine() {
         super._initGreasedLine();
 
         this._paths = [];
@@ -538,7 +556,7 @@ export class GreasedLineRibbonMesh extends GreasedLineBaseMesh {
         return slopes;
     }
 
-    protected _createVertexBuffers(): VertexData {
+    protected override _createVertexBuffers(): VertexData {
         this._uvs = this._options.uvs ?? this._uvs;
         const vertexData = super._createVertexBuffers(this._options.ribbonOptions?.smoothShading);
 

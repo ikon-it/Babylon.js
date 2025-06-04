@@ -3,7 +3,6 @@ import type { NodeGeometryConnectionPoint } from "../../nodeGeometryBlockConnect
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { NodeGeometryBlockConnectionPointTypes } from "../../Enums/nodeGeometryConnectionPointTypes";
 import type { NodeGeometryBuildState } from "../../nodeGeometryBuildState";
-import { GeometryInputBlock } from "../geometryInputBlock";
 import { Matrix } from "../../../../Maths/math.vector";
 
 /**
@@ -17,7 +16,7 @@ export class RotationZBlock extends NodeGeometryBlock {
     public constructor(name: string) {
         super(name);
 
-        this.registerInput("angle", NodeGeometryBlockConnectionPointTypes.Float, false, 0);
+        this.registerInput("angle", NodeGeometryBlockConnectionPointTypes.Float, true, 0);
         this.registerOutput("matrix", NodeGeometryBlockConnectionPointTypes.Matrix);
     }
 
@@ -25,7 +24,7 @@ export class RotationZBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "RotationZBlock";
     }
 
@@ -43,15 +42,7 @@ export class RotationZBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    public autoConfigure() {
-        if (!this.angle.isConnected) {
-            const angleInput = new GeometryInputBlock("Angle");
-            angleInput.value = 0;
-            angleInput.output.connectTo(this.angle);
-        }
-    }
-
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         super._buildBlock(state);
 
         this.matrix._storedFunction = (state) => {

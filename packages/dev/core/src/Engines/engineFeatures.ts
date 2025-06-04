@@ -1,4 +1,5 @@
 /** @internal */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface EngineFeatures {
     /** Force using Bitmap when Bitmap or HTMLImageElement can be used */
     forceBitmapOverHTMLImageElement: boolean;
@@ -42,6 +43,9 @@ export interface EngineFeatures {
     /** Indicates that SSAO2 is supported */
     supportSSAO2: boolean;
 
+    /** Indicates that IBL Shadows are supported */
+    supportIBLShadows: boolean;
+
     /** Indicates that some additional texture formats are supported (like TEXTUREFORMAT_R for eg) */
     supportExtendedTextureFormats: boolean;
 
@@ -69,8 +73,11 @@ export interface EngineFeatures {
     /**  Indicates that the engine supports sprite instancing */
     supportSpriteInstancing: boolean;
 
-    /** Indicates that the stride of a vertex buffer must always be a multiple of 4 bytes */
-    forceVertexBufferStrideMultiple4Bytes: boolean;
+    /** Indicates that the stride and (byte) offset of a vertex buffer must always be a multiple of 4 bytes */
+    forceVertexBufferStrideAndOffsetMultiple4Bytes: boolean;
+
+    /** @internal */
+    _checkNonFloatVertexBuffersDontRecreatePipelineContext: boolean;
 
     /** @internal */
     _collectUbosUpdatedInFrame: boolean;

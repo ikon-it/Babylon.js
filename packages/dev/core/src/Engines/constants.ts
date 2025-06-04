@@ -1,19 +1,35 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /** Defines the cross module used constants to avoid circular dependencies */
 export class Constants {
+    /** Sampler suffix when associated with a texture name */
+    public static readonly AUTOSAMPLERSUFFIX = "Sampler";
+    /** Flag used to disable diagnostics for WebGPU */
+    public static readonly DISABLEUA = "#define DISABLE_UNIFORMITY_ANALYSIS";
     /** Defines that alpha blending is disabled */
     public static readonly ALPHA_DISABLE = 0;
     /** Defines that alpha blending is SRC ALPHA * SRC + DEST */
     public static readonly ALPHA_ADD = 1;
-    /** Defines that alpha blending is SRC ALPHA * SRC + (1 - SRC ALPHA) * DEST */
+    /**
+     *  Defines that alpha blending is SRC ALPHA * SRC + (1 - SRC ALPHA) * DEST
+     *  Blends src and dest using src alpha. Go-to for transparency. 100% alpha means source, 0% alpha means background. Glass, UI fade, smoke
+     */
     public static readonly ALPHA_COMBINE = 2;
-    /** Defines that alpha blending is DEST - SRC * DEST */
+    /**
+     * Defines that alpha blending is DEST - SRC * DEST
+     * Subtracts source from destination, leading to darker results
+     * */
     public static readonly ALPHA_SUBTRACT = 3;
     /** Defines that alpha blending is SRC * DEST */
     public static readonly ALPHA_MULTIPLY = 4;
-    /** Defines that alpha blending is SRC ALPHA * SRC + (1 - SRC) * DEST */
+    /**
+     * Defines that alpha blending is SRC ALPHA * SRC + (1 - SRC) * DEST
+     * Prioritizes area with high source alpha, strongly emphasizes the source
+     */
     public static readonly ALPHA_MAXIMIZED = 5;
-    /** Defines that alpha blending is SRC + DEST */
+    /**
+     * Defines that alpha blending is SRC + DEST
+     * Source color is added to the destination color without alpha affecting the result. Great for additive glow effects (fire, magic, lasers)
+     */
     public static readonly ALPHA_ONEONE = 6;
     /** Defines that alpha blending is SRC + (1 - SRC ALPHA) * DEST */
     public static readonly ALPHA_PREMULTIPLIED = 7;
@@ -22,16 +38,21 @@ export class Constants {
      * Alpha will be set to (1 - SRC ALPHA) * DEST ALPHA
      */
     public static readonly ALPHA_PREMULTIPLIED_PORTERDUFF = 8;
-    /** Defines that alpha blending is CST * SRC + (1 - CST) * DEST */
+    /**
+     * Defines that alpha blending is CST * SRC + (1 - CST) * DEST
+     * Where CST is user-supplied color
+     */
     public static readonly ALPHA_INTERPOLATE = 9;
     /**
      * Defines that alpha blending is SRC + (1 - SRC) * DEST
      * Alpha will be set to SRC ALPHA + (1 - SRC ALPHA) * DEST ALPHA
+     * Brightens, good for soft light or UI highlights (like photoshop's screen blend)
      */
     public static readonly ALPHA_SCREENMODE = 10;
     /**
      * Defines that alpha blending is SRC + DST
      * Alpha will be set to SRC ALPHA + DST ALPHA
+     * Straight addition of color and alpha- use when you want both source and destination colors and opacities to stack
      */
     public static readonly ALPHA_ONEONE_ONEONE = 11;
     /**
@@ -41,26 +62,31 @@ export class Constants {
     public static readonly ALPHA_ALPHATOCOLOR = 12;
     /**
      * Defines that alpha blending is SRC * (1 - DST) + DST * (1 - SRC)
+     * Result is between source and destination, used for experimental blending or styled effects
      */
     public static readonly ALPHA_REVERSEONEMINUS = 13;
     /**
      * Defines that alpha blending is SRC + DST * (1 - SRC ALPHA)
      * Alpha will be set to SRC ALPHA + DST ALPHA * (1 - SRC ALPHA)
+     * Smooths blending between source and destination, useful in layered alpha masks
      */
     public static readonly ALPHA_SRC_DSTONEMINUSSRCALPHA = 14;
     /**
      * Defines that alpha blending is SRC + DST
      * Alpha will be set to SRC ALPHA
+     * Color stacks, but only source alpha is kept
      */
     public static readonly ALPHA_ONEONE_ONEZERO = 15;
     /**
      * Defines that alpha blending is SRC * (1 - DST) + DST * (1 - SRC)
      * Alpha will be set to DST ALPHA
+     * Produces inverted look (negative space), like 'exclusion' mode in photoshop
      */
     public static readonly ALPHA_EXCLUSION = 16;
     /**
      * Defines that alpha blending is SRC * SRC ALPHA + DST * (1 - SRC ALPHA)
      * Alpha will be set to SRC ALPHA + (1 - SRC ALPHA) * DST ALPHA
+     * Great for layered rendering (particles, fog volumes), accumulates transparency in a more physically accurate way
      */
     public static readonly ALPHA_LAYER_ACCUMULATE = 17;
 
@@ -149,6 +175,22 @@ export class Constants {
     public static readonly TEXTUREFORMAT_RED = 6;
     /** RED (2nd reference) */
     public static readonly TEXTUREFORMAT_R = 6;
+    /** RED unsigned short normed to [0, 1] **/
+    public static readonly TEXTUREFORMAT_R16_UNORM = 0x822a;
+    /** RG unsigned short normed to [0, 1] **/
+    public static readonly TEXTUREFORMAT_RG16_UNORM = 0x822c;
+    /** RGB unsigned short normed to [0, 1] **/
+    public static readonly TEXTUREFORMAT_RGB16_UNORM = 0x8054;
+    /** RGBA unsigned short normed to [0, 1] **/
+    public static readonly TEXTUREFORMAT_RGBA16_UNORM = 0x805b;
+    /** RED signed short normed to [-1, 1] **/
+    public static readonly TEXTUREFORMAT_R16_SNORM = 0x8f98;
+    /** RG signed short normed to [-1, 1] **/
+    public static readonly TEXTUREFORMAT_RG16_SNORM = 0x8f99;
+    /** RGB signed short normed to [-1, 1] **/
+    public static readonly TEXTUREFORMAT_RGB16_SNORM = 0x8f9a;
+    /** RGBA signed short normed to [-1, 1] **/
+    public static readonly TEXTUREFORMAT_RGBA16_SNORM = 0x8f9b;
     /** RG */
     public static readonly TEXTUREFORMAT_RG = 7;
     /** RED_INTEGER */
@@ -226,7 +268,7 @@ export class Constants {
 
     /** UNSIGNED_BYTE */
     public static readonly TEXTURETYPE_UNSIGNED_BYTE = 0;
-    /** UNSIGNED_BYTE (2nd reference) */
+    /** @deprecated use more explicit TEXTURETYPE_UNSIGNED_BYTE instead. Use TEXTURETYPE_UNSIGNED_INTEGER for 32bits values.*/
     public static readonly TEXTURETYPE_UNSIGNED_INT = 0;
     /** FLOAT */
     public static readonly TEXTURETYPE_FLOAT = 1;
@@ -372,9 +414,13 @@ export class Constants {
      */
     public static readonly MATERIAL_PrePassDirtyFlag = 32;
     /**
+     * The dirty image processing flag value
+     */
+    public static readonly MATERIAL_ImageProcessingDirtyFlag = 64;
+    /**
      * The all dirty flag value
      */
-    public static readonly MATERIAL_AllDirtyFlag = 63;
+    public static readonly MATERIAL_AllDirtyFlag = 127;
 
     /**
      * Returns the triangle fill mode
@@ -422,6 +468,54 @@ export class Constants {
      * Stores the counter clock-wise side orientation
      */
     public static readonly MATERIAL_CounterClockWiseSideOrientation = 1;
+
+    /**
+     * Energy-conserving Oren Nayar diffuse model type.
+     */
+    public static readonly MATERIAL_DIFFUSE_MODEL_E_OREN_NAYAR = 0;
+
+    /**
+     * Burley diffuse model type.
+     */
+    public static readonly MATERIAL_DIFFUSE_MODEL_BURLEY = 1;
+
+    /**
+     * Lambertian diffuse model type.
+     */
+    public static readonly MATERIAL_DIFFUSE_MODEL_LAMBERT = 2;
+
+    /**
+     * Babylon.js version less than 8.x
+     * IBL Lambert + Burley diffuse model type.
+     */
+    public static readonly MATERIAL_DIFFUSE_MODEL_LEGACY = 3;
+
+    /**
+     * Specular lighting for dielectric materials follows the logic
+     * in the glTF specification and KHR_materials_specular extension.
+     * Specular colour is applied only at normal incidence (i.e. F0) while
+     * glancing angles (i.e. F90) tend towards white.
+     */
+    public static readonly MATERIAL_DIELECTRIC_SPECULAR_MODEL_GLTF = 0;
+
+    /**
+     * Specular lighting for dielectric materials follows the logic
+     * in the OpenPBR specification. Specular colour is applied to all
+     * dielectric reflection, not just at normal incidence (i.e. F0).
+     */
+    public static readonly MATERIAL_DIELECTRIC_SPECULAR_MODEL_OPENPBR = 1;
+
+    /**
+     * Specular lighting for metals follows the logic in the glTF specification.
+     * Base colour is applied at F0 while glancing angles tend towards white.
+     */
+    public static readonly MATERIAL_CONDUCTOR_SPECULAR_MODEL_GLTF = 0;
+
+    /**
+     * Specular lighting for metals follows the logic in the OpenPBR specification.
+     * Specular colour is applied to glancing angles using the F82 spec.
+     */
+    public static readonly MATERIAL_CONDUCTOR_SPECULAR_MODEL_OPENPBR = 1;
 
     /**
      * Nothing
@@ -591,7 +685,7 @@ export class Constants {
     public static readonly PREPASS_POSITION_TEXTURE_TYPE = 1;
     /**
      * Constant used to retrieve the velocity texture index in the textures array in the prepass
-     * using getIndex(Constants.PREPASS_VELOCITY_TEXTURE_INDEX)
+     * using getIndex(Constants.PREPASS_VELOCITY_TEXTURE_TYPE)
      */
     public static readonly PREPASS_VELOCITY_TEXTURE_TYPE = 2;
     /**
@@ -605,7 +699,7 @@ export class Constants {
      */
     public static readonly PREPASS_COLOR_TEXTURE_TYPE = 4;
     /**
-     * Constant used to retrieve depth index in the textures array in the prepass
+     * Constant used to retrieve (camera view) depth index in the textures array in the prepass
      * using the getIndex(Constants.PREPASS_DEPTH_TEXTURE_TYPE)
      */
     public static readonly PREPASS_DEPTH_TEXTURE_TYPE = 5;
@@ -615,10 +709,40 @@ export class Constants {
      */
     public static readonly PREPASS_NORMAL_TEXTURE_TYPE = 6;
     /**
-     * Constant used to retrieve albedo index in the textures array in the prepass
+     * Constant used to retrieve (sqrt) albedo index in the textures array in the prepass
      * using the getIndex(Constants.PREPASS_ALBEDO_SQRT_TEXTURE_TYPE)
      */
     public static readonly PREPASS_ALBEDO_SQRT_TEXTURE_TYPE = 7;
+
+    /**
+     * Constant used to retrieve world normal index in the textures array in the prepass
+     * using the getIndex(Constants.PREPASS_WORLD_NORMAL_TEXTURE_TYPE)
+     */
+    public static readonly PREPASS_WORLD_NORMAL_TEXTURE_TYPE = 8;
+
+    /**
+     * Constant used to retrieve the local position texture index in the textures array in the prepass
+     * using getIndex(Constants.PREPASS_LOCAL_POSITION_TEXTURE_TYPE)
+     */
+    public static readonly PREPASS_LOCAL_POSITION_TEXTURE_TYPE = 9;
+
+    /**
+     * Constant used to retrieve screen-space (non-linear) depth index in the textures array in the prepass
+     * using the getIndex(Constants.PREPASS_SCREENSPACE_DEPTH_TEXTURE_TYPE)
+     */
+    public static readonly PREPASS_SCREENSPACE_DEPTH_TEXTURE_TYPE = 10;
+
+    /**
+     * Constant used to retrieve the velocity texture index in the textures array in the prepass
+     * using getIndex(Constants.PREPASS_VELOCITY_LINEAR_TEXTURE_TYPE)
+     */
+    public static readonly PREPASS_VELOCITY_LINEAR_TEXTURE_TYPE = 11;
+
+    /**
+     * Constant used to retrieve albedo index in the textures array in the prepass
+     * using the getIndex(Constants.PREPASS_ALBEDO_TEXTURE_TYPE)
+     */
+    public static readonly PREPASS_ALBEDO_TEXTURE_TYPE = 12;
 
     /** Flag to create a readable buffer (the buffer can be the source of a copy) */
     public static readonly BUFFER_CREATIONFLAG_READ = 1;
@@ -634,6 +758,8 @@ export class Constants {
     public static readonly BUFFER_CREATIONFLAG_INDEX = 16;
     /** Flag to create a buffer suitable to be used as a storage buffer */
     public static readonly BUFFER_CREATIONFLAG_STORAGE = 32;
+    /** Flag to create a buffer suitable to be used for indirect calls, such as `dispatchIndirect` */
+    public static readonly BUFFER_CREATIONFLAG_INDIRECT = 64;
 
     /**
      * Prefixes used by the engine for sub mesh draw wrappers
@@ -780,7 +906,163 @@ export class Constants {
     public static readonly GL_ALPHA_FUNCTION_CONSTANT_ALPHA = 0x8003;
     /** Alpha blend function: ONE_MINUS_CONSTANT_ALPHA */
     public static readonly GL_ALPHA_FUNCTION_ONE_MINUS_CONSTANT_ALPHA = 0x8004;
+    /** Alpha blend function: SRC1 */
+    public static readonly GL_ALPHA_FUNCTION_SRC1_COLOR = 0x88f9;
+    /** Alpha blend function: SRC1 */
+    public static readonly GL_ALPHA_FUNCTION_ONE_MINUS_SRC1_COLOR = 0x88fa;
+    /** Alpha blend function: SRC1 */
+    public static readonly GL_ALPHA_FUNCTION_SRC1_ALPHA = 0x8589;
+    /** Alpha blend function: SRC1 */
+    public static readonly GL_ALPHA_FUNCTION_ONE_MINUS_SRC1_ALPHA = 0x88fb;
 
     /** URL to the snippet server. Points to the public snippet server by default */
     public static SnippetUrl = "https://snippet.babylonjs.com";
+
+    /** The fog is deactivated */
+    public static FOGMODE_NONE = 0;
+    /** The fog density is following an exponential function */
+    public static FOGMODE_EXP = 1;
+    /** The fog density is following an exponential function faster than FOGMODE_EXP */
+    public static FOGMODE_EXP2 = 2;
+    /** The fog density is following a linear function. */
+    public static FOGMODE_LINEAR = 3;
+
+    /**
+     * The byte type.
+     */
+    public static BYTE = 5120;
+
+    /**
+     * The unsigned byte type.
+     */
+    public static UNSIGNED_BYTE = 5121;
+
+    /**
+     * The short type.
+     */
+    public static SHORT = 5122;
+
+    /**
+     * The unsigned short type.
+     */
+    public static UNSIGNED_SHORT = 5123;
+
+    /**
+     * The integer type.
+     */
+    public static INT = 5124;
+
+    /**
+     * The unsigned integer type.
+     */
+    public static UNSIGNED_INT = 5125;
+
+    /**
+     * The float type.
+     */
+    public static FLOAT = 5126;
+
+    /**
+     * Positions
+     */
+    public static PositionKind = "position";
+    /**
+     * Normals
+     */
+    public static NormalKind = "normal";
+    /**
+     * Tangents
+     */
+    public static TangentKind = "tangent";
+    /**
+     * Texture coordinates
+     */
+    public static UVKind = "uv";
+    /**
+     * Texture coordinates 2
+     */
+    public static UV2Kind = "uv2";
+    /**
+     * Texture coordinates 3
+     */
+    public static UV3Kind = "uv3";
+    /**
+     * Texture coordinates 4
+     */
+    public static UV4Kind = "uv4";
+    /**
+     * Texture coordinates 5
+     */
+    public static UV5Kind = "uv5";
+    /**
+     * Texture coordinates 6
+     */
+    public static UV6Kind = "uv6";
+    /**
+     * Colors
+     */
+    public static ColorKind = "color";
+    /**
+     * Instance Colors
+     */
+    public static ColorInstanceKind = "instanceColor";
+    /**
+     * Matrix indices (for bones)
+     */
+    public static MatricesIndicesKind = "matricesIndices";
+    /**
+     * Matrix weights (for bones)
+     */
+    public static MatricesWeightsKind = "matricesWeights";
+    /**
+     * Additional matrix indices (for bones)
+     */
+    public static MatricesIndicesExtraKind = "matricesIndicesExtra";
+    /**
+     * Additional matrix weights (for bones)
+     */
+    public static MatricesWeightsExtraKind = "matricesWeightsExtra";
+
+    // Animation type
+    /**
+     * Float animation type
+     */
+    public static readonly ANIMATIONTYPE_FLOAT = 0;
+    /**
+     * Vector3 animation type
+     */
+    public static readonly ANIMATIONTYPE_VECTOR3 = 1;
+    /**
+     * Quaternion animation type
+     */
+    public static readonly ANIMATIONTYPE_QUATERNION = 2;
+    /**
+     * Matrix animation type
+     */
+    public static readonly ANIMATIONTYPE_MATRIX = 3;
+    /**
+     * Color3 animation type
+     */
+    public static readonly ANIMATIONTYPE_COLOR3 = 4;
+    /**
+     * Color3 animation type
+     */
+    public static readonly ANIMATIONTYPE_COLOR4 = 7;
+    /**
+     * Vector2 animation type
+     */
+    public static readonly ANIMATIONTYPE_VECTOR2 = 5;
+    /**
+     * Size animation type
+     */
+    public static readonly ANIMATIONTYPE_SIZE = 6;
+
+    /**
+     * The default minZ value for the near plane of a frustum light
+     */
+    public static ShadowMinZ = 0;
+    /**
+     * The default maxZ value for the far plane of a frustum light
+     */
+    public static ShadowMaxZ = 10000;
 }

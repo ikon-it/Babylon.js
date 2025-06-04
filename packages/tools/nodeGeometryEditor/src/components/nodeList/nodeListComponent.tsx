@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import * as React from "react";
 import type { GlobalState } from "../../globalState";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
-import { DraggableLineComponent } from "../../sharedComponents/draggableLineComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
+import { DraggableLineComponent } from "shared-ui-components/lines/draggableLineComponent";
 import type { Observer } from "core/Misc/observable";
 import type { Nullable } from "core/types";
-import { DraggableLineWithButtonComponent } from "../../sharedComponents/draggableLineWithButtonComponent";
-import { LineWithFileButtonComponent } from "../../sharedComponents/lineWithFileButtonComponent";
+import { DraggableLineWithButtonComponent } from "shared-ui-components/lines/draggableLineWithButtonComponent";
+import { LineWithFileButtonComponent } from "shared-ui-components/lines/lineWithFileButtonComponent";
 import { Tools } from "core/Misc/tools";
 import addButton from "../../imgs/add.svg";
 import deleteButton from "../../imgs/delete.svg";
@@ -22,6 +22,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
     private _onResetRequiredObserver: Nullable<Observer<boolean>>;
 
     private static _Tooltips: { [key: string]: string } = {
+        PointListBlock: "Create a geometry made of a list of points",
         BoxBlock: "Create a box geometry",
         PlaneBlock: "Create a plane geometry",
         SphereBlock: "Create a sphere geometry",
@@ -48,6 +49,10 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         InstanceIDBlock: "Contextual value representing the current instance index (within an instantiate block)",
         GeometryIDBlock: "Contextual value representing the identifier of the current active geometry",
         CollectionIDBlock: "Contextual value representing the collection ID associated with the current active geometry",
+        LatticeIDBlock: "Contextual value representing the current lattice ID ie. the coordinate of the lattice control point inside the lattice",
+        LatticeControlBlock: "Contextual value representing the current lattice control point",
+        PosterizeBlock: "Reduces the number of values in each channel to the number in the corresponding channel of steps",
+        ReplaceColorBlock: "Outputs the replacement color if the distance between value and reference is less than distance, else outputs the value color",
         EqualBlock: "Conditional block set to Equal",
         NotEqualBlock: "Conditional block set to NotEqual",
         LessThanBlock: "Conditional block set to LessThan",
@@ -136,6 +141,16 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         CrossBlock: "Outputs a vector that is perpendicular to two input vectors",
         CurveBlock: "Apply a curve function",
         DesaturateBlock: "Convert a color input into a grayscale representation.",
+        DotBlock: "Outputs the cos of the angle between two vectors",
+        DistanceBlock: "Provides a distance vector based on the left and right input vectors",
+        Rotate2dBlock: "Rotates UV coordinates around the W axis.",
+        LengthBlock: "Outputs the length of an input vector",
+        InterceptorBlock: "Block used to trigger an observable when traversed",
+        LatticeBlock: "Block used to apply Lattice on geometry",
+        AggregatorBlock: "Block used to aggregate values from a geometry",
+        CleanGeometryBlock: "Try to clean a geometry",
+        SubdivideBlock: "Subdivide a geometry using Catmull-Clark algorithm",
+        EaseBlock: "Block used to apply easing on a value",
     };
 
     private _customFrameList: { [key: string]: string };
@@ -155,7 +170,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
     }
 
@@ -211,7 +226,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         }
     }
 
-    render() {
+    override render() {
         const customFrameNames: string[] = [];
         for (const frame in this._customFrameList) {
             customFrameNames.push(frame);
@@ -220,10 +235,23 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         // Block types used to create the menu from
         const allBlocks: any = {
             Custom_Frames: customFrameNames,
-            Sources: ["BoxBlock", "PlaneBlock", "SphereBlock", "TorusBlock", "CylinderBlock", "CapsuleBlock", "DiscBlock", "IcoSphereBlock", "MeshBlock", "GridBlock", "NullBlock"],
+            Sources: [
+                "BoxBlock",
+                "PlaneBlock",
+                "SphereBlock",
+                "TorusBlock",
+                "CylinderBlock",
+                "CapsuleBlock",
+                "DiscBlock",
+                "IcoSphereBlock",
+                "MeshBlock",
+                "GridBlock",
+                "NullBlock",
+                "PointListBlock",
+            ],
             Inputs: ["Float", "Vector2", "Vector3", "Vector4", "Int"],
             Interpolation: ["LerpBlock", "NLerpBlock", "SmoothStepBlock", "StepBlock"],
-            Color_Management: ["DesaturateBlock"],
+            Color_Management: ["DesaturateBlock", "PosterizeBlock", "ReplaceColorBlock"],
             Contextual: [
                 "PositionsBlock",
                 "NormalsBlock",
@@ -236,6 +264,8 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "InstanceIDBlock",
                 "GeometryIDBlock",
                 "CollectionIDBlock",
+                "LatticeIDBlock",
+                "LatticeControlBlock",
             ],
             Logical: ["EqualBlock", "NotEqualBlock", "LessThanBlock", "LessOrEqualBlock", "GreaterThanBlock", "GreaterOrEqualBlock", "XorBlock", "OrBlock", "AndBlock"],
             Math__Standard: [
@@ -257,6 +287,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "IntFloatConverterBlock",
                 "ModBlock",
                 "ClampBlock",
+                "EaseBlock",
             ],
             Math__Scientific: [
                 "AbsBlock",
@@ -275,7 +306,18 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "FractBlock",
                 "PowBlock",
             ],
-            Math__Vector: ["TransformBlock", "VectorConverterBlock", "NormalizeBlock", "BoundingBlock", "CrossBlock", "CurveBlock"],
+            Math__Vector: [
+                "TransformBlock",
+                "VectorConverterBlock",
+                "NormalizeBlock",
+                "BoundingBlock",
+                "CrossBlock",
+                "CurveBlock",
+                "DistanceBlock",
+                "DotBlock",
+                "LengthBlock",
+                "Rotate2dBlock",
+            ],
             Matrices: ["RotationXBlock", "RotationYBlock", "RotationZBlock", "ScalingBlock", "TranslationBlock", "AlignBlock", "MatrixComposeBlock"],
             Instances: [
                 "InstantiateOnVerticesBlock",
@@ -285,7 +327,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "InstantiateLinearBlock",
                 "InstantiateRadialBlock",
             ],
-            Misc: ["ElbowBlock", "DebugBlock", "TeleportInBlock", "TeleportOutBlock", "GeometryInfoBlock"],
+            Misc: ["ElbowBlock", "DebugBlock", "TeleportInBlock", "TeleportOutBlock", "GeometryInfoBlock", "InterceptorBlock"],
             Updates: [
                 "SetColorsBlock",
                 "SetNormalsBlock",
@@ -298,7 +340,11 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "CollectionBlock",
                 "ComputeNormalsBlock",
                 "OptimizeBlock",
+                "CleanGeometryBlock",
                 "MappingBlock",
+                "LatticeBlock",
+                "AggregatorBlock",
+                "SubdivideBlock",
             ],
             Noises: ["RandomBlock", "NoiseBlock"],
             Textures: ["TextureBlock", "TextureFetchBlock"],
@@ -308,7 +354,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         // Create node menu
         const blockMenu = [];
         for (const key in allBlocks) {
-            const blockList = (allBlocks as any)[key]
+            const blockList = allBlocks[key]
                 .filter((b: string) => !this.state.filter || b.toLowerCase().indexOf(this.state.filter.toLowerCase()) !== -1)
                 .sort((a: string, b: string) => a.localeCompare(b))
                 .map((block: any) => {
@@ -316,6 +362,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                         return (
                             <DraggableLineWithButtonComponent
                                 key={block}
+                                format={"babylonjs-geometry-node"}
                                 data={block}
                                 tooltip={this._customFrameList[block] || ""}
                                 iconImage={deleteButton}
@@ -324,7 +371,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                             />
                         );
                     }
-                    return <DraggableLineComponent key={block} data={block} tooltip={NodeListComponent._Tooltips[block] || ""} />;
+                    return <DraggableLineComponent key={block} format={"babylonjs-geometry-node"} data={block} tooltip={NodeListComponent._Tooltips[block] || ""} />;
                 });
 
             if (key === "Custom_Frames") {

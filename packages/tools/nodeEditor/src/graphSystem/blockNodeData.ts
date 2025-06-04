@@ -6,8 +6,9 @@ import type { IPortData } from "shared-ui-components/nodeGraphSystem/interfaces/
 import { ConnectionPointPortData } from "./connectionPointPortData";
 import triangle from "../imgs/triangle.svg";
 import square from "../imgs/square.svg";
-import styles from "./blockNodeData.modules.scss";
-import type { NodeMaterialTeleportInBlock } from "core/Materials/Node/Blocks";
+import * as styles from "./blockNodeData.module.scss";
+import type { NodeMaterialTeleportOutBlock } from "core/Materials/Node/Blocks/Teleport/teleportOutBlock";
+import type { NodeMaterialTeleportInBlock } from "core/Materials/Node/Blocks/Teleport/teleportInBlock";
 
 export class BlockNodeData implements INodeData {
     private _inputs: IPortData[] = [];
@@ -43,6 +44,10 @@ export class BlockNodeData implements INodeData {
 
     public set comments(value: string) {
         this.data.comments = value;
+    }
+
+    public get executionTime() {
+        return -1;
     }
 
     public getPortByName(name: string) {
@@ -87,7 +92,7 @@ export class BlockNodeData implements INodeData {
         iconDiv.classList.add(styles.hidden);
     }
 
-    public get invisibleEndpoints() {
+    public get invisibleEndpoints(): NodeMaterialTeleportOutBlock[] | null {
         if (this.data.isTeleportIn) {
             const teleportIn = this.data as NodeMaterialTeleportInBlock;
             return teleportIn.endpoints;
@@ -101,15 +106,27 @@ export class BlockNodeData implements INodeData {
         nodeContainer: INodeContainer
     ) {
         if (data.inputs) {
-            this.data.inputs.forEach((input) => {
+            for (const input of this.data.inputs) {
                 this._inputs.push(new ConnectionPointPortData(input, nodeContainer));
-            });
+            }
         }
 
-        if (data.outputs) {
-            this.data.outputs.forEach((output) => {
+        if (data.outputs && !this.data.isTeleportIn) {
+            for (const output of this.data.outputs) {
                 this._outputs.push(new ConnectionPointPortData(output, nodeContainer));
-            });
+            }
         }
+    }
+
+    public get canBeActivated() {
+        return this.data.getClassName() === "NodeMaterialDebugBlock";
+    }
+
+    public get isActive() {
+        return (this.data as any).isActive;
+    }
+
+    public setIsActive(value: boolean) {
+        (this.data as any).isActive = value;
     }
 }

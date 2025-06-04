@@ -46,7 +46,7 @@ import { MapRangeBlock } from "core/Meshes/Node/Blocks/mapRangeBlock";
 import { GeometryOptimizeBlock } from "core/Meshes/Node/Blocks/geometryOptimizeBlock";
 import { IntFloatConverterBlock } from "core/Meshes/Node/Blocks/intFloatConverterBlock";
 import { ConditionBlock, ConditionBlockTests } from "core/Meshes/Node/Blocks/conditionBlock";
-import { InstantiateLinearBlock } from "core/Meshes/Node/Blocks//Instances/instantiateLinearBlock";
+import { InstantiateLinearBlock } from "core/Meshes/Node/Blocks/Instances/instantiateLinearBlock";
 import { InstantiateRadialBlock } from "core/Meshes/Node/Blocks/Instances/instantiateRadialBlock";
 import { GeometryCollectionBlock } from "core/Meshes/Node/Blocks/geometryCollectionBlock";
 import { GeometryInfoBlock } from "core/Meshes/Node/Blocks/geometryInfoBlock";
@@ -67,6 +67,19 @@ import { GeometryClampBlock } from "core/Meshes/Node/Blocks/geometryClampBlock";
 import { GeometryCrossBlock } from "core/Meshes/Node/Blocks/geometryCrossBlock";
 import { GeometryCurveBlock } from "core/Meshes/Node/Blocks/geometryCurveBlock";
 import { GeometryDesaturateBlock } from "core/Meshes/Node/Blocks/geometryDesaturateBlock";
+import { GeometryPosterizeBlock } from "core/Meshes/Node/Blocks/geometryPosterizeBlock";
+import { GeometryDistanceBlock } from "core/Meshes/Node/Blocks/geometryDistanceBlock";
+import { GeometryDotBlock } from "core/Meshes/Node/Blocks/geometryDotBlock";
+import { GeometryReplaceColorBlock } from "core/Meshes/Node/Blocks/geometryReplaceColorBlock";
+import { GeometryRotate2dBlock } from "core/Meshes/Node/Blocks/geometryRotate2dBlock";
+import { GeometryLengthBlock } from "core/Meshes/Node/Blocks/geometryLengthBlock";
+import { GeometryInterceptorBlock } from "core/Meshes/Node/Blocks/geometryInterceptorBlock";
+import { LatticeBlock } from "core/Meshes/Node/Blocks/Set/latticeBlock";
+import { AggregatorBlock } from "core/Meshes/Node/Blocks/Set/aggregatorBlock";
+import { CleanGeometryBlock } from "core/Meshes/Node/Blocks/cleanGeometryBlock";
+import { PointListBlock } from "core/Meshes/Node/Blocks/Sources/pointListBlock";
+import { SubdivideBlock } from "core/Meshes/Node/Blocks/subdivideBlock";
+import { GeometryEaseBlock } from "core/Meshes/Node/Blocks/geometryEaseBlock";
 
 /**
  * Static class for BlockTools
@@ -74,6 +87,32 @@ import { GeometryDesaturateBlock } from "core/Meshes/Node/Blocks/geometryDesatur
 export class BlockTools {
     public static GetBlockFromString(data: string) {
         switch (data) {
+            case "EaseBlock":
+                return new GeometryEaseBlock("Ease");
+            case "SubdivideBlock":
+                return new SubdivideBlock("Subdivide");
+            case "PointListBlock":
+                return new PointListBlock("Point List");
+            case "CleanGeometryBlock":
+                return new CleanGeometryBlock("Clean");
+            case "AggregatorBlock":
+                return new AggregatorBlock("Aggregator");
+            case "LatticeBlock":
+                return new LatticeBlock("Lattice");
+            case "InterceptorBlock":
+                return new GeometryInterceptorBlock("Interceptor");
+            case "Rotate2dBlock":
+                return new GeometryRotate2dBlock("Rotate 2D");
+            case "LengthBlock":
+                return new GeometryLengthBlock("Length");
+            case "DistanceBlock":
+                return new GeometryDistanceBlock("Distance");
+            case "DotBlock":
+                return new GeometryDotBlock("Dot");
+            case "PosterizeBlock":
+                return new GeometryPosterizeBlock("Posterize");
+            case "ReplaceColorBlock":
+                return new GeometryReplaceColorBlock("Replace Color");
             case "DesaturateBlock":
                 return new GeometryDesaturateBlock("Desaturate");
             case "CurveBlock":
@@ -294,6 +333,16 @@ export class BlockTools {
                 block.contextualValue = NodeGeometryContextualSources.FaceID;
                 return block;
             }
+            case "LatticeIDBlock": {
+                const block = new GeometryInputBlock("Lattice ID");
+                block.contextualValue = NodeGeometryContextualSources.LatticeID;
+                return block;
+            }
+            case "LatticeControlBlock": {
+                const block = new GeometryInputBlock("Lattice Control");
+                block.contextualValue = NodeGeometryContextualSources.LatticeControl;
+                return block;
+            }
             case "AddBlock": {
                 const block = new MathBlock("Add");
                 block.operation = MathBlockOperations.Add;
@@ -444,7 +493,7 @@ export class BlockTools {
     }
 
     public static GetColorFromConnectionNodeType(type: NodeGeometryBlockConnectionPointTypes) {
-        let color = "#880000";
+        let color = "#964848";
         switch (type) {
             case NodeGeometryBlockConnectionPointTypes.Int:
                 color = "#51b0e5";

@@ -1,9 +1,24 @@
 uniform mat4 view;
 uniform mat4 viewProjection;
+uniform vec4 vEyePosition;
+#ifdef MULTIVIEW
+	mat4 viewProjectionR;
+#endif
 
 #ifdef ALBEDO
 uniform mat4 albedoMatrix;
 uniform vec2 vAlbedoInfos;
+#endif
+
+#ifdef BASE_WEIGHT
+uniform mat4 baseWeightMatrix;
+uniform vec2 vBaseWeightInfos;
+#endif
+
+uniform float baseDiffuseRoughness;
+#ifdef BASE_DIFFUSE_ROUGHNESS
+uniform mat4 baseDiffuseRoughnessMatrix;
+uniform vec2 vBaseDiffuseRoughnessInfos;
 #endif
 
 #ifdef AMBIENT
@@ -26,7 +41,7 @@ uniform vec2 vLightmapInfos;
 uniform mat4 lightmapMatrix;
 #endif
 
-#ifdef REFLECTIVITY 
+#ifdef REFLECTIVITY
 uniform vec3 vReflectivityInfos;
 uniform mat4 reflectivityMatrix;
 #endif
@@ -143,6 +158,11 @@ uniform float pointSize;
     #ifdef SS_TRANSLUCENCYINTENSITY_TEXTURE
         uniform vec2 vTranslucencyIntensityInfos;
         uniform mat4 translucencyIntensityMatrix;
+    #endif
+
+    #ifdef SS_TRANSLUCENCYCOLOR_TEXTURE
+        uniform vec2 vTranslucencyColorInfos;
+        uniform mat4 translucencyColorMatrix;
     #endif
 #endif
 

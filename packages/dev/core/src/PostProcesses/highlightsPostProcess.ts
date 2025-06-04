@@ -2,10 +2,8 @@ import type { Nullable } from "../types";
 import type { Camera } from "../Cameras/camera";
 import type { PostProcessOptions } from "./postProcess";
 import { PostProcess } from "./postProcess";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
-
-import "../Shaders/highlights.fragment";
 
 /**
  * Extracts highlights from the image
@@ -16,7 +14,7 @@ export class HighlightsPostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "HighlightsPostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "HighlightsPostProcess";
     }
 
@@ -29,17 +27,28 @@ export class HighlightsPostProcess extends PostProcess {
      * @param samplingMode The sampling mode to be used when computing the pass. (default: 0)
      * @param engine The engine which the post process will be applied. (default: current engine)
      * @param reusable If the post process can be reused on the same frame. (default: false)
-     * @param textureType Type of texture for the post process (default: Engine.TEXTURETYPE_UNSIGNED_INT)
+     * @param textureType Type of texture for the post process (default: Engine.TEXTURETYPE_UNSIGNED_BYTE)
      */
     constructor(
         name: string,
         options: number | PostProcessOptions,
         camera: Nullable<Camera>,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE
     ) {
         super(name, "highlights", null, null, options, camera, samplingMode, engine, reusable, null, textureType);
+    }
+
+    protected override _gatherImports(useWebGPU: boolean, list: Promise<any>[]) {
+        if (useWebGPU) {
+            this._webGPUReady = true;
+            list.push(Promise.all([import("../ShadersWGSL/highlights.fragment")]));
+        } else {
+            list.push(Promise.all([import("../Shaders/highlights.fragment")]));
+        }
+
+        super._gatherImports(useWebGPU, list);
     }
 }

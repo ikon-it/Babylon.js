@@ -12,6 +12,7 @@ import type {
     CylinderParticleEmitter,
     CylinderDirectedParticleEmitter,
     ConeParticleEmitter,
+    ConeDirectedParticleEmitter,
     // eslint-disable-next-line import/no-internal-modules
 } from "../Particles/EmitterTypes/index";
 import type { Scene } from "../scene";
@@ -75,7 +76,7 @@ export interface IParticleSystem {
     particleTexture: Nullable<BaseTexture>;
 
     /**
-     * Blend mode use to render the particle, it can be either ParticleSystem.BLENDMODE_ONEONE, ParticleSystem.BLENDMODE_STANDARD or ParticleSystem.BLENDMODE_ADD.
+     * Blend mode use to render the particle. It can be any of the ParticleSystem.BLENDMODE_* constants
      */
     blendMode: number;
 
@@ -188,10 +189,12 @@ export interface IParticleSystem {
     /**
      * If using a spritesheet (isAnimationSheetEnabled) defines the first sprite cell to display
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     startSpriteCellID: number;
     /**
      * If using a spritesheet (isAnimationSheetEnabled) defines the last sprite cell to display
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     endSpriteCellID: number;
     /**
      * If using a spritesheet (isAnimationSheetEnabled), defines whether the sprite animation is looping
@@ -317,8 +320,10 @@ export interface IParticleSystem {
     /**
      * Dispose the particle system and frees its associated resources.
      * @param disposeTexture defines if the particle texture must be disposed as well (true by default)
+     * @param disposeAttachedSubEmitters defines if the attached sub-emitters must be disposed as well (false by default)
+     * @param disposeEndSubEmitters defines if the end type sub-emitters must be disposed as well (false by default)
      */
-    dispose(disposeTexture?: boolean): void;
+    dispose(disposeTexture?: boolean, disposeAttachedSubEmitters?: boolean, disposeEndSubEmitters?: boolean): void;
     /**
      * An event triggered when the system is disposed
      */
@@ -397,8 +402,9 @@ export interface IParticleSystem {
      * Fill the defines array according to the current settings of the particle system
      * @param defines Array to be updated
      * @param blendMode blend mode to take into account when updating the array
+     * @param fillImageProcessing fills the image processing defines
      */
-    fillDefines(defines: Array<string>, blendMode: number): void;
+    fillDefines(defines: Array<string>, blendMode: number, fillImageProcessing?: boolean): void;
     /**
      * Fill the uniforms, attributes and samplers arrays according to the current settings of the particle system
      * @param uniforms Uniforms array to fill
@@ -724,6 +730,8 @@ export interface IParticleSystem {
      * @returns the emitter
      */
     createConeEmitter(radius: number, angle: number): ConeParticleEmitter;
+
+    createDirectedConeEmitter(radius: number, angle: number, direction1: Vector3, direction2: Vector3): ConeDirectedParticleEmitter;
 
     /**
      * Creates a Box Emitter for the particle system. (emits between direction1 and direction2 from withing the box defined by minEmitBox and maxEmitBox)

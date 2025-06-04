@@ -4,6 +4,10 @@
         color: white;
         background: #333333;
 
+        .hoverIcon:hover {
+            opacity: 0.8;
+        }
+
         #header {
             height: 30px;
             font-size: 16px;
@@ -13,9 +17,6 @@
             text-align: center;
             display: grid;
             grid-template-columns: 30px 1fr;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
             user-select: none;
 
             #logo {
@@ -45,7 +46,6 @@
             border-radius: 5px;
             outline: none;
             opacity: 0.7;
-            -webkit-transition: 0.2s;
             transition: opacity 0.2s;
         }
 
@@ -131,11 +131,15 @@
                         -webkit-appearance: none;
                         margin: 0;
                     }
-
-                    input[type="number"] {
-                        -moz-appearance: textfield;
-                    }
                 }
+
+                .copy {
+                    display: none;
+                }
+            }
+
+            .copy {
+                display: none;
             }
         }
 
@@ -430,9 +434,25 @@
                     -webkit-appearance: none;
                     margin: 0;
                 }
+            }
 
-                input[type="number"] {
-                    -moz-appearance: textfield;
+            .copy {
+                display: none;
+            }
+        }
+
+        .point-list {
+            .vector3Line {
+                .firstLine {
+                    grid-template-columns: 1fr auto 20px 20px 10px;
+
+                    .delete {
+                        grid-column: 4;
+                        display: grid;
+                        align-items: center;
+                        justify-items: center;
+                        cursor: pointer;
+                    }
                 }
             }
         }
@@ -466,6 +486,10 @@
                     align-items: center;
                     justify-items: center;
                     cursor: pointer;
+                }
+
+                .copy {
+                    display: none;
                 }
             }
 
@@ -665,6 +689,10 @@
                     display: none;
                 }
             }
+
+            .copy {
+                display: none;
+            }
         }
 
         .listLine {
@@ -690,6 +718,10 @@
                     width: 115px;
                 }
             }
+
+            .copy {
+                display: none;
+            }
         }
 
         .color3Line {
@@ -699,7 +731,7 @@
             .firstLine {
                 height: 30px;
                 display: grid;
-                grid-template-columns: 1fr auto 0px 20px 20px;
+                grid-template-columns: 1fr auto 20px;
 
                 .label {
                     grid-column: 1;
@@ -723,6 +755,19 @@
                     }
                 }
 
+                .expand {
+                    grid-column: 3;
+                    display: grid;
+                    align-items: center;
+                    justify-items: center;
+                    cursor: pointer;
+
+                    img {
+                        height: 100%;
+                        width: 20px;
+                    }
+                }
+
                 .copy {
                     grid-column: 4;
                     display: grid;
@@ -733,19 +778,6 @@
                     img {
                         height: 100%;
                         width: 24px;
-                    }
-                }
-
-                .expand {
-                    grid-column: 5;
-                    display: grid;
-                    align-items: center;
-                    justify-items: center;
-                    cursor: pointer;
-
-                    img {
-                        height: 100%;
-                        width: 20px;
                     }
                 }
             }
@@ -781,7 +813,7 @@
 
         .textLine {
             padding-left: $line-padding-left;
-            height: 30px;
+            min-height: 30px;
             display: grid;
             grid-template-columns: 1fr auto;
 
@@ -793,6 +825,11 @@
 
             &.label-center {
                 justify-items: center;
+            }
+
+            &.bold {
+                font-weight: bold;
+                text-decoration: underline;
             }
 
             .link-value {
@@ -819,9 +856,6 @@
                 margin: 5px;
                 margin-top: 6px;
                 max-width: 200px;
-                -webkit-user-select: text;
-                -moz-user-select: text;
-                -ms-user-select: text;
                 user-select: text;
 
                 &.check {

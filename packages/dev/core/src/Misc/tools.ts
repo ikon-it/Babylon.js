@@ -24,10 +24,13 @@ import { TimingTools } from "./timingTools";
 import { InstantiationTools } from "./instantiationTools";
 import { RandomGUID } from "./guid";
 import type { IScreenshotSize } from "./interfaces/screenshotSize";
-import type { Engine } from "../Engines/engine";
 import type { Camera } from "../Cameras/camera";
 import type { IColor4Like } from "../Maths/math.like";
+import { IsExponentOfTwo, Mix } from "./tools.functions";
+import type { AbstractEngine } from "../Engines/abstractEngine";
+import type { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 declare function importScripts(...urls: string[]): void;
 
 /**
@@ -43,6 +46,17 @@ export class Tools {
 
     public static set BaseUrl(value: string) {
         FileToolsOptions.BaseUrl = value;
+    }
+
+    /**
+     * Gets or sets the clean URL function to use to load assets
+     */
+    public static get CleanUrl() {
+        return FileToolsOptions.CleanUrl;
+    }
+
+    public static set CleanUrl(value: (url: string) => string) {
+        FileToolsOptions.CleanUrl = value;
     }
 
     /**
@@ -100,6 +114,21 @@ export class Tools {
 
     public static get ScriptBaseUrl(): string {
         return FileToolsOptions.ScriptBaseUrl;
+    }
+
+    /**
+     * The base URL to use to load assets. If empty the default base url is used.
+     */
+    public static AssetBaseUrl = "";
+
+    /**
+     * Sets both the script base URL and the assets base URL to the same value.
+     * Setter only!
+     */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public static set CDNBaseUrl(value: string) {
+        Tools.ScriptBaseUrl = value;
+        Tools.AssetBaseUrl = value;
     }
 
     /**
@@ -171,7 +200,7 @@ export class Tools {
         return InstantiationTools.RegisteredExternalClasses;
     }
 
-    public static set RegisteredExternalClasses(classes: { [key: string]: Object }) {
+    public static set RegisteredExternalClasses(classes: { [key: string]: object }) {
         InstantiationTools.RegisteredExternalClasses = classes;
     }
 
@@ -217,7 +246,7 @@ export class Tools {
      * @returns The mixed value
      */
     public static Mix(a: number, b: number, alpha: number): number {
-        return a * (1 - alpha) + b * alpha;
+        return 0;
     }
 
     /**
@@ -243,13 +272,7 @@ export class Tools {
      * @returns true if the value is an exponent of 2
      */
     public static IsExponentOfTwo(value: number): boolean {
-        let count = 1;
-
-        do {
-            count *= 2;
-        } while (count < value);
-
-        return count === value;
+        return true;
     }
 
     /**
@@ -348,6 +371,7 @@ export class Tools {
             return null;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return Array.isArray(obj) ? obj : [obj];
     }
 
@@ -356,25 +380,8 @@ export class Tools {
      * @param engine defines the engine we are finding the prefix for
      * @returns "pointer" if touch is enabled. Else returns "mouse"
      */
-    public static GetPointerPrefix(engine: Engine): string {
-        let eventPrefix = "pointer";
-
-        // Check if pointer events are supported
-        if (IsWindowObjectExist() && !window.PointerEvent) {
-            eventPrefix = "mouse";
-        }
-
-        // Special Fallback MacOS Safari...
-        if (
-            engine._badDesktopOS &&
-            !engine._badOS &&
-            // And not ipad pros who claim to be macs...
-            !(document && "ontouchend" in document)
-        ) {
-            eventPrefix = "mouse";
-        }
-
-        return eventPrefix;
+    public static GetPointerPrefix(engine: AbstractEngine): string {
+        return IsWindowObjectExist() && !window.PointerEvent ? "mouse" : "pointer";
     }
 
     /**
@@ -398,16 +405,6 @@ export class Tools {
     }
 
     // External files
-
-    /**
-     * Removes unwanted characters from an url
-     * @param url defines the url to clean
-     * @returns the cleaned url
-     */
-    public static CleanUrl(url: string): string {
-        url = url.replace(/#/gm, "%23");
-        return url;
-    }
 
     /**
      * Gets or sets a function used to pre-process url before using them to load assets
@@ -463,8 +460,8 @@ export class Tools {
     }
 
     // Note that this must come first since useArrayBuffer defaults to true below.
-    public static LoadFileAsync(url: string, useArrayBuffer?: true): Promise<ArrayBuffer>;
-    public static LoadFileAsync(url: string, useArrayBuffer?: false): Promise<string>;
+    public static async LoadFileAsync(url: string, useArrayBuffer?: true): Promise<ArrayBuffer>;
+    public static async LoadFileAsync(url: string, useArrayBuffer?: false): Promise<string>;
 
     /**
      * Loads a file from a url
@@ -472,8 +469,8 @@ export class Tools {
      * @param useArrayBuffer defines a boolean indicating that date must be returned as ArrayBuffer
      * @returns a promise containing an ArrayBuffer corresponding to the loaded file
      */
-    public static LoadFileAsync(url: string, useArrayBuffer = true): Promise<ArrayBuffer | string> {
-        return new Promise((resolve, reject) => {
+    public static async LoadFileAsync(url: string, useArrayBuffer = true): Promise<ArrayBuffer | string> {
+        return await new Promise((resolve, reject) => {
             FileToolsLoadFile(
                 url,
                 (data) => {
@@ -483,6 +480,7 @@ export class Tools {
                 undefined,
                 useArrayBuffer,
                 (request, exception) => {
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject(exception);
                 }
             );
@@ -492,7 +490,32 @@ export class Tools {
     /**
      * @internal
      */
-    public static _DefaultCdnUrl = "https://cdn.babylonjs.com";
+    public static readonly _DefaultCdnUrl = "https://cdn.babylonjs.com";
+
+    /**
+     * @internal
+     */
+    public static readonly _DefaultAssetsUrl = "https://assets.babylonjs.com/core";
+
+    /**
+     * This function will convert asset URLs if the AssetBaseUrl parameter is set.
+     * Any URL with `assets.babylonjs.com/core` will be replaced with the value of AssetBaseUrl.
+     * @param url the URL to convert
+     * @returns a new URL
+     */
+    public static GetAssetUrl(url: string): string {
+        if (!url) {
+            return "";
+        }
+
+        if (Tools.AssetBaseUrl && url.startsWith(Tools._DefaultAssetsUrl)) {
+            // normalize the baseUrl
+            const baseUrl = Tools.AssetBaseUrl[Tools.AssetBaseUrl.length - 1] === "/" ? Tools.AssetBaseUrl.substring(0, Tools.AssetBaseUrl.length - 1) : Tools.AssetBaseUrl;
+            return url.replace(Tools._DefaultAssetsUrl, baseUrl);
+        }
+
+        return url;
+    }
 
     /**
      * Get a script URL including preprocessing
@@ -542,9 +565,9 @@ export class Tools {
      * @param scriptUrl defines the url of the script to laod
      * @returns a promise request object
      */
-    public static LoadBabylonScriptAsync(scriptUrl: string): Promise<void> {
+    public static async LoadBabylonScriptAsync(scriptUrl: string): Promise<void> {
         scriptUrl = Tools.GetBabylonScriptURL(scriptUrl);
-        return Tools.LoadScriptAsync(scriptUrl);
+        return await Tools.LoadScriptAsync(scriptUrl);
     }
 
     /**
@@ -554,12 +577,15 @@ export class Tools {
      * @param onSuccess defines the callback called when the script is loaded
      * @param onError defines the callback to call if an error occurs
      * @param scriptId defines the id of the script element
+     * @param useModule defines if we should use the module strategy to load the script
      */
-    public static LoadScript(scriptUrl: string, onSuccess: () => void, onError?: (message?: string, exception?: any) => void, scriptId?: string) {
+    public static LoadScript(scriptUrl: string, onSuccess?: () => void, onError?: (message?: string, exception?: any) => void, scriptId?: string, useModule = false) {
         if (typeof importScripts === "function") {
             try {
                 importScripts(scriptUrl);
-                onSuccess();
+                if (onSuccess) {
+                    onSuccess();
+                }
             } catch (e) {
                 onError?.(`Unable to load script '${scriptUrl}' in worker`, e);
             }
@@ -570,8 +596,13 @@ export class Tools {
         }
         const head = document.getElementsByTagName("head")[0];
         const script = document.createElement("script");
-        script.setAttribute("type", "text/javascript");
-        script.setAttribute("src", scriptUrl);
+        if (useModule) {
+            script.setAttribute("type", "module");
+            script.innerText = scriptUrl;
+        } else {
+            script.setAttribute("type", "text/javascript");
+            script.setAttribute("src", scriptUrl);
+        }
         if (scriptId) {
             script.id = scriptId;
         }
@@ -598,14 +629,15 @@ export class Tools {
      * @param scriptId defines the id of the script element
      * @returns a promise request object
      */
-    public static LoadScriptAsync(scriptUrl: string, scriptId?: string): Promise<void> {
-        return new Promise((resolve, reject) => {
+    public static async LoadScriptAsync(scriptUrl: string, scriptId?: string): Promise<void> {
+        return await new Promise((resolve, reject) => {
             this.LoadScript(
                 scriptUrl,
                 () => {
                     resolve();
                 },
                 (message, exception) => {
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject(exception || new Error(message));
                 },
                 scriptId
@@ -761,15 +793,17 @@ export class Tools {
      * @param quality The quality of the image if lossy mimeType is used (e.g. image/jpeg, image/webp). See {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob | HTMLCanvasElement.toBlob()}'s `quality` parameter.
      * @returns a void promise
      */
+    // Should end with Async but this is a breaking change
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/require-await, @typescript-eslint/naming-convention
     public static async DumpFramebuffer(
         width: number,
         height: number,
-        engine: Engine,
+        engine: AbstractEngine,
         successCallback?: (data: string) => void,
         mimeType = "image/png",
         fileName?: string,
         quality?: number
-    ) {
+    ): Promise<void> {
         throw _WarnImport("DumpTools");
     }
 
@@ -812,7 +846,8 @@ export class Tools {
      * @param quality The quality of the image if lossy mimeType is used (e.g. image/jpeg, image/webp). See {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob | HTMLCanvasElement.toBlob()}'s `quality` parameter.
      * @returns a promise that resolve to the final data
      */
-    public static DumpDataAsync(
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/require-await
+    public static async DumpDataAsync(
         width: number,
         height: number,
         data: ArrayBufferView,
@@ -855,11 +890,13 @@ export class Tools {
             };
         }
         if (Tools._IsOffScreenCanvas(canvas)) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             canvas
                 .convertToBlob({
                     type: mimeType,
                     quality,
                 })
+                // eslint-disable-next-line github/no-then
                 .then((blob) => successCallback(blob));
         } else {
             canvas.toBlob(
@@ -937,11 +974,13 @@ export class Tools {
             );
         } else if (successCallback) {
             if (Tools._IsOffScreenCanvas(canvas)) {
+                // eslint-disable-next-line @typescript-eslint/no-floating-promises
                 canvas
                     .convertToBlob({
                         type: mimeType,
                         quality,
                     })
+                    // eslint-disable-next-line github/no-then
                     .then((blob) => {
                         const reader = new FileReader();
                         reader.readAsDataURL(blob);
@@ -1020,7 +1059,7 @@ export class Tools {
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public static CreateScreenshot(
-        engine: Engine,
+        engine: AbstractEngine,
         camera: Camera,
         size: IScreenshotSize | number,
         successCallback?: (data: string) => void,
@@ -1048,8 +1087,8 @@ export class Tools {
      * @returns screenshot as a string of base64-encoded characters. This string can be assigned
      * to the src parameter of an <img> to display it
      */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public static CreateScreenshotAsync(engine: Engine, camera: Camera, size: IScreenshotSize | number, mimeType = "image/png", quality?: number): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-restricted-syntax, @typescript-eslint/require-await
+    public static async CreateScreenshotAsync(engine: AbstractEngine, camera: Camera, size: IScreenshotSize | number, mimeType = "image/png", quality?: number): Promise<string> {
         throw _WarnImport("ScreenshotTools");
     }
 
@@ -1075,10 +1114,11 @@ export class Tools {
      * @param enableStencilBuffer Whether the stencil buffer should be enabled or not (default: false)
      * @param useLayerMask if the camera's layer mask should be used to filter what should be rendered (default: true)
      * @param quality The quality of the image if lossy mimeType is used (e.g. image/jpeg, image/webp). See {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob | HTMLCanvasElement.toBlob()}'s `quality` parameter.
+     * @param customizeTexture An optional callback that can be used to modify the render target texture before taking the screenshot. This can be used, for instance, to enable camera post-processes before taking the screenshot.
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public static CreateScreenshotUsingRenderTarget(
-        engine: Engine,
+        engine: AbstractEngine,
         camera: Camera,
         size: IScreenshotSize | number,
         successCallback?: (data: string) => void,
@@ -1089,7 +1129,8 @@ export class Tools {
         renderSprites = false,
         enableStencilBuffer = false,
         useLayerMask = true,
-        quality?: number
+        quality?: number,
+        customizeTexture?: (texture: RenderTargetTexture) => void
     ): void {
         throw _WarnImport("ScreenshotTools");
     }
@@ -1110,16 +1151,17 @@ export class Tools {
      * @param samples Texture samples (default: 1)
      * @param antialiasing Whether antialiasing should be turned on or not (default: false)
      * @param fileName A name for for the downloaded file.
-     * @returns screenshot as a string of base64-encoded characters. This string can be assigned
      * @param renderSprites Whether the sprites should be rendered or not (default: false)
      * @param enableStencilBuffer Whether the stencil buffer should be enabled or not (default: false)
      * @param useLayerMask if the camera's layer mask should be used to filter what should be rendered (default: true)
      * @param quality The quality of the image if lossy mimeType is used (e.g. image/jpeg, image/webp). See {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob | HTMLCanvasElement.toBlob()}'s `quality` parameter.
+     * @param customizeTexture An optional callback that can be used to modify the render target texture before taking the screenshot. This can be used, for instance, to enable camera post-processes before taking the screenshot.
+     * @returns screenshot as a string of base64-encoded characters. This string can be assigned
      * to the src parameter of an <img> to display it
      */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public static CreateScreenshotUsingRenderTargetAsync(
-        engine: Engine,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-restricted-syntax, @typescript-eslint/require-await
+    public static async CreateScreenshotUsingRenderTargetAsync(
+        engine: AbstractEngine,
         camera: Camera,
         size: IScreenshotSize | number,
         mimeType = "image/png",
@@ -1129,7 +1171,8 @@ export class Tools {
         renderSprites = false,
         enableStencilBuffer = false,
         useLayerMask = true,
-        quality?: number
+        quality?: number,
+        customizeTexture?: (texture: RenderTargetTexture) => void
     ): Promise<string> {
         throw _WarnImport("ScreenshotTools");
     }
@@ -1393,7 +1436,7 @@ export class Tools {
                 name = typeof object;
             }
         }
-        return name;
+        return name as string;
     }
 
     /**
@@ -1450,8 +1493,8 @@ export class Tools {
      * @param delay Number of milliseconds to delay
      * @returns Promise that resolves after the given amount of time
      */
-    public static DelayAsync(delay: number): Promise<void> {
-        return new Promise((resolve) => {
+    public static async DelayAsync(delay: number): Promise<void> {
+        await new Promise<void>((resolve) => {
             setTimeout(() => {
                 resolve();
             }, delay);
@@ -1479,8 +1522,9 @@ export class Tools {
  * @param module The name of the Module hosting the class, optional, but strongly recommended to specify if possible. Case should be preserved.
  * @returns a decorator function to apply on the class definition.
  */
-export function className(name: string, module?: string): (target: Object) => void {
-    return (target: Object) => {
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function className(name: string, module?: string): (target: object) => void {
+    return (target: object) => {
         (<any>target)["__bjsclassName__"] = name;
         (<any>target)["__bjsmoduleName__"] = module != null ? module : null;
     };
@@ -1602,6 +1646,9 @@ export class AsyncLoop {
         );
     }
 }
+
+Tools.Mix = Mix;
+Tools.IsExponentOfTwo = IsExponentOfTwo;
 
 // Will only be define if Tools is imported freeing up some space when only engine is required
 EngineStore.FallbackTexture =

@@ -1,3 +1,4 @@
+/* eslint-disable github/no-then */
 import type { Nullable } from "core/types";
 import { Observable } from "core/Misc/observable";
 import { Deferred } from "core/Misc/deferred";
@@ -9,8 +10,25 @@ import type { INode, IMaterial, IBuffer, IScene } from "../glTFLoaderInterfaces"
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader, ArrayItem } from "../glTFLoader";
 import type { IProperty, IMSFTLOD } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "MSFT_lod";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the MSFT_lod extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["MSFT_lod"]: Partial<{
+            /**
+             * Maximum number of LODs to load, starting from the lowest LOD.
+             */
+            maxLODsToLoad: number;
+        }>;
+    }
+}
 
 interface IBufferInfo {
     start: number;
@@ -76,6 +94,9 @@ export class MSFT_lod implements IGLTFLoaderExtension {
      */
     constructor(loader: GLTFLoader) {
         this._loader = loader;
+        // Options takes precedence. The maxLODsToLoad extension property is retained for back compat.
+        // For new extensions, they should only use options.
+        this.maxLODsToLoad = this._loader.parent.extensionOptions[NAME]?.maxLODsToLoad ?? this.maxLODsToLoad;
         this.enabled = this._loader.isExtensionUsed(NAME);
     }
 
@@ -145,6 +166,7 @@ export class MSFT_lod implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadSceneAsync(context: string, scene: IScene): Nullable<Promise<void>> {
         const promise = this._loader.loadSceneAsync(context, scene);
         this._loadBufferLOD(this._bufferLODs, 0);
@@ -154,8 +176,9 @@ export class MSFT_lod implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadNodeAsync(context: string, node: INode, assign: (babylonTransformNode: TransformNode) => void): Nullable<Promise<TransformNode>> {
-        return GLTFLoader.LoadExtensionAsync<IMSFTLOD, TransformNode>(context, node, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IMSFTLOD, TransformNode>(context, node, this.name, async (extensionContext, extension) => {
             let firstPromise: Promise<TransformNode>;
 
             const nodeLODs = this._getLODs(extensionContext, node, this._loader.gltf.nodes, extension.ids);
@@ -199,13 +222,14 @@ export class MSFT_lod implements IGLTFLoaderExtension {
             }
 
             this._loader.logClose();
-            return firstPromise!;
+            return await firstPromise!;
         });
     }
 
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public _loadMaterialAsync(
         context: string,
         material: IMaterial,
@@ -218,7 +242,7 @@ export class MSFT_lod implements IGLTFLoaderExtension {
             return null;
         }
 
-        return GLTFLoader.LoadExtensionAsync<IMSFTLOD, Material>(context, material, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IMSFTLOD, Material>(context, material, this.name, async (extensionContext, extension) => {
             let firstPromise: Promise<Material>;
 
             const materialLODs = this._getLODs(extensionContext, material, this._loader.gltf.materials, extension.ids);
@@ -263,28 +287,29 @@ export class MSFT_lod implements IGLTFLoaderExtension {
             }
 
             this._loader.logClose();
-            return firstPromise!;
+            return await firstPromise!;
         });
     }
 
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public _loadUriAsync(context: string, property: IProperty, uri: string): Nullable<Promise<ArrayBufferView>> {
         // Defer the loading of uris if loading a node or material LOD.
         if (this._nodeIndexLOD !== null) {
             this._loader.log(`deferred`);
             const previousIndexLOD = this._nodeIndexLOD - 1;
             this._nodeSignalLODs[previousIndexLOD] = this._nodeSignalLODs[previousIndexLOD] || new Deferred<void>();
-            return this._nodeSignalLODs[this._nodeIndexLOD - 1].promise.then(() => {
-                return this._loader.loadUriAsync(context, property, uri);
+            return this._nodeSignalLODs[this._nodeIndexLOD - 1].promise.then(async () => {
+                return await this._loader.loadUriAsync(context, property, uri);
             });
         } else if (this._materialIndexLOD !== null) {
             this._loader.log(`deferred`);
             const previousIndexLOD = this._materialIndexLOD - 1;
             this._materialSignalLODs[previousIndexLOD] = this._materialSignalLODs[previousIndexLOD] || new Deferred<void>();
-            return this._materialSignalLODs[previousIndexLOD].promise.then(() => {
-                return this._loader.loadUriAsync(context, property, uri);
+            return this._materialSignalLODs[previousIndexLOD].promise.then(async () => {
+                return await this._loader.loadUriAsync(context, property, uri);
             });
         }
 
@@ -294,13 +319,14 @@ export class MSFT_lod implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadBufferAsync(context: string, buffer: IBuffer, byteOffset: number, byteLength: number): Nullable<Promise<ArrayBufferView>> {
         if (this._loader.parent.useRangeRequests && !buffer.uri) {
             if (!this._loader.bin) {
                 throw new Error(`${context}: Uri is missing or the binary glTF is missing its binary chunk`);
             }
 
-            const loadAsync = (bufferLODs: Array<IBufferInfo>, indexLOD: number) => {
+            const loadAsync = async (bufferLODs: Array<IBufferInfo>, indexLOD: number) => {
                 const start = byteOffset;
                 const end = start + byteLength - 1;
                 let bufferLOD = bufferLODs[indexLOD];
@@ -312,7 +338,7 @@ export class MSFT_lod implements IGLTFLoaderExtension {
                     bufferLODs[indexLOD] = bufferLOD;
                 }
 
-                return bufferLOD.loaded.promise.then((data) => {
+                return await bufferLOD.loaded.promise.then((data) => {
                     return new Uint8Array(data.buffer, data.byteOffset + byteOffset - bufferLOD.start, byteLength);
                 });
             };
@@ -414,4 +440,5 @@ export class MSFT_lod implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new MSFT_lod(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new MSFT_lod(loader));

@@ -4,9 +4,9 @@ import type { Nullable } from "../types";
 import type { Scene } from "../scene";
 import { Xbox360Pad } from "./xboxGamepad";
 import { Gamepad, GenericPad } from "./gamepad";
-import { Engine } from "../Engines/engine";
 import { DualShockPad } from "./dualShockGamepad";
 import { Tools } from "../Misc/tools";
+import { AbstractEngine } from "core/Engines/abstractEngine";
 /**
  * Manager for handling gamepads
  */
@@ -86,7 +86,9 @@ export class GamepadManager {
                     disconnectedGamepad._isConnected = false;
 
                     this.onGamepadDisconnectedObservable.notifyObservers(disconnectedGamepad);
-                    disconnectedGamepad.dispose && disconnectedGamepad.dispose();
+                    if (disconnectedGamepad.dispose) {
+                        disconnectedGamepad.dispose();
+                    }
                     break;
                 }
             }
@@ -150,9 +152,9 @@ export class GamepadManager {
             this._onGamepadDisconnectedEvent = null;
         }
 
-        this._babylonGamepads.forEach((gamepad) => {
+        for (const gamepad of this._babylonGamepads) {
             gamepad.dispose();
-        });
+        }
 
         this.onGamepadConnectedObservable.clear();
         this.onGamepadDisconnectedObservable.clear();
@@ -222,7 +224,7 @@ export class GamepadManager {
         }
 
         if (this._isMonitoring) {
-            Engine.QueueNewFrame(() => {
+            AbstractEngine.QueueNewFrame(() => {
                 this._checkGamepadsStatus();
             });
         }

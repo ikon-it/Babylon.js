@@ -2,7 +2,7 @@
 
 var hostElement = document.getElementById("host-element");
 
-const fallbackUrl = "https://babylonsnapshots.z22.web.core.windows.net/refs/heads/master";
+const fallbackUrl = "https://snapshots-cvgtc2eugrd3cgfd.z01.azurefd.net/refs/heads/master";
 
 let loadScriptAsync = function (url, instantResolve) {
     return new Promise((resolve) => {
@@ -37,6 +37,7 @@ const Versions = {
     dist: [
         "https://cdn.babylonjs.com/timestamp.js?t=" + Date.now(),
         "https://preview.babylonjs.com/babylon.js",
+        "https://preview.babylonjs.com/addons/babylonjs.addons.min.js",
         "https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js",
         "https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js",
         "https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js",
@@ -45,6 +46,7 @@ const Versions = {
     ],
     local: [
         `//${window.location.hostname}:1337/babylon.js`,
+        `//${window.location.hostname}:1337/addons/babylonjs.addons.js`,
         `//${window.location.hostname}:1337/loaders/babylonjs.loaders.min.js`,
         `//${window.location.hostname}:1337/serializers/babylonjs.serializers.min.js`,
         `//${window.location.hostname}:1337/materialsLibrary/babylonjs.materials.min.js`,
@@ -88,13 +90,25 @@ let checkBabylonVersionAsync = function () {
 
     let versions = Versions[activeVersion] || Versions["dist"];
     if (snapshot && activeVersion === "dist") {
-        versions = versions.map((v) => v.replace("https://preview.babylonjs.com", "https://babylonsnapshots.z22.web.core.windows.net/" + snapshot));
+        versions = versions.map((v) => v.replace("https://preview.babylonjs.com", "https://snapshots-cvgtc2eugrd3cgfd.z01.azurefd.net/" + snapshot));
     } else if (version && activeVersion === "dist") {
         versions = versions.map((v) => v.replace("https://preview.babylonjs.com", "https://cdn.babylonjs.com/v" + version));
     }
 
     return new Promise((resolve, _reject) => {
         loadInSequence(versions, 0, resolve);
+    }).then(() => {
+        // if local, set the default base URL
+        if (snapshot) {
+            // eslint-disable-next-line no-undef
+            globalThis.BABYLON.Tools.ScriptBaseUrl = "https://snapshots-cvgtc2eugrd3cgfd.z01.azurefd.net/" + snapshot;
+        } else if (version) {
+            // eslint-disable-next-line no-undef
+            globalThis.BABYLON.Tools.ScriptBaseUrl = "https://cdn.babylonjs.com/v" + version;
+        } else if (activeVersion === "local") {
+            // eslint-disable-next-line no-undef
+            globalThis.BABYLON.Tools.ScriptBaseUrl = window.location.protocol + `//${window.location.hostname}:1337/`;
+        }
     });
 };
 

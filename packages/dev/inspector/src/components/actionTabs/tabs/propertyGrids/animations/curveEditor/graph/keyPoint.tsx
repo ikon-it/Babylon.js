@@ -7,9 +7,9 @@ import * as React from "react";
 import type { Context } from "../context";
 import type { Curve } from "./curve";
 
-const keyInactive = require("../assets/keyInactiveIcon.svg") as string;
-const keySelected = require("../assets/keySelectedIcon.svg") as string;
-const keyActive = require("../assets/keyActiveIcon.svg") as string;
+import keyInactive from "../assets/keyInactiveIcon.svg";
+import keySelected from "../assets/keySelectedIcon.svg";
+import keyActive from "../assets/keyActiveIcon.svg";
 
 interface IKeyPointComponentProps {
     x: number;
@@ -285,7 +285,7 @@ export class KeyPointComponent extends React.Component<IKeyPointComponentProps, 
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onSelectAllKeysObserver) {
             this.props.context.onSelectAllKeys.remove(this._onSelectAllKeysObserver);
         }
@@ -339,7 +339,7 @@ export class KeyPointComponent extends React.Component<IKeyPointComponentProps, 
         }
     }
 
-    shouldComponentUpdate(newProps: IKeyPointComponentProps, newState: IKeyPointComponentState) {
+    override shouldComponentUpdate(newProps: IKeyPointComponentProps, newState: IKeyPointComponentState) {
         if (newProps !== this.props) {
             newState.x = newProps.x;
             newState.y = newProps.y;
@@ -630,7 +630,7 @@ export class KeyPointComponent extends React.Component<IKeyPointComponentProps, 
         this._controlMode = ControlMode.None;
     }
 
-    public render() {
+    public override render() {
         if (!this.props.context.isChannelEnabled(this.props.curve.animation, this.props.curve.color)) {
             return null;
         }

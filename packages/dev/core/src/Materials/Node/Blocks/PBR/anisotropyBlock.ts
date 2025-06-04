@@ -1,7 +1,6 @@
 import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
@@ -12,6 +11,8 @@ import { TBNBlock } from "../Fragment/TBNBlock";
 import type { Mesh } from "../../../../Meshes/mesh";
 import type { Effect } from "../../../effect";
 import { Logger } from "core/Misc/logger";
+import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Block used to implement the anisotropy module of the PBR material
@@ -64,7 +65,7 @@ export class AnisotropyBlock extends NodeMaterialBlock {
      * Initialize the block and prepare the context for build
      * @param state defines the state that will be used for the build
      */
-    public initialize(state: NodeMaterialBuildState) {
+    public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("anisotropicOut");
         state._excludeVariableName("TBN");
     }
@@ -73,7 +74,7 @@ export class AnisotropyBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "AnisotropyBlock";
     }
 
@@ -135,6 +136,7 @@ export class AnisotropyBlock extends NodeMaterialBlock {
         const worldPosition = this.worldPositionConnectionPoint;
         const worldNormal = this.worldNormalConnectionPoint;
         const worldTangent = this.worldTangent;
+        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
 
         if (!uv.isConnected) {
             // we must set the uv input as optional because we may not end up in this method (in case a PerturbNormal block is linked to the PBR material)
@@ -147,27 +149,27 @@ export class AnisotropyBlock extends NodeMaterialBlock {
 
         const tangentReplaceString = { search: /defined\(TANGENT\)/g, replace: worldTangent.isConnected ? "defined(TANGENT)" : "defined(IGNORE)" };
 
-        const TBN = this.TBN;
-        if (TBN.isConnected) {
+        const tbn = this.TBN;
+        if (tbn.isConnected) {
             state.compilationString += `
             #ifdef TBNBLOCK
-            mat3 vTBN = ${TBN.associatedVariableName};
+            ${isWebGPU ? "var TBN" : "mat3 TBN"} = ${tbn.associatedVariableName};
             #endif
             `;
         } else if (worldTangent.isConnected) {
-            code += `vec3 tbnNormal = normalize(${worldNormal.associatedVariableName}.xyz);\n`;
-            code += `vec3 tbnTangent = normalize(${worldTangent.associatedVariableName}.xyz);\n`;
-            code += `vec3 tbnBitangent = cross(tbnNormal, tbnTangent) * ${this._tangentCorrectionFactorName};\n`;
-            code += `mat3 vTBN = mat3(tbnTangent, tbnBitangent, tbnNormal);\n`;
+            code += `${state._declareLocalVar("tbnNormal", NodeMaterialBlockConnectionPointTypes.Vector3)} = normalize(${worldNormal.associatedVariableName}.xyz);\n`;
+            code += `${state._declareLocalVar("tbnTangent", NodeMaterialBlockConnectionPointTypes.Vector3)} = normalize(${worldTangent.associatedVariableName}.xyz);\n`;
+            code += `${state._declareLocalVar("tbnBitangent", NodeMaterialBlockConnectionPointTypes.Vector3)} = cross(tbnNormal, tbnTangent) * ${this._tangentCorrectionFactorName};\n`;
+            code += `${isWebGPU ? "var vTBN" : "mat3 vTBN"} = ${isWebGPU ? "mat3x3f" : "mat3"}(tbnTangent, tbnBitangent, tbnNormal);\n`;
         }
 
         code += `
             #if defined(${worldTangent.isConnected ? "TANGENT" : "IGNORE"}) && defined(NORMAL)
-                mat3 TBN = vTBN;
+                ${isWebGPU ? "var TBN" : "mat3 TBN"} = vTBN;
             #else
-                mat3 TBN = cotangent_frame(${worldNormal.associatedVariableName + ".xyz"}, ${"v_" + worldPosition.associatedVariableName + ".xyz"}, ${
+                ${isWebGPU ? "var TBN" : "mat3 TBN"} = cotangent_frame(${worldNormal.associatedVariableName + ".xyz"}, ${"v_" + worldPosition.associatedVariableName + ".xyz"}, ${
                     uv.isConnected ? uv.associatedVariableName : "vec2(0.)"
-                }, vec2(1., 1.));
+                }, vec2${state.fSuffix}(1., 1.));
             #endif\n`;
 
         state._emitFunctionFromInclude("bumpFragmentMainFunctions", comments, {
@@ -189,13 +191,14 @@ export class AnisotropyBlock extends NodeMaterialBlock {
         if (generateTBNSpace) {
             code += this._generateTBNSpace(state);
         }
+        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
 
         const intensity = this.intensity.isConnected ? this.intensity.associatedVariableName : "1.0";
         const direction = this.direction.isConnected ? this.direction.associatedVariableName : "vec2(1., 0.)";
         const roughness = this.roughness.isConnected ? this.roughness.associatedVariableName : "0.";
 
-        code += `anisotropicOutParams anisotropicOut;
-            anisotropicBlock(
+        code += `${isWebGPU ? "var anisotropicOut: anisotropicOutParams" : "anisotropicOutParams anisotropicOut"};
+            anisotropicOut = anisotropicBlock(
                 vec3(${direction}, ${intensity}),
                 ${roughness},
             #ifdef ANISOTROPIC_TEXTURE
@@ -203,14 +206,13 @@ export class AnisotropyBlock extends NodeMaterialBlock {
             #endif
                 TBN,
                 normalW,
-                viewDirectionW,
-                anisotropicOut
+                viewDirectionW
             );\n`;
 
         return code;
     }
 
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         super.prepareDefines(mesh, nodeMaterial, defines);
 
         defines.setValue("ANISOTROPIC", true);
@@ -218,7 +220,7 @@ export class AnisotropyBlock extends NodeMaterialBlock {
         defines.setValue("ANISOTROPIC_LEGACY", !this.roughness.isConnected);
     }
 
-    public bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
+    public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         super.bind(effect, nodeMaterial, mesh);
 
         if (mesh) {
@@ -226,13 +228,13 @@ export class AnisotropyBlock extends NodeMaterialBlock {
         }
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         if (state.target === NodeMaterialBlockTargets.Fragment) {
             state.sharedData.blocksWithDefines.push(this);
             state.sharedData.bindableBlocks.push(this);
 
             this._tangentCorrectionFactorName = state._getFreeDefineName("tangentCorrectionFactor");
-            state._emitUniformFromString(this._tangentCorrectionFactorName, "float");
+            state._emitUniformFromString(this._tangentCorrectionFactorName, NodeMaterialBlockConnectionPointTypes.Float);
         }
 
         return this;

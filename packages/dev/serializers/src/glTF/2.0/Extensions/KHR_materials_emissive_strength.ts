@@ -1,5 +1,5 @@
 import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
-import { _Exporter } from "../glTFExporter";
+import { GLTFExporter } from "../glTFExporter";
 import type { Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import type { IMaterial, IKHRMaterialsEmissiveStrength } from "babylonjs-gltf2interface";
@@ -37,8 +37,8 @@ export class KHR_materials_emissive_strength implements IGLTFExporterExtensionV2
      * @param babylonMaterial corresponding babylon material
      * @returns promise, resolves with the material
      */
-    public postExportMaterialAsync(context: string, node: IMaterial, babylonMaterial: Material): Promise<IMaterial> {
-        return new Promise((resolve) => {
+    public async postExportMaterialAsync(context: string, node: IMaterial, babylonMaterial: Material): Promise<IMaterial> {
+        return await new Promise((resolve) => {
             if (!(babylonMaterial instanceof PBRMaterial)) {
                 return resolve(node);
             }
@@ -67,4 +67,4 @@ export class KHR_materials_emissive_strength implements IGLTFExporterExtensionV2
     }
 }
 
-_Exporter.RegisterExtension(NAME, (exporter) => new KHR_materials_emissive_strength());
+GLTFExporter.RegisterExtension(NAME, (exporter) => new KHR_materials_emissive_strength());

@@ -6,13 +6,14 @@ import type { Scene } from "../../scene";
 import { Texture } from "../../Materials/Textures/texture";
 import { Constants } from "../../Engines/constants";
 import type { ExternalTexture } from "./externalTexture";
+import type { WebGPUEngine } from "core/Engines";
 
 import "../../Engines/Extensions/engine.videoTexture";
 import "../../Engines/Extensions/engine.dynamicTexture";
 import { serialize } from "core/Misc/decorators";
 import { RegisterClass } from "core/Misc/typeStore";
 
-function removeSource(video: HTMLVideoElement): void {
+function RemoveSource(video: HTMLVideoElement): void {
     // Remove any <source> elements, etc.
     while (video.firstChild) {
         video.removeChild(video.firstChild);
@@ -31,6 +32,7 @@ function removeSource(video: HTMLVideoElement): void {
 /**
  * Settings for finer control over video usage
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface VideoTextureSettings {
     /**
      * Applies `autoplay` to video, if specified
@@ -128,6 +130,7 @@ export class VideoTexture extends Texture {
 
     private _handlePlay() {
         this._errorFound = false;
+        // eslint-disable-next-line github/no-then
         this.video.play().catch((reason) => {
             if (reason?.name === "NotAllowedError") {
                 if (this._onUserActionRequestedObservable && this._onUserActionRequestedObservable.hasObservers()) {
@@ -137,6 +140,7 @@ export class VideoTexture extends Texture {
                     Logger.Warn("Unable to autoplay a video with sound. Trying again with muted turned true");
                     this.video.muted = true;
                     this._errorFound = false;
+                    // eslint-disable-next-line github/no-then
                     this.video.play().catch((otherReason) => {
                         this._processError(otherReason);
                     });
@@ -192,8 +196,10 @@ export class VideoTexture extends Texture {
         this._currentSrc = src;
         this.name = name || this._getName(src);
         this.video = this._getVideo(src);
-        if (this._engine?.createExternalTexture) {
-            this._externalTexture = this._engine.createExternalTexture(this.video);
+        const engineWebGPU = this._engine as Nullable<WebGPUEngine>;
+        const createExternalTexture = engineWebGPU?.createExternalTexture;
+        if (createExternalTexture) {
+            this._externalTexture = createExternalTexture.call(engineWebGPU, this.video);
         }
 
         if (!this._settings.independentVideoSource) {
@@ -227,7 +233,7 @@ export class VideoTexture extends Texture {
 
         const videoHasEnoughData = this.video.readyState >= this.video.HAVE_CURRENT_DATA;
         if (this._settings.poster && (!this._settings.autoPlay || !videoHasEnoughData)) {
-            this._texture = this._getEngine()!.createTexture(this._settings.poster!, false, !this.invertY, scene);
+            this._texture = this._getEngine()!.createTexture(this._settings.poster, false, !this.invertY, scene);
             this._displayingPosterTexture = true;
         } else if (videoHasEnoughData) {
             this._createInternalTexture();
@@ -238,7 +244,7 @@ export class VideoTexture extends Texture {
      * Get the current class name of the video texture useful for serialization or dynamic coding.
      * @returns "VideoTexture"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "VideoTexture";
     }
 
@@ -268,15 +274,15 @@ export class VideoTexture extends Texture {
             video.src = src;
         } else {
             Tools.SetCorsBehavior(src[0], video);
-            src.forEach((url) => {
+            for (const url of src) {
                 const source = document.createElement("source");
                 source.src = url;
                 video.appendChild(source);
-            });
+            }
         }
 
         this.onDisposeObservable.addOnce(() => {
-            removeSource(video);
+            RemoveSource(video);
         });
 
         return video;
@@ -355,7 +361,7 @@ export class VideoTexture extends Texture {
     /**
      * @internal Internal method to initiate `update`.
      */
-    public _rebuild(): void {
+    public override _rebuild(): void {
         this.update();
     }
 
@@ -418,7 +424,7 @@ export class VideoTexture extends Texture {
      * Change video content. Changing video instance or setting multiple urls (as in constructor) is not supported.
      * @param url New url.
      */
-    public updateURL(url: string): void {
+    public override updateURL(url: string): void {
         this.video.src = url;
         this._currentSrc = url;
     }
@@ -427,14 +433,14 @@ export class VideoTexture extends Texture {
      * Clones the texture.
      * @returns the cloned texture
      */
-    public clone(): VideoTexture {
+    public override clone(): VideoTexture {
         return new VideoTexture(this.name, this._currentSrc!, this.getScene(), this._generateMipMaps, this.invertY, this.samplingMode, this._settings);
     }
 
     /**
      * Dispose the texture and release its associated resources.
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
 
         this._currentSrc = null;
@@ -465,6 +471,7 @@ export class VideoTexture extends Texture {
      * @param invertY Defines if the video should be stored with invert Y set to true (true by default)
      * @returns The created video texture as a promise
      */
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     public static CreateFromStreamAsync(scene: Scene, stream: MediaStream, constraints: any, invertY = true): Promise<VideoTexture> {
         const video = scene.getEngine().createVideoElement(constraints);
 
@@ -485,9 +492,6 @@ export class VideoTexture extends Texture {
 
         if (video.isNative) {
             // No additional configuration needed for native
-        } else if (video.mozSrcObject !== undefined) {
-            // hack for Firefox < 19
-            video.mozSrcObject = stream;
         } else {
             if (typeof video.srcObject == "object") {
                 video.srcObject = stream;
@@ -506,7 +510,7 @@ export class VideoTexture extends Texture {
                     });
                 }
                 videoTexture.onDisposeObservable.addOnce(() => {
-                    removeSource(video);
+                    RemoveSource(video);
                 });
 
                 resolve(videoTexture);
@@ -546,14 +550,16 @@ export class VideoTexture extends Texture {
 
             const videoTexture = await this.CreateFromStreamAsync(scene, stream, constraints, invertY);
             videoTexture.onDisposeObservable.addOnce(() => {
-                stream.getTracks().forEach((track) => {
+                const tracks = stream.getTracks();
+                for (const track of tracks) {
                     track.stop();
-                });
+                }
             });
 
             return videoTexture;
         }
 
+        // eslint-disable-next-line @typescript-eslint/return-await, @typescript-eslint/prefer-promise-reject-errors
         return Promise.reject("No support for userMedia on this device");
     }
 
@@ -579,11 +585,13 @@ export class VideoTexture extends Texture {
         invertY = true
     ): void {
         this.CreateFromWebCamAsync(scene, constraints, audioConstaints, invertY)
+            // eslint-disable-next-line github/no-then
             .then(function (videoTexture) {
                 if (onReady) {
                     onReady(videoTexture);
                 }
             })
+            // eslint-disable-next-line github/no-then
             .catch(function (err) {
                 Logger.Error(err.name);
             });

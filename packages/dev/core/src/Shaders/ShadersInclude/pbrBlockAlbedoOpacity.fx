@@ -5,27 +5,32 @@ struct albedoOpacityOutParams
 };
 
 #define pbr_inline
-void albedoOpacityBlock(
-    in vec4 vAlbedoColor,
+albedoOpacityOutParams albedoOpacityBlock(
+    in vec4 vAlbedoColor
 #ifdef ALBEDO
-    in vec4 albedoTexture,
-    in vec2 albedoInfos,
+    ,in vec4 albedoTexture
+    ,in vec2 albedoInfos
+#endif
+    , in float baseWeight
+#ifdef BASE_WEIGHT
+    , in vec4 baseWeightTexture
+    , in vec2 vBaseWeightInfos
 #endif
 #ifdef OPACITY
-    in vec4 opacityMap,
-    in vec2 vOpacityInfos,
+    ,in vec4 opacityMap
+    ,in vec2 vOpacityInfos
 #endif
 #ifdef DETAIL
-    in vec4 detailColor,
-    in vec4 vDetailInfos,
+    ,in vec4 detailColor
+    ,in vec4 vDetailInfos
 #endif
 #ifdef DECAL
-    in vec4 decalColor,
-    in vec4 vDecalInfos,
+    ,in vec4 decalColor
+    ,in vec4 vDecalInfos
 #endif
-    out albedoOpacityOutParams outParams
 )
 {
+    albedoOpacityOutParams outParams;
     // _____________________________ Albedo Information ______________________________
     vec3 surfaceAlbedo = vAlbedoColor.rgb;
     float alpha = vAlbedoColor.a;
@@ -63,6 +68,17 @@ void albedoOpacityBlock(
 
     #define CUSTOM_FRAGMENT_UPDATE_ALBEDO
 
+    // According to OpenPBR:
+    // - for metals, base_weight is a factor to the base_color (F0, thus surfaceAlbedo in
+    //   Babylons.js).
+    // - for dielectrics, base_weight is a factor to the diffuse BRDF (i.e. it should be
+    //   applied in computeDiffuseLighting), but with the diffuse model *currently* used
+    //   in Babylon.js, factoring it into the surfaceAlbedo is equivalent.
+    surfaceAlbedo *= baseWeight;
+    #ifdef BASE_WEIGHT
+        surfaceAlbedo *= baseWeightTexture.r;
+    #endif
+
     // _____________________________ Alpha Information _______________________________
     #ifdef OPACITY
         #ifdef OPACITYRGB
@@ -79,7 +95,7 @@ void albedoOpacityBlock(
     #endif
 
     #if !defined(SS_LINKREFRACTIONTOTRANSPARENCY) && !defined(ALPHAFRESNEL)
-        #ifdef ALPHATEST 
+        #ifdef ALPHATEST
             #if DEBUGMODE != 88
                 if (alpha < ALPHATESTVALUE)
                     discard;
@@ -94,4 +110,6 @@ void albedoOpacityBlock(
 
     outParams.surfaceAlbedo = surfaceAlbedo;
     outParams.alpha = alpha;
+
+    return outParams;
 }

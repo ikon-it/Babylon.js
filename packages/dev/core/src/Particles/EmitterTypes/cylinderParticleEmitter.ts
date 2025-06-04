@@ -1,6 +1,6 @@
 import type { Matrix } from "../../Maths/math.vector";
 import { Vector3 } from "../../Maths/math.vector";
-import { Scalar } from "../../Maths/math.scalar";
+import { RandomRange } from "../../Maths/math.scalar.functions";
 import type { Particle } from "../../Particles/particle";
 import type { IParticleEmitterType } from "./IParticleEmitterType";
 import { DeepCopier } from "../../Misc/deepCopier";
@@ -22,19 +22,19 @@ export class CylinderParticleEmitter implements IParticleEmitterType {
      */
     constructor(
         /**
-         * The radius of the emission cylinder.
+         * [1] The radius of the emission cylinder.
          */
         public radius = 1,
         /**
-         * The height of the emission cylinder.
+         * [1] The height of the emission cylinder.
          */
         public height = 1,
         /**
-         * The range of emission [0-1] 0 Surface only, 1 Entire Radius.
+         * [1] The range of emission [0-1] 0 Surface only, 1 Entire Radius.
          */
         public radiusRange = 1,
         /**
-         * How much to randomize the particle direction [0-1].
+         * [0] How much to randomize the particle direction [0-1].
          */
         public directionRandomizer = 0
     ) {}
@@ -54,10 +54,10 @@ export class CylinderParticleEmitter implements IParticleEmitterType {
 
         Vector3.TransformNormalToRef(this._tempVector, inverseWorldMatrix, this._tempVector);
 
-        const randY = Scalar.RandomRange(-this.directionRandomizer / 2, this.directionRandomizer / 2);
+        const randY = RandomRange(-this.directionRandomizer / 2, this.directionRandomizer / 2);
 
         let angle = Math.atan2(this._tempVector.x, this._tempVector.z);
-        angle += Scalar.RandomRange(-Math.PI / 2, Math.PI / 2) * this.directionRandomizer;
+        angle += RandomRange(-Math.PI / 2, Math.PI / 2) * this.directionRandomizer;
 
         this._tempVector.y = randY; // set direction y to rand y to mirror normal of cylinder surface
         this._tempVector.x = Math.sin(angle);
@@ -80,11 +80,11 @@ export class CylinderParticleEmitter implements IParticleEmitterType {
      * @param isLocal defines if the position should be set in local space
      */
     public startPositionFunction(worldMatrix: Matrix, positionToUpdate: Vector3, particle: Particle, isLocal: boolean): void {
-        const yPos = Scalar.RandomRange(-this.height / 2, this.height / 2);
-        const angle = Scalar.RandomRange(0, 2 * Math.PI);
+        const yPos = RandomRange(-this.height / 2, this.height / 2);
+        const angle = RandomRange(0, 2 * Math.PI);
 
         // Pick a properly distributed point within the circle https://programming.guide/random-point-within-circle.html
-        const radiusDistribution = Scalar.RandomRange((1 - this.radiusRange) * (1 - this.radiusRange), 1);
+        const radiusDistribution = RandomRange((1 - this.radiusRange) * (1 - this.radiusRange), 1);
         const positionRadius = Math.sqrt(radiusDistribution) * this.radius;
         const xPos = positionRadius * Math.cos(angle);
         const zPos = positionRadius * Math.sin(angle);
@@ -192,11 +192,11 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
         height = 1,
         radiusRange = 1,
         /**
-         * The min limit of the emission direction.
+         * [Up vector] The min limit of the emission direction.
          */
         public direction1 = new Vector3(0, 1, 0),
         /**
-         * The max limit of the emission direction.
+         * [Up vector] The max limit of the emission direction.
          */
         public direction2 = new Vector3(0, 1, 0)
     ) {
@@ -210,10 +210,10 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * @param _particle is the particle we are computed the direction for
      * @param isLocal defines if the direction should be set in local space
      */
-    public startDirectionFunction(worldMatrix: Matrix, directionToUpdate: Vector3, _particle: Particle, isLocal: boolean): void {
-        const randX = Scalar.RandomRange(this.direction1.x, this.direction2.x);
-        const randY = Scalar.RandomRange(this.direction1.y, this.direction2.y);
-        const randZ = Scalar.RandomRange(this.direction1.z, this.direction2.z);
+    public override startDirectionFunction(worldMatrix: Matrix, directionToUpdate: Vector3, _particle: Particle, isLocal: boolean): void {
+        const randX = RandomRange(this.direction1.x, this.direction2.x);
+        const randY = RandomRange(this.direction1.y, this.direction2.y);
+        const randZ = RandomRange(this.direction1.z, this.direction2.z);
         if (isLocal) {
             directionToUpdate.copyFromFloats(randX, randY, randZ);
             return;
@@ -225,7 +225,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Clones the current emitter and returns a copy of it
      * @returns the new emitter
      */
-    public clone(): CylinderDirectedParticleEmitter {
+    public override clone(): CylinderDirectedParticleEmitter {
         const newOne = new CylinderDirectedParticleEmitter(this.radius, this.height, this.radiusRange, this.direction1, this.direction2);
 
         DeepCopier.DeepCopy(this, newOne);
@@ -237,7 +237,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Called by the GPUParticleSystem to setup the update shader
      * @param uboOrEffect defines the update shader
      */
-    public applyToShader(uboOrEffect: UniformBufferEffectCommonAccessor): void {
+    public override applyToShader(uboOrEffect: UniformBufferEffectCommonAccessor): void {
         uboOrEffect.setFloat("radius", this.radius);
         uboOrEffect.setFloat("height", this.height);
         uboOrEffect.setFloat("radiusRange", this.radiusRange);
@@ -249,7 +249,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Creates the structure of the ubo for this particle emitter
      * @param ubo ubo to create the structure for
      */
-    public buildUniformLayout(ubo: UniformBuffer): void {
+    public override buildUniformLayout(ubo: UniformBuffer): void {
         ubo.addUniform("radius", 1);
         ubo.addUniform("height", 1);
         ubo.addUniform("radiusRange", 1);
@@ -261,7 +261,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Returns a string to use to update the GPU particles update shader
      * @returns a string containing the defines string
      */
-    public getEffectDefines(): string {
+    public override getEffectDefines(): string {
         return "#define CYLINDEREMITTER\n#define DIRECTEDCYLINDEREMITTER";
     }
 
@@ -269,7 +269,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Returns the string "CylinderDirectedParticleEmitter"
      * @returns a string containing the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "CylinderDirectedParticleEmitter";
     }
 
@@ -277,7 +277,7 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Serializes the particle system to a JSON object.
      * @returns the JSON object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.direction1 = this.direction1.asArray();
@@ -290,9 +290,9 @@ export class CylinderDirectedParticleEmitter extends CylinderParticleEmitter {
      * Parse properties from a JSON object
      * @param serializationObject defines the JSON object
      */
-    public parse(serializationObject: any): void {
+    public override parse(serializationObject: any): void {
         super.parse(serializationObject);
-        this.direction1.copyFrom(serializationObject.direction1);
-        this.direction2.copyFrom(serializationObject.direction2);
+        Vector3.FromArrayToRef(serializationObject.direction1, 0, this.direction1);
+        Vector3.FromArrayToRef(serializationObject.direction2, 0, this.direction2);
     }
 }

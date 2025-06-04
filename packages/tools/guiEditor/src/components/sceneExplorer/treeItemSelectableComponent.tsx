@@ -2,7 +2,6 @@ import type { Nullable } from "core/types";
 import type { IExplorerExtensibilityGroup } from "core/Debug/debugLayer";
 
 import { Tools } from "../../tools";
-import * as ReactDOM from "react-dom";
 import * as React from "react";
 import type { GlobalState } from "../../globalState";
 import { DragOverLocation } from "../../globalState";
@@ -38,6 +37,7 @@ export class TreeItemSelectableComponent extends React.Component<ITreeItemSelect
     private _onSelectionChangedObservable: Nullable<Observer<any>>;
     private _onDraggingEndObservable: Nullable<Observer<any>>;
     private _onDraggingStartObservable: Nullable<Observer<any>>;
+    private _thisRef: React.RefObject<HTMLDivElement> = React.createRef<HTMLDivElement>();
     /** flag flipped onDragEnter if dragOver is already true
      * prevents dragLeave from immediately setting dragOver to false
      * required to make dragging work as expected
@@ -73,7 +73,7 @@ export class TreeItemSelectableComponent extends React.Component<ITreeItemSelect
         this.setState({ expand: !this.state.expand });
     }
 
-    shouldComponentUpdate(nextProps: ITreeItemSelectableComponentProps, nextState: { isSelected: boolean }) {
+    override shouldComponentUpdate(nextProps: ITreeItemSelectableComponentProps, nextState: { isSelected: boolean }) {
         //if the next entity is going to be selected then we want to highlight it so update
         if (nextProps.selectedEntities.includes(nextProps.entity)) {
             nextState.isSelected = true;
@@ -89,14 +89,14 @@ export class TreeItemSelectableComponent extends React.Component<ITreeItemSelect
     }
 
     scrollIntoView() {
-        const element = ReactDOM.findDOMNode(this) as Element;
+        const element = this._thisRef.current;
 
         if (element) {
             element.scrollIntoView(false);
         }
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.globalState.onSelectionChangedObservable.remove(this._onSelectionChangedObservable);
         this.props.globalState.onDraggingEndObservable.remove(this._onDraggingEndObservable);
         this.props.globalState.onDraggingStartObservable.remove(this._onDraggingStartObservable);
@@ -139,7 +139,7 @@ export class TreeItemSelectableComponent extends React.Component<ITreeItemSelect
         });
     }
 
-    render() {
+    override render() {
         if (
             this.props.entity === this.props.globalState.workbench.trueRootContainer ||
             this.props.entity === this.props.globalState.workbench.visibleRegionContainer ||
@@ -201,7 +201,7 @@ export class TreeItemSelectableComponent extends React.Component<ITreeItemSelect
         const styleName = className === "itemContainer seAbove" || className === "itemContainer seBelow" ? lineMarginStyle : marginStyle;
 
         return (
-            <div>
+            <div ref={this._thisRef}>
                 <div
                     className={className}
                     style={styleName}

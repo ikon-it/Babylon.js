@@ -9,8 +9,8 @@ import { ReflectionBlock } from "core/Materials/Node/Blocks/PBR/reflectionBlock"
 import { TriPlanarBlock } from "core/Materials/Node/Blocks/triPlanarBlock";
 import type { IDisplayManager } from "shared-ui-components/nodeGraphSystem/interfaces/displayManager";
 import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
-import localStyles from "./textureDisplayManager.modules.scss";
-import commonStyles from "./common.modules.scss";
+import * as localStyles from "./textureDisplayManager.module.scss";
+import * as commonStyles from "./common.module.scss";
 
 export class TextureDisplayManager implements IDisplayManager {
     private _previewCanvas: HTMLCanvasElement;
@@ -55,13 +55,14 @@ export class TextureDisplayManager implements IDisplayManager {
                 contentArea.classList.add(localStyles["refraction-texture-block"]);
             }
 
-            this._previewCanvas = contentArea.ownerDocument!.createElement("canvas");
-            this._previewImage = contentArea.ownerDocument!.createElement("img");
+            this._previewCanvas = contentArea.ownerDocument.createElement("canvas");
+            this._previewImage = contentArea.ownerDocument.createElement("img");
             contentArea.appendChild(this._previewImage);
             this._previewImage.classList.add(commonStyles.empty);
         }
 
         if (textureBlock.texture) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             TextureLineComponent.UpdatePreview(
                 this._previewCanvas,
                 textureBlock.texture,

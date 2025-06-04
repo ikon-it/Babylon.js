@@ -1,14 +1,16 @@
 import type { Nullable, DataArray, FloatArray } from "../types";
-import type { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import { DataBuffer } from "./dataBuffer";
 import type { Mesh } from "../Meshes/mesh";
 import { Logger } from "../Misc/logger";
+import { Constants } from "../Engines/constants";
+import { EnumerateFloatValues, GetFloatData, GetTypeByteLength } from "./bufferUtils";
 
 /**
  * Class used to store data that will be store in GPU memory
  */
 export class Buffer {
-    private _engine: ThinEngine;
+    private _engine: AbstractEngine;
     private _buffer: Nullable<DataBuffer>;
     /** @internal */
     public _data: Nullable<DataArray>;
@@ -44,7 +46,7 @@ export class Buffer {
      * @param label defines the label of the buffer (for debug purpose)
      */
     constructor(
-        engine: ThinEngine,
+        engine: AbstractEngine,
         data: DataArray | DataBuffer,
         updatable: boolean,
         stride = 0,
@@ -355,37 +357,37 @@ export class VertexBuffer {
     /**
      * The byte type.
      */
-    public static readonly BYTE = 5120;
+    public static readonly BYTE = Constants.BYTE;
 
     /**
      * The unsigned byte type.
      */
-    public static readonly UNSIGNED_BYTE = 5121;
+    public static readonly UNSIGNED_BYTE = Constants.UNSIGNED_BYTE;
 
     /**
      * The short type.
      */
-    public static readonly SHORT = 5122;
+    public static readonly SHORT = Constants.SHORT;
 
     /**
      * The unsigned short type.
      */
-    public static readonly UNSIGNED_SHORT = 5123;
+    public static readonly UNSIGNED_SHORT = Constants.UNSIGNED_SHORT;
 
     /**
      * The integer type.
      */
-    public static readonly INT = 5124;
+    public static readonly INT = Constants.INT;
 
     /**
      * The unsigned integer type.
      */
-    public static readonly UNSIGNED_INT = 5125;
+    public static readonly UNSIGNED_INT = Constants.UNSIGNED_INT;
 
     /**
      * The float type.
      */
-    public static readonly FLOAT = 5126;
+    public static readonly FLOAT = Constants.FLOAT;
 
     /**
      * Gets a boolean indicating if the Buffer is disposed
@@ -445,7 +447,7 @@ export class VertexBuffer {
     /**
      * Gets the engine associated with the buffer
      */
-    public readonly engine: ThinEngine;
+    public readonly engine: AbstractEngine;
 
     /**
      * Gets the max possible amount of vertices stored within the current vertex buffer.
@@ -484,7 +486,7 @@ export class VertexBuffer {
      * @param takeBufferOwnership defines if the buffer should be released when the vertex buffer is disposed
      */
     constructor(
-        engine: ThinEngine,
+        engine: AbstractEngine,
         data: DataArray | Buffer | DataBuffer,
         kind: string,
         updatable: boolean,
@@ -507,11 +509,11 @@ export class VertexBuffer {
      * @param kind the vertex buffer kind
      * @param options defines the rest of the options used to create the buffer
      */
-    constructor(engine: ThinEngine, data: DataArray | Buffer | DataBuffer, kind: string, options?: IVertexBufferOptions);
+    constructor(engine: AbstractEngine, data: DataArray | Buffer | DataBuffer, kind: string, options?: IVertexBufferOptions);
 
     /** @internal */
     constructor(
-        engine: ThinEngine,
+        engine: AbstractEngine,
         data: DataArray | Buffer | DataBuffer,
         kind: string,
         updatableOrOptions?: boolean | IVertexBufferOptions,
@@ -565,7 +567,7 @@ export class VertexBuffer {
             this.type = type;
         }
 
-        const typeByteLength = VertexBuffer.GetTypeByteLength(this.type);
+        const typeByteLength = GetTypeByteLength(this.type);
 
         if (useBytes) {
             this._size = size || (stride ? stride / typeByteLength : VertexBuffer.DeduceStride(kind));
@@ -640,7 +642,7 @@ export class VertexBuffer {
             return null;
         }
 
-        return VertexBuffer.GetFloatData(data, this._size, this.type, this.byteOffset, this.byteStride, this.normalized, totalVertices, forceCopy);
+        return GetFloatData(data, this._size, this.type, this.byteOffset, this.byteStride, this.normalized, totalVertices, forceCopy);
     }
 
     /**
@@ -666,7 +668,7 @@ export class VertexBuffer {
      * @deprecated Please use byteStride instead.
      */
     public getStrideSize(): number {
-        return this.byteStride / VertexBuffer.GetTypeByteLength(this.type);
+        return this.byteStride / GetTypeByteLength(this.type);
     }
 
     /**
@@ -675,7 +677,7 @@ export class VertexBuffer {
      * @deprecated Please use byteOffset instead.
      */
     public getOffset(): number {
-        return this.byteOffset / VertexBuffer.GetTypeByteLength(this.type);
+        return this.byteOffset / GetTypeByteLength(this.type);
     }
 
     /**
@@ -684,7 +686,7 @@ export class VertexBuffer {
      * @returns the number of components
      */
     public getSize(sizeInBytes = false): number {
-        return sizeInBytes ? this._size * VertexBuffer.GetTypeByteLength(this.type) : this._size;
+        return sizeInBytes ? this._size * GetTypeByteLength(this.type) : this._size;
     }
 
     /**
@@ -753,7 +755,11 @@ export class VertexBuffer {
      * @param callback the callback function called for each value
      */
     public forEach(count: number, callback: (value: number, index: number) => void): void {
-        VertexBuffer.ForEach(this._buffer.getData()!, this.byteOffset, this.byteStride, this._size, this.type, count, this.normalized, callback);
+        EnumerateFloatValues(this._buffer.getData()!, this.byteOffset, this.byteStride, this._size, this.type, count, this.normalized, (values, index) => {
+            for (let i = 0; i < this._size; i++) {
+                callback(values[i], index + i);
+            }
+        });
     }
 
     /** @internal */
@@ -763,63 +769,63 @@ export class VertexBuffer {
     /**
      * Positions
      */
-    public static readonly PositionKind = "position";
+    public static readonly PositionKind = Constants.PositionKind;
     /**
      * Normals
      */
-    public static readonly NormalKind = "normal";
+    public static readonly NormalKind = Constants.NormalKind;
     /**
      * Tangents
      */
-    public static readonly TangentKind = "tangent";
+    public static readonly TangentKind = Constants.TangentKind;
     /**
      * Texture coordinates
      */
-    public static readonly UVKind = "uv";
+    public static readonly UVKind = Constants.UVKind;
     /**
      * Texture coordinates 2
      */
-    public static readonly UV2Kind = "uv2";
+    public static readonly UV2Kind = Constants.UV2Kind;
     /**
      * Texture coordinates 3
      */
-    public static readonly UV3Kind = "uv3";
+    public static readonly UV3Kind = Constants.UV3Kind;
     /**
      * Texture coordinates 4
      */
-    public static readonly UV4Kind = "uv4";
+    public static readonly UV4Kind = Constants.UV4Kind;
     /**
      * Texture coordinates 5
      */
-    public static readonly UV5Kind = "uv5";
+    public static readonly UV5Kind = Constants.UV5Kind;
     /**
      * Texture coordinates 6
      */
-    public static readonly UV6Kind = "uv6";
+    public static readonly UV6Kind = Constants.UV6Kind;
     /**
      * Colors
      */
-    public static readonly ColorKind = "color";
+    public static readonly ColorKind = Constants.ColorKind;
     /**
      * Instance Colors
      */
-    public static readonly ColorInstanceKind = "instanceColor";
+    public static readonly ColorInstanceKind = Constants.ColorInstanceKind;
     /**
      * Matrix indices (for bones)
      */
-    public static readonly MatricesIndicesKind = "matricesIndices";
+    public static readonly MatricesIndicesKind = Constants.MatricesIndicesKind;
     /**
      * Matrix weights (for bones)
      */
-    public static readonly MatricesWeightsKind = "matricesWeights";
+    public static readonly MatricesWeightsKind = Constants.MatricesWeightsKind;
     /**
      * Additional matrix indices (for bones)
      */
-    public static readonly MatricesIndicesExtraKind = "matricesIndicesExtra";
+    public static readonly MatricesIndicesExtraKind = Constants.MatricesIndicesExtraKind;
     /**
      * Additional matrix weights (for bones)
      */
-    public static readonly MatricesWeightsExtraKind = "matricesWeightsExtra";
+    public static readonly MatricesWeightsExtraKind = Constants.MatricesWeightsExtraKind;
 
     /**
      * Deduces the stride given a kind.
@@ -878,22 +884,10 @@ export class VertexBuffer {
      * Gets the byte length of the given type.
      * @param type the type
      * @returns the number of bytes
+     * @deprecated Use `getTypeByteLength` from `bufferUtils` instead
      */
     public static GetTypeByteLength(type: number): number {
-        switch (type) {
-            case VertexBuffer.BYTE:
-            case VertexBuffer.UNSIGNED_BYTE:
-                return 1;
-            case VertexBuffer.SHORT:
-            case VertexBuffer.UNSIGNED_SHORT:
-                return 2;
-            case VertexBuffer.INT:
-            case VertexBuffer.UNSIGNED_INT:
-            case VertexBuffer.FLOAT:
-                return 4;
-            default:
-                throw new Error(`Invalid type '${type}'`);
-        }
+        return GetTypeByteLength(type);
     }
 
     /**
@@ -906,6 +900,7 @@ export class VertexBuffer {
      * @param count the number of values to enumerate
      * @param normalized whether the data is normalized
      * @param callback the callback function called for each value
+     * @deprecated Use `EnumerateFloatValues` from `bufferUtils` instead
      */
     public static ForEach(
         data: DataArray,
@@ -917,73 +912,11 @@ export class VertexBuffer {
         normalized: boolean,
         callback: (value: number, index: number) => void
     ): void {
-        if (data instanceof Array) {
-            let offset = byteOffset / 4;
-            const stride = byteStride / 4;
-            for (let index = 0; index < count; index += componentCount) {
-                for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
-                    callback(data[offset + componentIndex], index + componentIndex);
-                }
-                offset += stride;
+        EnumerateFloatValues(data, byteOffset, byteStride, componentCount, componentType, count, normalized, (values, index) => {
+            for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
+                callback(values[componentIndex], index + componentIndex);
             }
-        } else {
-            const dataView = data instanceof ArrayBuffer ? new DataView(data) : new DataView(data.buffer, data.byteOffset, data.byteLength);
-            const componentByteLength = VertexBuffer.GetTypeByteLength(componentType);
-            for (let index = 0; index < count; index += componentCount) {
-                let componentByteOffset = byteOffset;
-                for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
-                    const value = VertexBuffer._GetFloatValue(dataView, componentType, componentByteOffset, normalized);
-                    callback(value, index + componentIndex);
-                    componentByteOffset += componentByteLength;
-                }
-                byteOffset += byteStride;
-            }
-        }
-    }
-
-    private static _GetFloatValue(dataView: DataView, type: number, byteOffset: number, normalized: boolean): number {
-        switch (type) {
-            case VertexBuffer.BYTE: {
-                let value = dataView.getInt8(byteOffset);
-                if (normalized) {
-                    value = Math.max(value / 127, -1);
-                }
-                return value;
-            }
-            case VertexBuffer.UNSIGNED_BYTE: {
-                let value = dataView.getUint8(byteOffset);
-                if (normalized) {
-                    value = value / 255;
-                }
-                return value;
-            }
-            case VertexBuffer.SHORT: {
-                let value = dataView.getInt16(byteOffset, true);
-                if (normalized) {
-                    value = Math.max(value / 32767, -1);
-                }
-                return value;
-            }
-            case VertexBuffer.UNSIGNED_SHORT: {
-                let value = dataView.getUint16(byteOffset, true);
-                if (normalized) {
-                    value = value / 65535;
-                }
-                return value;
-            }
-            case VertexBuffer.INT: {
-                return dataView.getInt32(byteOffset, true);
-            }
-            case VertexBuffer.UNSIGNED_INT: {
-                return dataView.getUint32(byteOffset, true);
-            }
-            case VertexBuffer.FLOAT: {
-                return dataView.getFloat32(byteOffset, true);
-            }
-            default: {
-                throw new Error(`Invalid component type ${type}`);
-            }
-        }
+        });
     }
 
     /**
@@ -997,6 +930,7 @@ export class VertexBuffer {
      * @param totalVertices number of vertices in the buffer to take into account
      * @param forceCopy defines a boolean indicating that the returned array must be cloned upon returning it
      * @returns a float array containing vertex data
+     * @deprecated Use `GetFloatData` from `bufferUtils` instead
      */
     public static GetFloatData(
         data: DataArray,
@@ -1008,47 +942,6 @@ export class VertexBuffer {
         totalVertices: number,
         forceCopy?: boolean
     ): FloatArray {
-        const tightlyPackedByteStride = size * VertexBuffer.GetTypeByteLength(type);
-        const count = totalVertices * size;
-
-        if (type !== VertexBuffer.FLOAT || byteStride !== tightlyPackedByteStride) {
-            const copy = new Float32Array(count);
-            VertexBuffer.ForEach(data, byteOffset, byteStride, size, type, count, normalized, (value, index) => (copy[index] = value));
-            return copy;
-        }
-
-        if (!(data instanceof Array || data instanceof Float32Array) || byteOffset !== 0 || data.length !== count) {
-            if (data instanceof Array) {
-                const offset = byteOffset / 4;
-                return data.slice(offset, offset + count);
-            } else if (data instanceof ArrayBuffer) {
-                return new Float32Array(data, byteOffset, count);
-            } else {
-                let offset = data.byteOffset + byteOffset;
-                if (forceCopy) {
-                    const result = new Float32Array(count);
-                    const source = new Float32Array(data.buffer, offset, count);
-
-                    result.set(source);
-
-                    return result;
-                }
-
-                // Protect against bad data
-                const remainder = offset % 4;
-
-                if (remainder) {
-                    offset = Math.max(0, offset - remainder);
-                }
-
-                return new Float32Array(data.buffer, offset, count);
-            }
-        }
-
-        if (forceCopy) {
-            return data.slice();
-        }
-
-        return data;
+        return GetFloatData(data, size, type, byteOffset, byteStride, normalized, totalVertices, forceCopy);
     }
 }

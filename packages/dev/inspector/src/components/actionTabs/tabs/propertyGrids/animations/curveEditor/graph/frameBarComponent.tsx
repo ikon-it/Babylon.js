@@ -5,8 +5,8 @@ import type { Context, IActiveAnimationChangedOptions } from "../context";
 import type { Observer } from "core/Misc/observable";
 
 // x distance between consecutive ticks on the frame
-const baseTickDistance = 25;
-const minTickDistance = 35;
+const BaseTickDistance = 25;
+const MinTickDistance = 35;
 
 interface IFrameBarComponentProps {
     globalState: GlobalState;
@@ -51,7 +51,7 @@ export class FrameBarComponent extends React.Component<IFrameBarComponentProps, 
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onActiveAnimationChangedObserver) {
             this.props.context.onActiveAnimationChanged.remove(this._onActiveAnimationChangedObserver);
         }
@@ -76,7 +76,7 @@ export class FrameBarComponent extends React.Component<IFrameBarComponentProps, 
 
         const range = maxFrame - minFrame;
         const convertRatio = range / this._graphAbsoluteWidth;
-        const dist = Math.max(baseTickDistance * this._viewScale, minTickDistance); // x distance between consecutive ticks
+        const dist = Math.max(BaseTickDistance * this._viewScale, MinTickDistance); // x distance between consecutive ticks
         let offset = Math.floor(dist * convertRatio);
 
         const steps = [];
@@ -129,7 +129,7 @@ export class FrameBarComponent extends React.Component<IFrameBarComponentProps, 
         });
     }
 
-    public render() {
+    public override render() {
         const viewBox = `${-this._offsetX} 0 ${Math.round(this._viewWidth * this._viewScale)} ${Math.round(30 * this._viewScale)}`;
 
         return (

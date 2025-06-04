@@ -67,13 +67,15 @@ export class PropertiesBar extends React.PureComponent<IPropertiesBarProps, IPro
     private _getNewDimension(oldDim: number, newDim: any) {
         if (!isNaN(newDim)) {
             if (parseInt(newDim) > 0) {
-                if (Number.isInteger(parseInt(newDim))) return parseInt(newDim);
+                if (Number.isInteger(parseInt(newDim))) {
+                    return parseInt(newDim);
+                }
             }
         }
         return oldDim;
     }
 
-    componentWillUpdate(nextProps: IPropertiesBarProps) {
+    override componentWillUpdate(nextProps: IPropertiesBarProps) {
         if (nextProps.size.width != this.props.size.width || nextProps.size.height != this.props.size.height) {
             this.setState({
                 width: nextProps.size.width,
@@ -82,7 +84,7 @@ export class PropertiesBar extends React.PureComponent<IPropertiesBarProps, IPro
         }
     }
 
-    render() {
+    override render() {
         const { mipLevel, setMipLevel, pixelData, resizeTexture, texture, face, setFace, saveTexture, resetTexture, uploadTexture } = this.props;
         const maxLevels = Math.floor(Math.log2(Math.max(texture.getSize().width, texture.getSize().height)));
         const engine = texture.getScene()!.getEngine();
@@ -158,7 +160,7 @@ export class PropertiesBar extends React.PureComponent<IPropertiesBarProps, IPro
                     <img title="Reset" className="icon button" src={resetButton} onClick={() => resetTexture()} />
                     <label>
                         <input
-                            accept=".jpg, .png, .tga, .dds, .env"
+                            accept=".jpg, .png, .tga, .dds, .env, .exr"
                             type="file"
                             onChange={(evt: React.ChangeEvent<HTMLInputElement>) => {
                                 const files = evt.target.files;

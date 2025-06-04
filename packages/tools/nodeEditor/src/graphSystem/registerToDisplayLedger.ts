@@ -15,8 +15,12 @@ import { MeshAttributeExistsDisplayManager } from "./display/meshAttributeExists
 import { CurveDisplayManager } from "./display/curveDisplayManager";
 import { TeleportOutDisplayManager } from "./display/teleportOutDisplayManager";
 import { TeleportInDisplayManager } from "./display/teleportInDisplayManager";
+import { LoopDisplayManager } from "./display/loopDisplayManager";
+import { DebugDisplayManager } from "./display/debugDisplayManager";
 
 export const RegisterToDisplayManagers = () => {
+    DisplayLedger.RegisteredControls["NodeMaterialDebugBlock"] = DebugDisplayManager;
+    DisplayLedger.RegisteredControls["LoopBlock"] = LoopDisplayManager;
     DisplayLedger.RegisteredControls["InputBlock"] = InputDisplayManager;
     DisplayLedger.RegisteredControls["VertexOutputBlock"] = OutputDisplayManager;
     DisplayLedger.RegisteredControls["FragmentOutputBlock"] = OutputDisplayManager;
@@ -30,6 +34,7 @@ export const RegisterToDisplayManagers = () => {
     DisplayLedger.RegisteredControls["ReflectionBlock"] = TextureDisplayManager;
     DisplayLedger.RegisteredControls["RefractionBlock"] = TextureDisplayManager;
     DisplayLedger.RegisteredControls["CurrentScreenBlock"] = TextureDisplayManager;
+    DisplayLedger.RegisteredControls["SmartFilterTextureBlock"] = TextureDisplayManager;
     DisplayLedger.RegisteredControls["ParticleTextureBlock"] = TextureDisplayManager;
     DisplayLedger.RegisteredControls["TriPlanarBlock"] = TextureDisplayManager;
     DisplayLedger.RegisteredControls["BiPlanarBlock"] = TextureDisplayManager;

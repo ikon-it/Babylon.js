@@ -7,10 +7,12 @@ import { Observable } from "./observable";
 import type { Effect } from "../Materials/effect";
 import { PostProcess } from "../PostProcesses/postProcess";
 import { PostProcessManager } from "../PostProcesses/postProcessManager";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
-import type { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 
 import "../Shaders/minmaxRedux.fragment";
+import "../ShadersWGSL/minmaxRedux.fragment";
 
 /**
  * This class computes a min/max reduction from a texture: it means it computes the minimum
@@ -30,7 +32,7 @@ export class MinMaxReducer {
     protected _postProcessManager: PostProcessManager;
     protected _onAfterUnbindObserver: Nullable<Observer<RenderTargetTexture>>;
     protected _forceFullscreenViewport = true;
-    protected _onContextRestoredObserver: Nullable<Observer<ThinEngine>>;
+    protected _onContextRestoredObserver: Nullable<Observer<AbstractEngine>>;
 
     /**
      * Creates a min/max reducer
@@ -92,7 +94,8 @@ export class MinMaxReducer {
             undefined,
             undefined,
             undefined,
-            Constants.TEXTUREFORMAT_RG
+            Constants.TEXTUREFORMAT_RG,
+            scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL
         );
 
         reductionInitial.autoClear = false;
@@ -132,7 +135,8 @@ export class MinMaxReducer {
                 undefined,
                 undefined,
                 undefined,
-                Constants.TEXTUREFORMAT_RG
+                Constants.TEXTUREFORMAT_RG,
+                scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL
             );
 
             reduction.autoClear = false;
@@ -157,6 +161,12 @@ export class MinMaxReducer {
                     const buffer = new Float32Array(4 * w * h),
                         minmax = { min: 0, max: 0 };
                     return () => {
+                        // Note that we should normally await the call to _readTexturePixels!
+                        // But because WebGL does the read synchronously, we know the values will be updated without waiting for the promise to be resolved, which will let us get the updated values
+                        // in the current frame, whereas in WebGPU, the read is asynchronous and we should normally wait for the promise to be resolved to get the updated values.
+                        // However, it's safe to avoid waiting for the promise to be resolved in WebGPU as well, because we will simply use the current values until "buffer" is updated later on.
+                        // Note that it means we can suffer some rendering artifacts in WebGPU because we may use previous min/max values for the current frame.
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
                         scene.getEngine()._readTexturePixels(reduction.inputTexture.texture!, w, h, -1, 0, buffer, false);
                         minmax.min = buffer[0];
                         minmax.max = buffer[1];

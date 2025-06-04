@@ -27,12 +27,12 @@ class Reflector {
             const message: string = event.data;
 
             if (message.startsWith(Reflector._SERVER_PREFIX)) {
-                const serverMessage = message.substr(Reflector._SERVER_PREFIX.length);
+                const serverMessage = message.substring(Reflector._SERVER_PREFIX.length);
                 Logger.Log(`[Reflector] Received server message: ${serverMessage}`);
                 this._handleServerMessage(serverMessage);
                 return;
             } else {
-                Logger.Log(`[Reflector] Received client message: ${message.substr(0, 64)}`);
+                Logger.Log(`[Reflector] Received client message: ${message.substring(0, 64)}`);
                 this._handleClientMessage(message);
             }
         };
@@ -56,9 +56,10 @@ class Reflector {
         const [command, payload] = message.split("|", 2);
         switch (command) {
             case "load": {
+                // eslint-disable-next-line @typescript-eslint/no-floating-promises, @typescript-eslint/no-deprecated, github/no-then
                 SceneLoader.LoadAsync("", `data:${payload}`, this._engine).then((scene) => {
                     if (scene.activeCamera) {
-                        scene.activeCamera!.attachControl();
+                        scene.activeCamera.attachControl();
 
                         this._engine.runRenderLoop(() => {
                             scene.render();
@@ -67,6 +68,7 @@ class Reflector {
 
                     this._globalState.onSceneLoaded.notifyObservers({ scene: scene, filename: "Reflector scene" });
 
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
                     scene.debugLayer.show();
                 });
                 break;
@@ -104,7 +106,7 @@ export class ReflectorZone extends React.Component<IReflectorProps> {
         });
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         if (!Engine.isSupported()) {
             return;
         }
@@ -116,11 +118,11 @@ export class ReflectorZone extends React.Component<IReflectorProps> {
         this._reflector = new Reflector(this._engine, this.props.globalState);
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this._reflector.close();
     }
 
-    shouldComponentUpdate(nextProps: IReflectorProps) {
+    override shouldComponentUpdate(nextProps: IReflectorProps) {
         if (nextProps.expanded !== this.props.expanded) {
             setTimeout(() => this._engine.resize());
             return true;
@@ -128,7 +130,7 @@ export class ReflectorZone extends React.Component<IReflectorProps> {
         return false;
     }
 
-    public render() {
+    public override render() {
         return (
             <div id="canvasZone" className={this.props.expanded ? "expanded" : ""}>
                 <canvas id="renderCanvas" touch-action="none" onContextMenu={(evt) => evt.preventDefault()}></canvas>

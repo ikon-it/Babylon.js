@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { GlobalState } from "../../globalState";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 
 import "./propertyTab.scss";
 import { Vector2LineComponent } from "shared-ui-components/lines/vector2LineComponent";
@@ -100,11 +100,11 @@ export class InputsPropertyTabComponent extends React.Component<IInputsPropertyT
         return null;
     }
 
-    render() {
+    override render() {
         return (
             <LineContainerComponent title="INPUTS">
                 {this.props.inputs.map((ib) => {
-                    if (ib.isContextual || !ib.name) {
+                    if (ib.isContextual || !ib.name || !ib.displayInInspector) {
                         return null;
                     }
                     return this.renderInputBlock(ib);

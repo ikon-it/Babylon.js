@@ -4,7 +4,7 @@ import { VRCameraMetrics } from "./vrCameraMetrics";
 import type { Scene } from "../../scene";
 import { Vector3 } from "../../Maths/math.vector";
 import { Node } from "../../node";
-import { setVRRigMode } from "../RigModes/vrRigMode";
+import { _SetVrRigMode } from "../RigModes/vrRigMode";
 
 import "../Inputs/arcRotateCameraVRDeviceOrientationInput";
 
@@ -50,9 +50,9 @@ export class VRDeviceOrientationArcRotateCamera extends ArcRotateCamera {
      * Gets camera class name
      * @returns VRDeviceOrientationArcRotateCamera
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "VRDeviceOrientationArcRotateCamera";
     }
 
-    protected _setRigMode = (rigParams: any) => setVRRigMode(this, rigParams);
+    protected override _setRigMode = (rigParams: any) => _SetVrRigMode(this, rigParams);
 }

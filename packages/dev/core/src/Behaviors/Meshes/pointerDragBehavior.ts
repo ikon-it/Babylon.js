@@ -49,11 +49,13 @@ export class PointerDragBehavior implements Behavior<AbstractMesh> {
      * Get or set the currentDraggingPointerId
      * @deprecated Please use currentDraggingPointerId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public get currentDraggingPointerID(): number {
         return this.currentDraggingPointerId;
     }
-    public set currentDraggingPointerID(currentDraggingPointerID: number) {
-        this.currentDraggingPointerId = currentDraggingPointerID;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public set currentDraggingPointerID(currentDraggingPointerId: number) {
+        this.currentDraggingPointerId = currentDraggingPointerId;
     }
     /**
      * The id of the pointer that is currently interacting with the behavior (-1 when no pointer is active)
@@ -262,6 +264,19 @@ export class PointerDragBehavior implements Behavior<AbstractMesh> {
                 return;
             }
 
+            // If we are dragging and the user presses another button on the same pointer, end the drag. Otherwise,
+            // tracking when the drag should end becomes very complex.
+            // gizmo.ts has similar behavior.
+            if (
+                this.dragging &&
+                this.currentDraggingPointerId == (<IPointerEvent>pointerInfo.event).pointerId &&
+                pointerInfo.event.button !== -1 &&
+                pointerInfo.event.button !== this._activeDragButton
+            ) {
+                this.releaseDrag();
+                return;
+            }
+
             if (pointerInfo.type == PointerEventTypes.POINTERDOWN) {
                 if (
                     this.startAndReleaseDragOnPointerEvents &&
@@ -449,9 +464,10 @@ export class PointerDragBehavior implements Behavior<AbstractMesh> {
                 this.useObjectOrientationForDragging
                     ? Vector3.TransformCoordinatesToRef(this._options.dragAxis, this.attachedNode.getWorldMatrix().getRotationMatrix(), this._worldDragAxis)
                     : this._worldDragAxis.copyFrom(this._options.dragAxis);
-
                 // Project delta drag from the drag plane onto the drag axis
                 pickedPoint.subtractToRef(this.lastDragPosition, this._tmpVector);
+
+                this._worldDragAxis.normalize();
                 dragLength = Vector3.Dot(this._tmpVector, this._worldDragAxis);
                 this._worldDragAxis.scaleToRef(dragLength, this._dragDelta);
             } else {
@@ -571,8 +587,11 @@ export class PointerDragBehavior implements Behavior<AbstractMesh> {
             this._pointA.addToRef(this._localAxis, this._lookAt);
             this._dragPlane.lookAt(this._lookAt);
         } else {
+            if (this._scene.activeCamera) {
+                this._scene.activeCamera.getForwardRay().direction.normalizeToRef(this._localAxis);
+            }
             this._dragPlane.position.copyFrom(this._pointA);
-            this._dragPlane.lookAt(ray.origin);
+            this._dragPlane.lookAt(this._pointA.add(this._localAxis));
         }
         // Update the position of the drag plane so it doesn't get out of sync with the node (eg. when moving back and forth quickly)
         this._dragPlane.position.copyFrom(this.attachedNode.getAbsolutePosition());

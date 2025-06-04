@@ -1,10 +1,9 @@
-import { AbstractScene } from "./abstractScene";
 import type { Scene } from "./scene";
 import { Mesh } from "./Meshes/mesh";
 import { TransformNode } from "./Meshes/transformNode";
 import type { Skeleton } from "./Bones/skeleton";
 import type { AnimationGroup } from "./Animations/animationGroup";
-import type { Animatable } from "./Animations/animatable";
+import { type Animatable } from "./Animations/animatable.core";
 import { AbstractMesh } from "./Meshes/abstractMesh";
 import type { MultiMaterial } from "./Materials/multiMaterial";
 import type { Material } from "./Materials/material";
@@ -13,16 +12,191 @@ import { EngineStore } from "./Engines/engineStore";
 import type { Nullable } from "./types";
 import type { Node } from "./node";
 import type { Observer } from "./Misc/observable";
-import type { ThinEngine } from "./Engines/thinEngine";
+import type { AbstractEngine } from "./Engines/abstractEngine";
 import { InstancedMesh } from "./Meshes/instancedMesh";
 import { Light } from "./Lights/light";
 import { Camera } from "./Cameras/camera";
 import { Tools } from "./Misc/tools";
+import type { IParticleSystem } from "./Particles/IParticleSystem";
+import type { IAssetContainer } from "./IAssetContainer";
+import type { Animation } from "./Animations/animation";
+import type { MorphTargetManager } from "./Morph/morphTargetManager";
+import type { Geometry } from "./Meshes/geometry";
+import type { AbstractActionManager } from "./Actions/abstractActionManager";
+import type { BaseTexture } from "./Materials/Textures/baseTexture";
+import type { PostProcess } from "./PostProcesses/postProcess";
+import type { Sound } from "./Audio/sound";
+import type { Layer } from "./Layers/layer";
+import type { EffectLayer } from "./Layers/effectLayer";
+import type { ReflectionProbe } from "./Probes/reflectionProbe";
+import type { LensFlareSystem } from "./LensFlares/lensFlareSystem";
+import type { ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
+import { Tags } from "./Misc/tags";
+
+/**
+ * Root class for AssetContainer and KeepAssets
+ */
+export class AbstractAssetContainer implements IAssetContainer {
+    /**
+     * Gets the list of root nodes (ie. nodes with no parent)
+     */
+    public rootNodes: Node[] = [];
+
+    /** All of the cameras added to this scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/cameras
+     */
+    public cameras: Camera[] = [];
+
+    /**
+     * All of the lights added to this scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/lights/lights_introduction
+     */
+    public lights: Light[] = [];
+
+    /**
+     * All of the (abstract) meshes added to this scene
+     */
+    public meshes: AbstractMesh[] = [];
+
+    /**
+     * The list of skeletons added to the scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/bonesSkeletons
+     */
+    public skeletons: Skeleton[] = [];
+
+    /**
+     * All of the particle systems added to this scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/particle_system_intro
+     */
+    public particleSystems: IParticleSystem[] = [];
+
+    /**
+     * Gets a list of Animations associated with the scene
+     */
+    public animations: Animation[] = [];
+
+    /**
+     * All of the animation groups added to this scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/animation/groupAnimations
+     */
+    public animationGroups: AnimationGroup[] = [];
+
+    /**
+     * All of the multi-materials added to this scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/using/multiMaterials
+     */
+    public multiMaterials: MultiMaterial[] = [];
+
+    /**
+     * All of the materials added to this scene
+     * In the context of a Scene, it is not supposed to be modified manually.
+     * Any addition or removal should be done using the addMaterial and removeMaterial Scene methods.
+     * Note also that the order of the Material within the array is not significant and might change.
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materials_introduction
+     */
+    public materials: Material[] = [];
+
+    /**
+     * The list of morph target managers added to the scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/dynamicMeshMorph
+     */
+    public morphTargetManagers: MorphTargetManager[] = [];
+
+    /**
+     * The list of geometries used in the scene.
+     */
+    public geometries: Geometry[] = [];
+
+    /**
+     * All of the transform nodes added to this scene
+     * In the context of a Scene, it is not supposed to be modified manually.
+     * Any addition or removal should be done using the addTransformNode and removeTransformNode Scene methods.
+     * Note also that the order of the TransformNode within the array is not significant and might change.
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/transforms/parent_pivot/transform_node
+     */
+    public transformNodes: TransformNode[] = [];
+
+    /**
+     * ActionManagers available on the scene.
+     * @deprecated
+     */
+    public actionManagers: AbstractActionManager[] = [];
+
+    /**
+     * Textures to keep.
+     */
+    public textures: BaseTexture[] = [];
+
+    /** @internal */
+    protected _environmentTexture: Nullable<BaseTexture> = null;
+    /**
+     * Texture used in all pbr material as the reflection texture.
+     * As in the majority of the scene they are the same (exception for multi room and so on),
+     * this is easier to reference from here than from all the materials.
+     */
+    public get environmentTexture(): Nullable<BaseTexture> {
+        return this._environmentTexture;
+    }
+
+    public set environmentTexture(value: Nullable<BaseTexture>) {
+        this._environmentTexture = value;
+    }
+
+    /**
+     * The list of postprocesses added to the scene
+     */
+    public postProcesses: PostProcess[] = [];
+
+    /**
+     * The list of sounds
+     */
+    public sounds: Nullable<Sound[]> = null;
+
+    /**
+     * The list of effect layers added to the scene
+     */
+    public effectLayers: EffectLayer[] = [];
+
+    /**
+     * The list of layers added to the scene
+     */
+    public layers: Layer[] = [];
+
+    /**
+     * The list of reflection probes added to the scene
+     */
+    public reflectionProbes: ReflectionProbe[] = [];
+
+    /**
+     * The list of lens flare systems added to the scene
+     */
+    public lensFlareSystems: LensFlareSystem[];
+
+    /**
+     * The list of procedural textures added to the scene
+     */
+    public proceduralTextures: ProceduralTexture[];
+
+    /**
+     * @returns all meshes, lights, cameras, transformNodes and bones
+     */
+    public getNodes(): Array<Node> {
+        let nodes: Node[] = [];
+        nodes = nodes.concat(this.meshes);
+        nodes = nodes.concat(this.lights);
+        nodes = nodes.concat(this.cameras);
+        nodes = nodes.concat(this.transformNodes); // dummies
+        for (const skeleton of this.skeletons) {
+            nodes = nodes.concat(skeleton.bones);
+        }
+        return nodes;
+    }
+}
 
 /**
  * Set of assets to keep when moving a scene into an asset container.
  */
-export class KeepAssets extends AbstractScene {}
+export class KeepAssets extends AbstractAssetContainer {}
 
 /**
  * Class used to store the output of the AssetContainer.instantiateAllMeshesToScene function
@@ -47,29 +221,32 @@ export class InstantiatedEntries {
      * Disposes the instantiated entries from the scene
      */
     public dispose() {
-        this.rootNodes.slice(0).forEach((o) => {
-            o.dispose();
-        });
-        this.rootNodes.length = 0;
+        const rootNodes = this.rootNodes;
+        for (const rootNode of rootNodes) {
+            rootNode.dispose();
+        }
+        rootNodes.length = 0;
 
-        this.skeletons.slice(0).forEach((o) => {
-            o.dispose();
-        });
-        this.skeletons.length = 0;
+        const skeletons = this.skeletons;
+        for (const skeleton of skeletons) {
+            skeleton.dispose();
+        }
+        skeletons.length = 0;
 
-        this.animationGroups.slice(0).forEach((o) => {
-            o.dispose();
-        });
-        this.animationGroups.length = 0;
+        const animationGroups = this.animationGroups;
+        for (const animationGroup of animationGroups) {
+            animationGroup.dispose();
+        }
+        animationGroups.length = 0;
     }
 }
 
 /**
  * Container with a set of assets that can be added or removed from a scene.
  */
-export class AssetContainer extends AbstractScene {
+export class AssetContainer extends AbstractAssetContainer {
     private _wasAddedToScene = false;
-    private _onContextRestoredObserver: Nullable<Observer<ThinEngine>>;
+    private _onContextRestoredObserver: Nullable<Observer<AbstractEngine>>;
 
     /**
      * The scene the AssetContainer belongs to.
@@ -87,12 +264,7 @@ export class AssetContainer extends AbstractScene {
             return;
         }
         this.scene = scene;
-        this["sounds"] = [];
-        this["effectLayers"] = [];
-        this["layers"] = [];
-        this["lensFlareSystems"] = [];
         this["proceduralTextures"] = [];
-        this["reflectionProbes"] = [];
 
         scene.onDisposeObservable.add(() => {
             if (!this._wasAddedToScene) {
@@ -210,7 +382,9 @@ export class AssetContainer extends AbstractScene {
 
         if (nodesUidMap.size > 0) {
             Logger.Error("SceneSerializer._topologicalSort: There were unvisited nodes:");
-            nodesUidMap.forEach((node) => Logger.Error(node.name));
+            nodesUidMap.forEach((node) => {
+                Logger.Error(node.name);
+            });
         }
 
         return sortedNodes;
@@ -235,7 +409,7 @@ export class AssetContainer extends AbstractScene {
      * @returns true if the node is contained in this container, otherwise false.
      */
     private _isNodeInContainer(node: Node) {
-        if (node instanceof Mesh && this.meshes.indexOf(node) !== -1) {
+        if (node instanceof AbstractMesh && this.meshes.indexOf(node) !== -1) {
             return true;
         }
         if (node instanceof TransformNode && this.transformNodes.indexOf(node) !== -1) {
@@ -320,7 +494,7 @@ export class AssetContainer extends AbstractScene {
             }
 
             if (clone instanceof Mesh) {
-                const clonedMesh = clone as Mesh;
+                const clonedMesh = clone;
 
                 if (clonedMesh.morphTargetManager) {
                     const oldMorphTargetManager = (source as Mesh).morphTargetManager!;
@@ -435,7 +609,7 @@ export class AssetContainer extends AbstractScene {
             }
         };
 
-        sortedNodes.forEach((node) => {
+        for (const node of sortedNodes) {
             if (node.getClassName() === "InstancedMesh") {
                 const instancedNode = node as InstancedMesh;
                 const sourceMesh = instancedNode.sourceMesh;
@@ -468,11 +642,11 @@ export class AssetContainer extends AbstractScene {
                 }
                 onNewCreated(node, replicatedNode);
             }
-        });
+        }
 
-        this.skeletons.forEach((s) => {
+        for (const s of this.skeletons) {
             if (localOptions.predicate && !localOptions.predicate(s)) {
-                return;
+                continue;
             }
 
             const clone = s.clone(nameFunction ? nameFunction(s.name) : "Clone of " + s.name);
@@ -501,11 +675,11 @@ export class AssetContainer extends AbstractScene {
             }
 
             result.skeletons.push(clone);
-        });
+        }
 
-        this.animationGroups.forEach((o) => {
+        for (const o of this.animationGroups) {
             if (localOptions.predicate && !localOptions.predicate(o)) {
-                return;
+                continue;
             }
 
             const clone = o.clone(nameFunction ? nameFunction(o.name) : "Clone of " + o.name, (oldTarget) => {
@@ -515,7 +689,7 @@ export class AssetContainer extends AbstractScene {
             });
 
             result.animationGroups.push(clone);
-        });
+        }
 
         return result;
     }
@@ -553,94 +727,94 @@ export class AssetContainer extends AbstractScene {
      */
     public addToScene(predicate: Nullable<(entity: any) => boolean> = null) {
         const addedNodes: Node[] = [];
-        this.cameras.forEach((o) => {
+        for (const o of this.cameras) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addCamera(o);
             addedNodes.push(o);
-        });
-        this.lights.forEach((o) => {
+        }
+        for (const o of this.lights) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addLight(o);
             addedNodes.push(o);
-        });
-        this.meshes.forEach((o) => {
+        }
+        for (const o of this.meshes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addMesh(o);
             addedNodes.push(o);
-        });
-        this.skeletons.forEach((o) => {
+        }
+        for (const o of this.skeletons) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addSkeleton(o);
-        });
-        this.animations.forEach((o) => {
+        }
+        for (const o of this.animations) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addAnimation(o);
-        });
-        this.animationGroups.forEach((o) => {
+        }
+        for (const o of this.animationGroups) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addAnimationGroup(o);
-        });
-        this.multiMaterials.forEach((o) => {
+        }
+        for (const o of this.multiMaterials) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addMultiMaterial(o);
-        });
-        this.materials.forEach((o) => {
+        }
+        for (const o of this.materials) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addMaterial(o);
-        });
-        this.morphTargetManagers.forEach((o) => {
+        }
+        for (const o of this.morphTargetManagers) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addMorphTargetManager(o);
-        });
-        this.geometries.forEach((o) => {
+        }
+        for (const o of this.geometries) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addGeometry(o);
-        });
-        this.transformNodes.forEach((o) => {
+        }
+        for (const o of this.transformNodes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addTransformNode(o);
             addedNodes.push(o);
-        });
-        this.actionManagers.forEach((o) => {
+        }
+        for (const o of this.actionManagers) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addActionManager(o);
-        });
-        this.textures.forEach((o) => {
+        }
+        for (const o of this.textures) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addTexture(o);
-        });
-        this.reflectionProbes.forEach((o) => {
+        }
+        for (const o of this.reflectionProbes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.addReflectionProbe(o);
-        });
+        }
 
         for (const addedNode of addedNodes) {
             // If node was added to the scene, but parent is not in the scene, break the relationship
@@ -681,159 +855,172 @@ export class AssetContainer extends AbstractScene {
      * @param predicate defines a predicate used to select which entity will be added (can be null)
      */
     public removeFromScene(predicate: Nullable<(entity: any) => boolean> = null) {
-        this.cameras.forEach((o) => {
+        for (const o of this.cameras) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeCamera(o);
-        });
-        this.lights.forEach((o) => {
+        }
+        for (const o of this.lights) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeLight(o);
-        });
-        this.meshes.forEach((o) => {
+        }
+        for (const o of this.meshes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeMesh(o, true);
-        });
-        this.skeletons.forEach((o) => {
+        }
+        for (const o of this.skeletons) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeSkeleton(o);
-        });
-        this.animations.forEach((o) => {
+        }
+        for (const o of this.animations) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeAnimation(o);
-        });
-        this.animationGroups.forEach((o) => {
+        }
+        for (const o of this.animationGroups) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeAnimationGroup(o);
-        });
-        this.multiMaterials.forEach((o) => {
+        }
+        for (const o of this.multiMaterials) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeMultiMaterial(o);
-        });
-        this.materials.forEach((o) => {
+        }
+        for (const o of this.materials) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeMaterial(o);
-        });
-        this.morphTargetManagers.forEach((o) => {
+        }
+        for (const o of this.morphTargetManagers) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeMorphTargetManager(o);
-        });
-        this.geometries.forEach((o) => {
+        }
+        for (const o of this.geometries) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeGeometry(o);
-        });
-        this.transformNodes.forEach((o) => {
+        }
+        for (const o of this.transformNodes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeTransformNode(o);
-        });
-        this.actionManagers.forEach((o) => {
+        }
+        for (const o of this.actionManagers) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeActionManager(o);
-        });
-        this.textures.forEach((o) => {
+        }
+        for (const o of this.textures) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeTexture(o);
-        });
-        this.reflectionProbes.forEach((o) => {
+        }
+        for (const o of this.reflectionProbes) {
             if (predicate && !predicate(o)) {
-                return;
+                continue;
             }
             this.scene.removeReflectionProbe(o);
-        });
+        }
     }
 
     /**
      * Disposes all the assets in the container
      */
     public dispose() {
-        this.cameras.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const cameras = this.cameras.slice(0);
+        for (const camera of cameras) {
+            camera.dispose();
+        }
         this.cameras.length = 0;
 
-        this.lights.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const lights = this.lights.slice(0);
+        for (const light of lights) {
+            light.dispose();
+        }
         this.lights.length = 0;
 
-        this.meshes.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const meshes = this.meshes.slice(0);
+        for (const mesh of meshes) {
+            mesh.dispose();
+        }
         this.meshes.length = 0;
 
-        this.skeletons.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const skeletons = this.skeletons.slice(0);
+        for (const skeleton of skeletons) {
+            skeleton.dispose();
+        }
         this.skeletons.length = 0;
 
-        this.animationGroups.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const animationGroups = this.animationGroups.slice(0);
+        for (const animationGroup of animationGroups) {
+            animationGroup.dispose();
+        }
         this.animationGroups.length = 0;
 
-        this.multiMaterials.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const multiMaterials = this.multiMaterials.slice(0);
+        for (const multiMaterial of multiMaterials) {
+            multiMaterial.dispose();
+        }
         this.multiMaterials.length = 0;
 
-        this.materials.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const materials = this.materials.slice(0);
+        for (const material of materials) {
+            material.dispose();
+        }
         this.materials.length = 0;
 
-        this.geometries.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const geometries = this.geometries.slice(0);
+        for (const geometry of geometries) {
+            geometry.dispose();
+        }
         this.geometries.length = 0;
 
-        this.transformNodes.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const transformNodes = this.transformNodes.slice(0);
+        for (const transformNode of transformNodes) {
+            transformNode.dispose();
+        }
         this.transformNodes.length = 0;
 
-        this.actionManagers.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const actionManagers = this.actionManagers.slice(0);
+        for (const actionManager of actionManagers) {
+            actionManager.dispose();
+        }
         this.actionManagers.length = 0;
 
-        this.textures.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const textures = this.textures.slice(0);
+        for (const texture of textures) {
+            texture.dispose();
+        }
         this.textures.length = 0;
 
-        this.reflectionProbes.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const reflectionProbes = this.reflectionProbes.slice(0);
+        for (const reflectionProbe of reflectionProbes) {
+            reflectionProbe.dispose();
+        }
         this.reflectionProbes.length = 0;
 
-        this.morphTargetManagers.slice(0).forEach((o) => {
-            o.dispose();
-        });
+        const morphTargetManagers = this.morphTargetManagers.slice(0);
+        for (const morphTargetManager of morphTargetManagers) {
+            morphTargetManager.dispose();
+        }
         this.morphTargetManagers.length = 0;
 
         if (this.environmentTexture) {
@@ -903,11 +1090,11 @@ export class AssetContainer extends AbstractScene {
      */
     public createRootMesh() {
         const rootMesh = new Mesh("assetContainerRootMesh", this.scene);
-        this.meshes.forEach((m) => {
+        for (const m of this.meshes) {
             if (!m.parent) {
                 rootMesh.addChild(m);
             }
-        });
+        }
         this.meshes.unshift(rootMesh);
         return rootMesh;
     }
@@ -962,7 +1149,7 @@ export class AssetContainer extends AbstractScene {
 
         // Copy new node animations
         const nodesInAC = this.getNodes();
-        nodesInAC.forEach((nodeInAC) => {
+        for (const nodeInAC of nodesInAC) {
             const nodeInScene = _targetConverter(nodeInAC);
             if (nodeInScene !== null) {
                 // Remove old animations with same target property as a new one
@@ -982,23 +1169,24 @@ export class AssetContainer extends AbstractScene {
                 // Append new animations
                 nodeInScene.animations = nodeInScene.animations.concat(nodeInAC.animations);
             }
-        });
+        }
 
         const newAnimationGroups: AnimationGroup[] = [];
 
         // Copy new animation groups
-        this.animationGroups.slice().forEach((animationGroupInAC) => {
+        const animationGroups = this.animationGroups.slice();
+        for (const animationGroupInAC of animationGroups) {
             // Clone the animation group and all its animatables
             newAnimationGroups.push(animationGroupInAC.clone(animationGroupInAC.name, _targetConverter));
 
             // Remove animatables related to the asset container
-            animationGroupInAC.animatables.forEach((animatable) => {
+            for (const animatable of animationGroupInAC.animatables) {
                 animatable.stop();
-            });
-        });
+            }
+        }
 
         // Retarget animatables
-        animatables.forEach((animatable) => {
+        for (const animatable of animatables) {
             const target = _targetConverter(animatable.target);
 
             if (target) {
@@ -1019,7 +1207,7 @@ export class AssetContainer extends AbstractScene {
                 // Stop animation for the target in the asset container
                 scene.stopAnimation(animatable.target);
             }
-        });
+        }
 
         return newAnimationGroups;
     }
@@ -1032,26 +1220,26 @@ export class AssetContainer extends AbstractScene {
      */
     public populateRootNodes() {
         this.rootNodes.length = 0;
-        this.meshes.forEach((m) => {
+        for (const m of this.meshes) {
             if (!m.parent && this.rootNodes.indexOf(m) === -1) {
                 this.rootNodes.push(m);
             }
-        });
-        this.transformNodes.forEach((t) => {
+        }
+        for (const t of this.transformNodes) {
             if (!t.parent && this.rootNodes.indexOf(t) === -1) {
                 this.rootNodes.push(t);
             }
-        });
-        this.lights.forEach((l) => {
+        }
+        for (const l of this.lights) {
             if (!l.parent && this.rootNodes.indexOf(l) === -1) {
                 this.rootNodes.push(l);
             }
-        });
-        this.cameras.forEach((c) => {
+        }
+        for (const c of this.cameras) {
             if (!c.parent && this.rootNodes.indexOf(c) === -1) {
                 this.rootNodes.push(c);
             }
-        });
+        }
     }
 
     /**
@@ -1076,6 +1264,8 @@ export class AssetContainer extends AbstractScene {
                 if (nodeToVisit.geometry && this.geometries.indexOf(nodeToVisit.geometry) === -1) {
                     this.geometries.push(nodeToVisit.geometry);
                 }
+                this.meshes.push(nodeToVisit);
+            } else if (nodeToVisit instanceof InstancedMesh) {
                 this.meshes.push(nodeToVisit);
             } else if (nodeToVisit instanceof TransformNode) {
                 this.transformNodes.push(nodeToVisit);
@@ -1114,5 +1304,80 @@ export class AssetContainer extends AbstractScene {
         }
 
         this.populateRootNodes();
+    }
+
+    /**
+     * Get from a list of objects by tags
+     * @param list the list of objects to use
+     * @param tagsQuery the query to use
+     * @param filter a predicate to filter for tags
+     * @returns
+     */
+    private _getByTags<T>(list: T[], tagsQuery: string, filter?: (item: T) => boolean): T[] {
+        if (tagsQuery === undefined) {
+            // returns the complete list (could be done with Tags.MatchesQuery but no need to have a for-loop here)
+            return list;
+        }
+
+        const listByTags = [];
+
+        for (const i in list) {
+            const item = list[i];
+            if (Tags && Tags.MatchesQuery(item, tagsQuery) && (!filter || filter(item))) {
+                listByTags.push(item);
+            }
+        }
+
+        return listByTags;
+    }
+
+    /**
+     * Get a list of meshes by tags
+     * @param tagsQuery defines the tags query to use
+     * @param filter defines a predicate used to filter results
+     * @returns an array of Mesh
+     */
+    public getMeshesByTags(tagsQuery: string, filter?: (mesh: AbstractMesh) => boolean): AbstractMesh[] {
+        return this._getByTags(this.meshes, tagsQuery, filter);
+    }
+
+    /**
+     * Get a list of cameras by tags
+     * @param tagsQuery defines the tags query to use
+     * @param filter defines a predicate used to filter results
+     * @returns an array of Camera
+     */
+    public getCamerasByTags(tagsQuery: string, filter?: (camera: Camera) => boolean): Camera[] {
+        return this._getByTags(this.cameras, tagsQuery, filter);
+    }
+
+    /**
+     * Get a list of lights by tags
+     * @param tagsQuery defines the tags query to use
+     * @param filter defines a predicate used to filter results
+     * @returns an array of Light
+     */
+    public getLightsByTags(tagsQuery: string, filter?: (light: Light) => boolean): Light[] {
+        return this._getByTags(this.lights, tagsQuery, filter);
+    }
+
+    /**
+     * Get a list of materials by tags
+     * @param tagsQuery defines the tags query to use
+     * @param filter defines a predicate used to filter results
+     * @returns an array of Material
+     */
+    public getMaterialsByTags(tagsQuery: string, filter?: (material: Material) => boolean): Material[] {
+        return this._getByTags(this.materials, tagsQuery, filter).concat(this._getByTags(this.multiMaterials, tagsQuery, filter));
+    }
+
+    /**
+     * Get a list of transform nodes by tags
+     * @param tagsQuery defines the tags query to use
+     * @param filter defines a predicate used to filter results
+     * @returns an array of TransformNode
+     */
+    public getTransformNodesByTags(tagsQuery: string, filter?: (transform: TransformNode) => boolean): TransformNode[] {
+        return this._getByTags(this.transformNodes, tagsQuery, filter);
     }
 }

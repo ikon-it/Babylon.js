@@ -12,7 +12,7 @@ import { CubeTexture } from "../Materials/Textures/cubeTexture";
 import { HDRCubeTexture } from "../Materials/Textures/hdrCubeTexture";
 import { EquiRectangularCubeTexture } from "../Materials/Textures/equiRectangularCubeTexture";
 import { Logger } from "../Misc/logger";
-import type { Animatable } from "../Animations/animatable";
+import type { Animatable } from "../Animations/animatable.core";
 import type { AnimationGroup } from "../Animations/animationGroup";
 import type { AssetContainer } from "../assetContainer";
 import { EngineStore } from "../Engines/engineStore";
@@ -21,7 +21,7 @@ import type { Nullable } from "../types";
 /**
  * Defines the list of states available for a task inside a AssetsManager
  */
-export enum AssetTaskState {
+export const enum AssetTaskState {
     /**
      * Initialization
      */
@@ -253,12 +253,12 @@ export class ContainerAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: ContainerAssetTask) => void;
+    public override onSuccess: (task: ContainerAssetTask) => void;
 
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: ContainerAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: ContainerAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new ContainerAssetTask
@@ -272,7 +272,7 @@ export class ContainerAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the list of mesh's names you want to load
          */
@@ -299,7 +299,7 @@ export class ContainerAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         SceneLoader.LoadAssetContainer(
             this.rootUrl,
             this.sceneFilename,
@@ -350,12 +350,12 @@ export class MeshAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: MeshAssetTask) => void;
+    public override onSuccess: (task: MeshAssetTask) => void;
 
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: MeshAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: MeshAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new MeshAssetTask
@@ -369,7 +369,7 @@ export class MeshAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the list of mesh's names you want to load
          */
@@ -396,7 +396,7 @@ export class MeshAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         SceneLoader.ImportMesh(
             this.meshesNames,
             this.rootUrl,
@@ -435,12 +435,12 @@ export class AnimationAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: AnimationAssetTask) => void;
+    public override onSuccess: (task: AnimationAssetTask) => void;
 
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: AnimationAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: AnimationAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new AnimationAssetTask
@@ -454,7 +454,7 @@ export class AnimationAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the root url to use as a base to load your meshes and associated resources
          */
@@ -481,12 +481,11 @@ export class AnimationAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         const startingIndexForNewAnimatables = scene.animatables.length;
         const startingIndexForNewAnimationGroups = scene.animationGroups.length;
         this.loadedAnimatables = [];
         this.loadedAnimationGroups = [];
-
         SceneLoader.ImportAnimations(
             this.rootUrl,
             this.filename,
@@ -521,12 +520,12 @@ export class TextFileAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: TextFileAssetTask) => void;
+    public override onSuccess: (task: TextFileAssetTask) => void;
 
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: TextFileAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: TextFileAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new TextFileAssetTask object
@@ -537,7 +536,7 @@ export class TextFileAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the file to load
          */
@@ -552,7 +551,7 @@ export class TextFileAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         scene._loadFile(
             this.url,
             (data) => {
@@ -583,11 +582,11 @@ export class BinaryFileAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: BinaryFileAssetTask) => void;
+    public override onSuccess: (task: BinaryFileAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: BinaryFileAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: BinaryFileAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new BinaryFileAssetTask object
@@ -598,7 +597,7 @@ export class BinaryFileAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the file to load
          */
@@ -613,7 +612,7 @@ export class BinaryFileAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         scene._loadFile(
             this.url,
             (data) => {
@@ -644,11 +643,11 @@ export class ImageAssetTask extends AbstractAssetTask {
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: ImageAssetTask) => void;
+    public override onSuccess: (task: ImageAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: ImageAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: ImageAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new ImageAssetTask
@@ -659,7 +658,7 @@ export class ImageAssetTask extends AbstractAssetTask {
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the image to load
          */
@@ -674,7 +673,7 @@ export class ImageAssetTask extends AbstractAssetTask {
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         const img = new Image();
 
         Tools.SetCorsBehavior(this.url, img);
@@ -695,11 +694,11 @@ export class ImageAssetTask extends AbstractAssetTask {
 /**
  * Defines the interface used by texture loading tasks
  */
-export interface ITextureAssetTask<TEX extends BaseTexture> {
+export interface ITextureAssetTask<Tex extends BaseTexture> {
     /**
      * Gets the loaded texture
      */
-    texture: TEX;
+    texture: Tex;
 }
 
 /**
@@ -714,11 +713,11 @@ export class TextureAssetTask extends AbstractAssetTask implements ITextureAsset
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: TextureAssetTask) => void;
+    public override onSuccess: (task: TextureAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: TextureAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: TextureAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new TextureAssetTask object
@@ -732,7 +731,7 @@ export class TextureAssetTask extends AbstractAssetTask implements ITextureAsset
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the file to load
          */
@@ -742,11 +741,11 @@ export class TextureAssetTask extends AbstractAssetTask implements ITextureAsset
          */
         public noMipmap?: boolean,
         /**
-         * Defines if texture must be inverted on Y axis (default is true)
+         * [true] Defines if texture must be inverted on Y axis (default is true)
          */
         public invertY: boolean = true,
         /**
-         * Defines the sampling mode to use (default is Texture.TRILINEAR_SAMPLINGMODE)
+         * [3] Defines the sampling mode to use (default is Texture.TRILINEAR_SAMPLINGMODE)
          */
         public samplingMode: number = Texture.TRILINEAR_SAMPLINGMODE
     ) {
@@ -759,7 +758,7 @@ export class TextureAssetTask extends AbstractAssetTask implements ITextureAsset
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         const onload = () => {
             onSuccess();
         };
@@ -784,11 +783,11 @@ export class CubeTextureAssetTask extends AbstractAssetTask implements ITextureA
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: CubeTextureAssetTask) => void;
+    public override onSuccess: (task: CubeTextureAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: CubeTextureAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: CubeTextureAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new CubeTextureAssetTask
@@ -803,7 +802,7 @@ export class CubeTextureAssetTask extends AbstractAssetTask implements ITextureA
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the files to load (You have to specify the folder where the files are + filename with no extension)
          */
@@ -834,7 +833,7 @@ export class CubeTextureAssetTask extends AbstractAssetTask implements ITextureA
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         const onload = () => {
             onSuccess();
         };
@@ -859,11 +858,11 @@ export class HDRCubeTextureAssetTask extends AbstractAssetTask implements ITextu
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: HDRCubeTextureAssetTask) => void;
+    public override onSuccess: (task: HDRCubeTextureAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: HDRCubeTextureAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: HDRCubeTextureAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new HDRCubeTextureAssetTask object
@@ -879,7 +878,7 @@ export class HDRCubeTextureAssetTask extends AbstractAssetTask implements ITextu
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the file to load
          */
@@ -889,19 +888,19 @@ export class HDRCubeTextureAssetTask extends AbstractAssetTask implements ITextu
          */
         public size: number,
         /**
-         * Defines if mipmaps should not be generated (default is false)
+         * [false] Defines if mipmaps should not be generated (default is false)
          */
         public noMipmap = false,
         /**
-         * Specifies whether you want to extract the polynomial harmonics during the generation process (default is true)
+         * [true] Specifies whether you want to extract the polynomial harmonics during the generation process (default is true)
          */
         public generateHarmonics = true,
         /**
-         * Specifies if the texture will be use in gamma or linear space (the PBR material requires those texture in linear space, but the standard material would require them in Gamma space) (default is false)
+         * [false] Specifies if the texture will be use in gamma or linear space (the PBR material requires those texture in linear space, but the standard material would require them in Gamma space) (default is false)
          */
         public gammaSpace = false,
         /**
-         * Internal Use Only
+         * [false] Internal Use Only
          */
         public reserved = false
     ) {
@@ -914,7 +913,7 @@ export class HDRCubeTextureAssetTask extends AbstractAssetTask implements ITextu
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void) {
         const onload = () => {
             onSuccess();
         };
@@ -939,11 +938,11 @@ export class EquiRectangularCubeTextureAssetTask extends AbstractAssetTask imple
     /**
      * Callback called when the task is successful
      */
-    public onSuccess: (task: EquiRectangularCubeTextureAssetTask) => void;
+    public override onSuccess: (task: EquiRectangularCubeTextureAssetTask) => void;
     /**
      * Callback called when the task is successful
      */
-    public onError: (task: EquiRectangularCubeTextureAssetTask, message?: string, exception?: any) => void;
+    public override onError: (task: EquiRectangularCubeTextureAssetTask, message?: string, exception?: any) => void;
 
     /**
      * Creates a new EquiRectangularCubeTextureAssetTask object
@@ -960,7 +959,7 @@ export class EquiRectangularCubeTextureAssetTask extends AbstractAssetTask imple
         /**
          * Defines the name of the task
          */
-        public name: string,
+        public override name: string,
         /**
          * Defines the location of the file to load
          */
@@ -970,11 +969,11 @@ export class EquiRectangularCubeTextureAssetTask extends AbstractAssetTask imple
          */
         public size: number,
         /**
-         * Defines if mipmaps should not be generated (default is false)
+         * [false] Defines if mipmaps should not be generated (default is false)
          */
         public noMipmap: boolean = false,
         /**
-         * Specifies if the texture will be use in gamma or linear space (the PBR material requires those texture in linear space,
+         * [true] Specifies if the texture will be use in gamma or linear space (the PBR material requires those texture in linear space,
          * but the standard material would require them in Gamma space) (default is true)
          */
         public gammaSpace: boolean = true
@@ -988,7 +987,7 @@ export class EquiRectangularCubeTextureAssetTask extends AbstractAssetTask imple
      * @param onSuccess is a callback called when the task is successfully executed
      * @param onError is a callback called if an error occurs
      */
-    public runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void): void {
+    public override runTask(scene: Scene, onSuccess: () => void, onError: (message?: string, exception?: any) => void): void {
         const onload = () => {
             onSuccess();
         };
@@ -1371,14 +1370,15 @@ export class AssetsManager {
      * Start the loading process as an async operation
      * @returns a promise returning the list of failed tasks
      */
-    public loadAsync(): Promise<void> {
-        return new Promise((resolve, reject) => {
+    public async loadAsync(): Promise<void> {
+        return await new Promise((resolve, reject) => {
             if (this._isLoading) {
                 resolve();
                 return;
             }
             this.onTasksDoneObservable.addOnce((remainingTasks) => {
                 if (remainingTasks && remainingTasks.length) {
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject(remainingTasks);
                 } else {
                     resolve();

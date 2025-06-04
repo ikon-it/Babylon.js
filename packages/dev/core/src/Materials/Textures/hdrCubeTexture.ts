@@ -4,16 +4,16 @@ import { Matrix, Vector3 } from "../../Maths/math.vector";
 import { BaseTexture } from "../../Materials/Textures/baseTexture";
 import { Texture } from "../../Materials/Textures/texture";
 import { Constants } from "../../Engines/constants";
-import { HDRTools } from "../../Misc/HighDynamicRange/hdr";
+import { GetCubeMapTextureData } from "../../Misc/HighDynamicRange/hdr";
 import { CubeMapToSphericalPolynomialTools } from "../../Misc/HighDynamicRange/cubemapToSphericalPolynomial";
 import { RegisterClass } from "../../Misc/typeStore";
 import { Observable } from "../../Misc/observable";
 import { Tools } from "../../Misc/tools";
 import { ToGammaSpace } from "../../Maths/math.constants";
-import type { ThinEngine } from "../../Engines/thinEngine";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 import { HDRFiltering } from "../../Materials/Textures/Filtering/hdrFiltering";
+import { HDRIrradianceFiltering } from "../../Materials/Textures/Filtering/hdrIrradianceFiltering";
 import { ToHalfFloat } from "../../Misc/textureTools";
-import "../../Engines/Extensions/engine.rawTexture";
 import "../../Materials/Textures/baseTexture.polynomial";
 
 /**
@@ -28,6 +28,8 @@ export class HDRCubeTexture extends BaseTexture {
     private _generateHarmonics = true;
     private _noMipmap: boolean;
     private _prefilterOnLoad: boolean;
+    private _prefilterIrradianceOnLoad: boolean;
+    private _prefilterUsingCdf: boolean;
     private _textureMatrix: Matrix;
     private _size: number;
     private _supersample: boolean;
@@ -43,13 +45,13 @@ export class HDRCubeTexture extends BaseTexture {
     /**
      * Sets whether or not the texture is blocking during loading.
      */
-    public set isBlocking(value: boolean) {
+    public override set isBlocking(value: boolean) {
         this._isBlocking = value;
     }
     /**
      * Gets whether or not the texture is blocking during loading.
      */
-    public get isBlocking(): boolean {
+    public override get isBlocking(): boolean {
         return this._isBlocking;
     }
 
@@ -114,10 +116,12 @@ export class HDRCubeTexture extends BaseTexture {
      * @param onLoad on success callback function
      * @param onError on error callback function
      * @param supersample Defines if texture must be supersampled (default: false)
+     * @param prefilterIrradianceOnLoad Prefilters HDR texture to allow use of this texture for irradiance lighting.
+     * @param prefilterUsingCdf Defines if the prefiltering should be done using a CDF instead of the default approach.
      */
     constructor(
         url: string,
-        sceneOrEngine: Scene | ThinEngine,
+        sceneOrEngine: Scene | AbstractEngine,
         size: number,
         noMipmap = false,
         generateHarmonics = true,
@@ -125,7 +129,9 @@ export class HDRCubeTexture extends BaseTexture {
         prefilterOnLoad = false,
         onLoad: Nullable<() => void> = null,
         onError: Nullable<(message?: string, exception?: any) => void> = null,
-        supersample = false
+        supersample = false,
+        prefilterIrradianceOnLoad = false,
+        prefilterUsingCdf = false
     ) {
         super(sceneOrEngine);
 
@@ -140,6 +146,8 @@ export class HDRCubeTexture extends BaseTexture {
         this.isCube = true;
         this._textureMatrix = Matrix.Identity();
         this._prefilterOnLoad = prefilterOnLoad;
+        this._prefilterIrradianceOnLoad = prefilterIrradianceOnLoad;
+        this._prefilterUsingCdf = prefilterUsingCdf;
         this._onLoad = () => {
             this.onLoadObservable.notifyObservers(this);
             if (onLoad) {
@@ -152,7 +160,10 @@ export class HDRCubeTexture extends BaseTexture {
 
         this._noMipmap = noMipmap;
         this._size = size;
-        this._supersample = supersample;
+        // CDF is very sensitive to lost precision due to downsampling. This can result in
+        // noticeable brightness differences with different resolutions. Enabling supersampling
+        // mitigates this.
+        this._supersample = supersample || prefilterUsingCdf;
         this._generateHarmonics = generateHarmonics;
 
         this._texture = this._getFromCache(url, this._noMipmap, undefined, undefined, undefined, this.isCube);
@@ -176,7 +187,7 @@ export class HDRCubeTexture extends BaseTexture {
      * Get the current class name of the texture useful for serialization or dynamic coding.
      * @returns "HDRCubeTexture"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "HDRCubeTexture";
     }
 
@@ -199,7 +210,7 @@ export class HDRCubeTexture extends BaseTexture {
             this.lodGenerationScale = 0.8;
 
             // Extract the raw linear data.
-            const data = HDRTools.GetCubeMapTextureData(buffer, this._size, this._supersample);
+            const data = GetCubeMapTextureData(buffer, this._size, this._supersample);
 
             // Generate harmonics if needed.
             if (this._generateHarmonics) {
@@ -275,11 +286,33 @@ export class HDRCubeTexture extends BaseTexture {
             return results;
         };
 
-        if (engine._features.allowTexturePrefiltering && this._prefilterOnLoad) {
+        if (engine._features.allowTexturePrefiltering && (this._prefilterOnLoad || this._prefilterIrradianceOnLoad)) {
             const previousOnLoad = this._onLoad;
             const hdrFiltering = new HDRFiltering(engine);
             this._onLoad = () => {
-                hdrFiltering.prefilter(this, previousOnLoad);
+                let irradiancePromise: Promise<Nullable<BaseTexture>> = Promise.resolve(null);
+                let radiancePromise: Promise<void> = Promise.resolve();
+                if (this._prefilterIrradianceOnLoad) {
+                    const hdrIrradianceFiltering = new HDRIrradianceFiltering(engine, { useCdf: this._prefilterUsingCdf });
+                    irradiancePromise = hdrIrradianceFiltering.prefilter(this);
+                }
+                if (this._prefilterOnLoad) {
+                    radiancePromise = hdrFiltering.prefilter(this);
+                }
+                // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
+                Promise.all([irradiancePromise, radiancePromise]).then((results) => {
+                    const irradianceTexture = results[0];
+                    if (this._prefilterIrradianceOnLoad && irradianceTexture) {
+                        this.irradianceTexture = irradianceTexture;
+                        const scene = this.getScene();
+                        if (scene) {
+                            scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag);
+                        }
+                    }
+                    if (previousOnLoad) {
+                        previousOnLoad();
+                    }
+                });
             };
         }
 
@@ -297,7 +330,7 @@ export class HDRCubeTexture extends BaseTexture {
         );
     }
 
-    public clone(): HDRCubeTexture {
+    public override clone(): HDRCubeTexture {
         const newTexture = new HDRCubeTexture(this.url, this.getScene() || this._getEngine()!, this._size, this._noMipmap, this._generateHarmonics, this.gammaSpace);
 
         // Base texture
@@ -311,7 +344,7 @@ export class HDRCubeTexture extends BaseTexture {
     }
 
     // Methods
-    public delayLoad(): void {
+    public override delayLoad(): void {
         if (this.delayLoadState !== Constants.DELAYLOADSTATE_NOTLOADED) {
             return;
         }
@@ -328,7 +361,7 @@ export class HDRCubeTexture extends BaseTexture {
      * Get the texture reflection matrix used to rotate/transform the reflection.
      * @returns the reflection matrix
      */
-    public getReflectionTextureMatrix(): Matrix {
+    public override getReflectionTextureMatrix(): Matrix {
         return this._textureMatrix;
     }
 
@@ -351,7 +384,7 @@ export class HDRCubeTexture extends BaseTexture {
     /**
      * Dispose the texture and release its associated resources.
      */
-    public dispose(): void {
+    public override dispose(): void {
         this.onLoadObservable.clear();
         super.dispose();
     }
@@ -394,7 +427,7 @@ export class HDRCubeTexture extends BaseTexture {
         return texture;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         if (!this.name) {
             return null;
         }

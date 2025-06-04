@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { SerializationHelper, serialize } from "core/Misc/decorators";
+import { serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Vector2, Vector3, Vector4 } from "core/Maths/math.vector";
 import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Texture } from "core/Materials/Textures/texture";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import type { IEffectCreationOptions } from "core/Materials/effect";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -22,6 +22,8 @@ import { Constants } from "core/Engines/constants";
 
 import "./shaders/mrdlSliderBar.fragment";
 import "./shaders/mrdlSliderBar.vertex";
+import { HandleFallbacksForShadows, PrepareAttributesForInstances, PrepareDefinesForAttributes, PrepareUniformsAndSamplersList } from "core/Materials/materialHelper.functions";
+import { Tools } from "core/Misc/tools";
 
 /** @internal */
 class MRDLSliderBarMaterialDefines extends MaterialDefines {
@@ -47,7 +49,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
     /**
      * URL pointing to the texture used to define the coloring for the Iridescent Map effect.
      */
-    public static BLUE_GRADIENT_TEXTURE_URL = "https://assets.babylonjs.com/meshes/MRTK/MRDL/mrtk-mrdl-blue-gradient.png";
+    public static BLUE_GRADIENT_TEXTURE_URL = "https://assets.babylonjs.com/core/MRTK/MRDL/mrtk-mrdl-blue-gradient.png";
     private _blueGradientTexture: Texture;
     private _decalTexture: Texture;
     private _reflectionMapTexture: Texture;
@@ -486,26 +488,27 @@ export class MRDLSliderBarMaterial extends PushMaterial {
         super(name, scene);
         this.alphaMode = Constants.ALPHA_DISABLE;
         this.backFaceCulling = false;
-        this._blueGradientTexture = new Texture(MRDLSliderBarMaterial.BLUE_GRADIENT_TEXTURE_URL, this.getScene(), true, false, Texture.NEAREST_SAMPLINGMODE);
+        const textureUrl = Tools.GetAssetUrl(MRDLSliderBarMaterial.BLUE_GRADIENT_TEXTURE_URL);
+        this._blueGradientTexture = new Texture(textureUrl, this.getScene(), true, false, Texture.NEAREST_SAMPLINGMODE);
         this._decalTexture = new Texture("", this.getScene());
         this._reflectionMapTexture = new Texture("", this.getScene());
         this._indirectEnvTexture = new Texture("", this.getScene());
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return false;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
     // Methods
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -528,7 +531,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
         const engine = scene.getEngine();
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, false, false);
+        PrepareDefinesForAttributes(mesh, defines, false, false);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -542,7 +545,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks);
+            HandleFallbacksForShadows(defines, fallbacks);
 
             defines.IMAGEPROCESSINGPOSTPROCESS = scene.imageProcessingConfiguration.applyByPostProcess;
 
@@ -569,7 +572,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.TangentKind);
             }
 
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForInstances(attribs, defines);
 
             // Legacy browser patch
             const shaderName = "mrdlSliderBar";
@@ -661,7 +664,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
             const samplers: string[] = ["_Rim_Texture_", "_Iridescence_Texture_"];
             const uniformBuffers: string[] = [];
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -699,7 +702,7 @@ export class MRDLSliderBarMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const defines = <MRDLSliderBarMaterialDefines>subMesh.materialDefines;
         if (!defines) {
             return;
@@ -851,11 +854,11 @@ export class MRDLSliderBarMaterial extends PushMaterial {
      * Get the list of animatables in the material.
      * @returns the list of animatables object used in the material
      */
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         return [];
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         super.dispose(forceDisposeEffect);
         this._reflectionMapTexture.dispose();
         this._indirectEnvTexture.dispose();
@@ -863,22 +866,22 @@ export class MRDLSliderBarMaterial extends PushMaterial {
         this._decalTexture.dispose();
     }
 
-    public clone(name: string): MRDLSliderBarMaterial {
+    public override clone(name: string): MRDLSliderBarMaterial {
         return SerializationHelper.Clone(() => new MRDLSliderBarMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.MRDLSliderBarMaterial";
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "MRDLSliderBarMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): MRDLSliderBarMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): MRDLSliderBarMaterial {
         return SerializationHelper.Parse(() => new MRDLSliderBarMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

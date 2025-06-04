@@ -1,10 +1,11 @@
-import { serialize, SerializationHelper, serializeAsColor3, expandToProperty, serializeAsTexture } from "../../Misc/decorators";
+import { serialize, serializeAsColor3, expandToProperty, serializeAsTexture } from "../../Misc/decorators";
 import type { Scene } from "../../scene";
 import type { Color3 } from "../../Maths/math.color";
 import type { BaseTexture } from "../../Materials/Textures/baseTexture";
 import { PBRBaseSimpleMaterial } from "./pbrBaseSimpleMaterial";
 import { RegisterClass } from "../../Misc/typeStore";
 import type { Nullable } from "../../types";
+import { SerializationHelper } from "../../Misc/decorators.serialization";
 
 /**
  * The PBR material of BJS following the specular glossiness convention.
@@ -70,7 +71,7 @@ export class PBRSpecularGlossinessMaterial extends PBRBaseSimpleMaterial {
     /**
      * @returns the current class name of the material.
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "PBRSpecularGlossinessMaterial";
     }
 
@@ -79,7 +80,7 @@ export class PBRSpecularGlossinessMaterial extends PBRBaseSimpleMaterial {
      * @param name - name to use for the new material.
      * @returns cloned material instance
      */
-    public clone(name: string): PBRSpecularGlossinessMaterial {
+    public override clone(name: string): PBRSpecularGlossinessMaterial {
         const clone = SerializationHelper.Clone(() => new PBRSpecularGlossinessMaterial(name, this.getScene()), this);
 
         clone.id = name;
@@ -98,16 +99,28 @@ export class PBRSpecularGlossinessMaterial extends PBRBaseSimpleMaterial {
      * Serialize the material to a parsable JSON object.
      * @returns the JSON object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = SerializationHelper.Serialize(this);
         serializationObject.customType = "BABYLON.PBRSpecularGlossinessMaterial";
 
-        serializationObject.clearCoat = this.clearCoat.serialize();
-        serializationObject.anisotropy = this.anisotropy.serialize();
-        serializationObject.brdf = this.brdf.serialize();
-        serializationObject.sheen = this.sheen.serialize();
-        serializationObject.subSurface = this.subSurface.serialize();
-        serializationObject.iridescence = this.iridescence.serialize();
+        if (!this.clearCoat.doNotSerialize) {
+            serializationObject.clearCoat = this.clearCoat.serialize();
+        }
+        if (!this.anisotropy.doNotSerialize) {
+            serializationObject.anisotropy = this.anisotropy.serialize();
+        }
+        if (!this.brdf.doNotSerialize) {
+            serializationObject.brdf = this.brdf.serialize();
+        }
+        if (!this.sheen.doNotSerialize) {
+            serializationObject.sheen = this.sheen.serialize();
+        }
+        if (!this.subSurface.doNotSerialize) {
+            serializationObject.subSurface = this.subSurface.serialize();
+        }
+        if (!this.iridescence.doNotSerialize) {
+            serializationObject.iridescence = this.iridescence.serialize();
+        }
 
         return serializationObject;
     }
@@ -119,7 +132,7 @@ export class PBRSpecularGlossinessMaterial extends PBRBaseSimpleMaterial {
      * @param rootUrl - root url of the assets.
      * @returns a new PBRSpecularGlossinessMaterial.
      */
-    public static Parse(source: any, scene: Scene, rootUrl: string): PBRSpecularGlossinessMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): PBRSpecularGlossinessMaterial {
         const material = SerializationHelper.Parse(() => new PBRSpecularGlossinessMaterial(source.name, scene), source, scene, rootUrl);
         if (source.clearCoat) {
             material.clearCoat.parse(source.clearCoat, scene, rootUrl);

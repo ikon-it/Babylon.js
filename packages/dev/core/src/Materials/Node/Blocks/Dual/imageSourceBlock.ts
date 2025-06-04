@@ -13,6 +13,7 @@ import { NodeMaterial } from "../../nodeMaterial";
 import type { Scene } from "../../../../scene";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
 import { EngineStore } from "../../../../Engines/engineStore";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 /**
  * Block used to provide an image for a TextureBlock
  */
@@ -68,9 +69,11 @@ export class ImageSourceBlock extends NodeMaterialBlock {
             NodeMaterialBlockTargets.VertexAndFragment,
             new NodeMaterialConnectionPointCustomObject("source", this, NodeMaterialConnectionPointDirection.Output, ImageSourceBlock, "ImageSourceBlock")
         );
+
+        this.registerOutput("dimensions", NodeMaterialBlockConnectionPointTypes.Vector2);
     }
 
-    public bind(effect: Effect) {
+    public override bind(effect: Effect) {
         if (!this.texture) {
             return;
         }
@@ -78,7 +81,7 @@ export class ImageSourceBlock extends NodeMaterialBlock {
         effect.setTexture(this._samplerName, this.texture);
     }
 
-    public isReady() {
+    public override isReady() {
         if (this.texture && !this.texture.isReadyOrNotBlocking()) {
             return false;
         }
@@ -90,7 +93,7 @@ export class ImageSourceBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "ImageSourceBlock";
     }
 
@@ -101,11 +104,18 @@ export class ImageSourceBlock extends NodeMaterialBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    /**
+     * Gets the dimension component
+     */
+    public get dimensions(): NodeMaterialConnectionPoint {
+        return this._outputs[1];
+    }
+
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         if (state.target === NodeMaterialBlockTargets.Vertex) {
-            this._samplerName = state._getFreeVariableName(this.name + "Sampler");
+            this._samplerName = state._getFreeVariableName(this.name + "Texture");
 
             // Declarations
             state.sharedData.blockingBlocks.push(this);
@@ -113,12 +123,23 @@ export class ImageSourceBlock extends NodeMaterialBlock {
             state.sharedData.bindableBlocks.push(this);
         }
 
+        if (this.dimensions.isConnected) {
+            let affect: string = "";
+            if (state.shaderLanguage === ShaderLanguage.WGSL) {
+                affect = `vec2f(textureDimensions(${this._samplerName}, 0).xy)`;
+            } else {
+                affect = `vec2(textureSize(${this._samplerName}, 0).xy)`;
+            }
+
+            state.compilationString += `${state._declareOutput(this.dimensions)} = ${affect};\n`;
+        }
+
         state._emit2DSampler(this._samplerName);
 
         return this;
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         let codeString = super._dumpPropertiesCode();
 
         if (!this.texture) {
@@ -140,7 +161,7 @@ export class ImageSourceBlock extends NodeMaterialBlock {
         return codeString;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         if (this.texture && !this.texture.isRenderTarget && this.texture.getClassName() !== "VideoTexture") {
@@ -150,11 +171,16 @@ export class ImageSourceBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
-        super._deserialize(serializationObject, scene, rootUrl);
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string, urlRewriter?: (url: string) => string) {
+        super._deserialize(serializationObject, scene, rootUrl, urlRewriter);
 
         if (serializationObject.texture && !NodeMaterial.IgnoreTexturesAtLoadTime && serializationObject.texture.url !== undefined) {
-            rootUrl = serializationObject.texture.url.indexOf("data:") === 0 ? "" : rootUrl;
+            if (serializationObject.texture.url.indexOf("data:") === 0) {
+                rootUrl = "";
+            } else if (urlRewriter) {
+                serializationObject.texture.url = urlRewriter(serializationObject.texture.url);
+                serializationObject.texture.name = serializationObject.texture.url;
+            }
             this.texture = Texture.Parse(serializationObject.texture, scene, rootUrl) as Texture;
         }
     }

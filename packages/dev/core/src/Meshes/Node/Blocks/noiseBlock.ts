@@ -3,7 +3,7 @@ import type { NodeGeometryConnectionPoint } from "../nodeGeometryBlockConnection
 import { RegisterClass } from "../../../Misc/typeStore";
 import { NodeGeometryBlockConnectionPointTypes } from "../Enums/nodeGeometryConnectionPointTypes";
 import { Vector3 } from "../../../Maths/math.vector";
-import { Scalar } from "../../../Maths/math.scalar";
+import { Clamp } from "../../../Maths/math.scalar.functions";
 import { NodeGeometryContextualSources } from "../Enums/nodeGeometryContextualSources";
 
 /**
@@ -30,7 +30,7 @@ export class NoiseBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "NoiseBlock";
     }
 
@@ -123,27 +123,27 @@ export class NoiseBlock extends NodeGeometryBlock {
     }
 
     private _perlinNoise(position: Vector3) {
-        const X = (position.x | 0) - (position.x < 0 ? 1 : 0);
-        const Y = (position.y | 0) - (position.y < 0 ? 1 : 0);
-        const Z = (position.z | 0) - (position.z < 0 ? 1 : 0);
+        const x = (position.x | 0) - (position.x < 0 ? 1 : 0);
+        const y = (position.y | 0) - (position.y < 0 ? 1 : 0);
+        const z = (position.z | 0) - (position.z < 0 ? 1 : 0);
 
-        const fx = position.x - X;
-        const fy = position.y - Y;
-        const fz = position.z - Z;
+        const fx = position.x - x;
+        const fy = position.y - y;
+        const fz = position.z - z;
 
         const u = this._fade(fx);
         const v = this._fade(fy);
         const w = this._fade(fz);
 
         return this._mix(
-            this._noiseGrad(this._hash(X, Y, Z), fx, fy, fz),
-            this._noiseGrad(this._hash(X + 1, Y, Z), fx - 1, fy, fz),
-            this._noiseGrad(this._hash(X, Y + 1, Z), fx, fy - 1, fz),
-            this._noiseGrad(this._hash(X + 1, Y + 1, Z), fx - 1, fy - 1, fz),
-            this._noiseGrad(this._hash(X, Y, Z + 1), fx, fy, fz - 1),
-            this._noiseGrad(this._hash(X + 1, Y, Z + 1), fx - 1, fy, fz - 1),
-            this._noiseGrad(this._hash(X, Y + 1, Z + 1), fx, fy - 1, fz - 1),
-            this._noiseGrad(this._hash(X + 1, Y + 1, Z + 1), fx - 1, fy - 1, fz - 1),
+            this._noiseGrad(this._hash(x, y, z), fx, fy, fz),
+            this._noiseGrad(this._hash(x + 1, y, z), fx - 1, fy, fz),
+            this._noiseGrad(this._hash(x, y + 1, z), fx, fy - 1, fz),
+            this._noiseGrad(this._hash(x + 1, y + 1, z), fx - 1, fy - 1, fz),
+            this._noiseGrad(this._hash(x, y, z + 1), fx, fy, fz - 1),
+            this._noiseGrad(this._hash(x + 1, y, z + 1), fx - 1, fy, fz - 1),
+            this._noiseGrad(this._hash(x, y + 1, z + 1), fx, fy - 1, fz - 1),
+            this._noiseGrad(this._hash(x + 1, y + 1, z + 1), fx - 1, fy - 1, fz - 1),
             u,
             v,
             w
@@ -175,14 +175,14 @@ export class NoiseBlock extends NodeGeometryBlock {
         let amp = 1.0;
         let maxamp = 0.0;
         let sum = 0.0;
-        octaves = Scalar.Clamp(octaves, 0, 15.0);
+        octaves = Clamp(octaves, 0, 15.0);
         const step = octaves | 0;
 
         for (let i = 0; i <= step; i++) {
             const t = this._perlin(position.scale(fscale));
             sum += t * amp;
             maxamp += amp;
-            amp *= Scalar.Clamp(roughness, 0.0, 1.0);
+            amp *= Clamp(roughness, 0.0, 1.0);
             fscale *= 2.0;
         }
 
@@ -198,7 +198,7 @@ export class NoiseBlock extends NodeGeometryBlock {
         return (1.0 - rmd) * sum + rmd * sum2;
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         this.output._storedFunction = (state) => {
             const position = state.getContextualValue(NodeGeometryContextualSources.Positions) as Vector3;
             const octaves = this.octaves.getConnectedValue(state);

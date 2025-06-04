@@ -15,7 +15,7 @@ export class GridBlock extends NodeGeometryBlock {
      * Gets or sets a boolean indicating that this block can evaluate context
      * Build performance is improved when this value is set to false as the system will cache values instead of reevaluating everything per context change
      */
-    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { rebuild: true } })
+    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
     public evaluateContext = false;
 
     /**
@@ -27,9 +27,9 @@ export class GridBlock extends NodeGeometryBlock {
 
         this.registerInput("width", NodeGeometryBlockConnectionPointTypes.Float, true, 1);
         this.registerInput("height", NodeGeometryBlockConnectionPointTypes.Float, true, 1);
-        this.registerInput("subdivisions", NodeGeometryBlockConnectionPointTypes.Int, true, 1);
-        this.registerInput("subdivisionsX", NodeGeometryBlockConnectionPointTypes.Int, true, 0);
-        this.registerInput("subdivisionsY", NodeGeometryBlockConnectionPointTypes.Int, true, 0);
+        this.registerInput("subdivisions", NodeGeometryBlockConnectionPointTypes.Int, true, 1, 0);
+        this.registerInput("subdivisionsX", NodeGeometryBlockConnectionPointTypes.Int, true, 0, 0);
+        this.registerInput("subdivisionsY", NodeGeometryBlockConnectionPointTypes.Int, true, 0, 0);
 
         this.registerOutput("geometry", NodeGeometryBlockConnectionPointTypes.Geometry);
     }
@@ -38,7 +38,7 @@ export class GridBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GridBlock";
     }
 
@@ -84,7 +84,7 @@ export class GridBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    public autoConfigure() {
+    public override autoConfigure() {
         if (!this.width.isConnected) {
             const widthInput = new GeometryInputBlock("Width");
             widthInput.value = 1;
@@ -98,7 +98,7 @@ export class GridBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         const options: { width?: number; height?: number; subdivisions?: number; subdivisionsX?: number; subdivisionsY?: number } = {};
         const func = (state: NodeGeometryBuildState) => {
             options.width = this.width.getConnectedValue(state);
@@ -122,7 +122,7 @@ export class GridBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.evaluateContext = ${this.evaluateContext ? "true" : "false"};\n`;
         return codeString;
     }
@@ -131,7 +131,7 @@ export class GridBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.evaluateContext = this.evaluateContext;
@@ -139,7 +139,7 @@ export class GridBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.evaluateContext = serializationObject.evaluateContext;

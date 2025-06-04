@@ -1,5 +1,5 @@
 import * as React from "react";
-import * as ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import { GlobalState } from "./globalState";
 import { RenderingZone } from "./components/renderingZone";
 import { ReflectorZone } from "./components/reflectorZone";
@@ -14,19 +14,34 @@ import { Color3, Color4 } from "core/Maths/math";
 
 import "./scss/main.scss";
 import fullScreenLogo from "./img/logo-fullscreen.svg";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
+import { ImageProcessingConfiguration } from "core/Materials/imageProcessingConfiguration";
 
 interface ISandboxProps {}
 
-export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: boolean; errorMessage: string }> {
+/**
+ * Sandbox component
+ */
+export class Sandbox extends React.Component<
+    ISandboxProps,
+    {
+        /**
+         * is the footer visible?
+         */
+        isFooterVisible: boolean;
+        /**
+         * error message
+         */
+        errorMessage: string;
+    }
+> {
     private _globalState: GlobalState;
-    private _assetUrl?: string;
-    private _autoRotate?: boolean;
-    private _cameraPosition?: Vector3;
     private _logoRef: React.RefObject<HTMLImageElement>;
     private _dropTextRef: React.RefObject<HTMLDivElement>;
     private _clickInterceptorRef: React.RefObject<HTMLDivElement>;
     private _clearColor?: string;
     private _camera?: number;
+    private _engine?: AbstractEngine;
 
     public constructor(props: ISandboxProps) {
         super(props);
@@ -71,13 +86,16 @@ export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: b
         });
 
         this._globalState.onError.add((error) => {
+            this._logoRef.current!.parentElement!.className = "hidden";
+            this._logoRef.current!.className = "hidden";
+
             if (error.scene) {
                 this._globalState.showDebugLayer();
             }
 
-            if (error.message) {
-                this.setState({ errorMessage: error.message });
-            }
+            this.setState({ errorMessage: error.message ? `${error.message} Check the developer console.` : "Unable to load scene. Check the developer console." });
+
+            this._engine && this._engine.hideLoadingUI();
 
             Sandbox._SceneLoadedDeferred.reject(new Error(error.message));
         });
@@ -99,7 +117,29 @@ export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: b
                 this.setState({ isFooterVisible: !this.state.isFooterVisible });
             }
         });
+
+        //
+
+        window.onerror = (error: any) => {
+            this._globalState.onError.notifyObservers({ message: `${error}` });
+            return true;
+        };
+
+        window.onunhandledrejection = (event) => {
+            // eslint-disable-next-line no-console
+            console.error("Unhandled promise rejection:", event.reason);
+
+            return true;
+        };
     }
+
+    /**
+     * Stores the engine
+     * @param engine the Engine
+     */
+    onEngineCreated = (engine: AbstractEngine) => {
+        this._engine = engine;
+    };
 
     checkUrl() {
         const set3DCommerceMode = () => {
@@ -123,36 +163,69 @@ export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: b
         if (indexOf !== -1) {
             const params = location.href.substr(indexOf + 1).split("&");
             for (const param of params) {
-                const split = param.split("=", 2);
-                const name = split[0];
-                const value = split[1];
-                switch (name) {
-                    case "assetUrl": {
-                        this._assetUrl = value;
+                const [name, value] = param.split("=", 2);
+                switch (name.toLowerCase()) {
+                    case "3dcommerce": {
+                        set3DCommerceMode();
                         break;
                     }
-                    case "autoRotate": {
-                        this._autoRotate = value === "true" ? true : false;
+                    case "asset":
+                    case "asseturl": {
+                        this._globalState.assetUrl = value;
                         break;
                     }
-                    case "cameraPosition": {
-                        this._cameraPosition = Vector3.FromArray(
+                    case "autorotate": {
+                        this._globalState.autoRotate = value.toLowerCase() === "true" ? true : false;
+                        break;
+                    }
+                    case "camera": {
+                        this._camera = +value;
+                        break;
+                    }
+                    case "cameraposition": {
+                        this._globalState.cameraPosition = Vector3.FromArray(
                             value.split(",").map(function (component) {
                                 return +component;
                             })
                         );
                         break;
                     }
-                    case "kiosk": {
-                        this.state = { isFooterVisible: value === "true" ? false : true, errorMessage: "" };
+                    case "clearcolor": {
+                        this._clearColor = value;
                         break;
                     }
+                    case "environment": {
+                        EnvironmentTools.SkyboxPath = value;
+                        break;
+                    }
+                    case "kiosk": {
+                        this.state = { isFooterVisible: value.toLowerCase() === "true" ? false : true, errorMessage: "" };
+                        break;
+                    }
+                    case "skybox": {
+                        this._globalState.skybox = value.toLowerCase() === "true" ? true : false;
+                        break;
+                    }
+                    case "tonemapping": {
+                        switch (value.toLowerCase()) {
+                            case "standard":
+                                this._globalState.toneMapping = ImageProcessingConfiguration.TONEMAPPING_STANDARD;
+                                break;
+                            case "aces":
+                                this._globalState.toneMapping = ImageProcessingConfiguration.TONEMAPPING_ACES;
+                                break;
+                            case "khr_pbr_neutral":
+                                this._globalState.toneMapping = ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
+                                break;
+                        }
+                        break;
+                    }
+
+                    // --------------------------------------------
+                    // Reflector specific parameters (undocumented)
+                    // --------------------------------------------
                     case "reflector": {
                         setReflectorMode();
-                        break;
-                    }
-                    case "3dcommerce": {
-                        set3DCommerceMode();
                         break;
                     }
                     case "hostname": {
@@ -167,49 +240,22 @@ export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: b
                         }
                         break;
                     }
-                    case "environment": {
-                        EnvironmentTools.SkyboxPath = value;
-                        break;
-                    }
-                    case "skybox": {
-                        this._globalState.skybox = value === "true" ? true : false;
-                        break;
-                    }
-                    case "clearColor": {
-                        this._clearColor = value;
-                        break;
-                    }
-                    case "camera": {
-                        this._camera = +value;
-                        break;
-                    }
                 }
             }
         }
     }
 
-    componentDidUpdate() {
-        this._assetUrl = undefined;
-        this._cameraPosition = undefined;
-    }
-
-    public render() {
+    public override render() {
         return (
             <div id="root">
                 <span>
                     <p id="droptext" ref={this._dropTextRef}>
-                        {this._globalState.reflector ? "" : "Drag and drop gltf, glb, obj or babylon files to view them"}
+                        {this._globalState.reflector ? "" : "Drag and drop gltf, glb, obj, ply, splat, spz or babylon files to view them"}
                     </p>
                     {this._globalState.reflector ? (
                         <ReflectorZone globalState={this._globalState} expanded={!this.state.isFooterVisible} />
                     ) : (
-                        <RenderingZone
-                            globalState={this._globalState}
-                            assetUrl={this._assetUrl}
-                            autoRotate={this._autoRotate}
-                            cameraPosition={this._cameraPosition}
-                            expanded={!this.state.isFooterVisible}
-                        />
+                        <RenderingZone globalState={this._globalState} expanded={!this.state.isFooterVisible} onEngineCreated={this.onEngineCreated} />
                     )}
                 </span>
                 <div
@@ -241,12 +287,12 @@ export class Sandbox extends React.Component<ISandboxProps, { isFooterVisible: b
 
     public static Show(hostElement: HTMLElement): void {
         const sandbox = React.createElement(Sandbox, {});
-        ReactDOM.render(sandbox, hostElement);
+        const root = createRoot(hostElement);
+        root.render(sandbox);
     }
 
-    public static CaptureScreenshotAsync(size: IScreenshotSize | number, mimeType?: string): Promise<string> {
-        return this._SceneLoadedDeferred.promise.then((scene) => {
-            return CreateScreenshotAsync(scene.getEngine(), scene.activeCamera!, size, mimeType);
-        });
+    public static async CaptureScreenshotAsync(size: IScreenshotSize | number, mimeType?: string): Promise<string> {
+        const scene = await this._SceneLoadedDeferred.promise;
+        return await CreateScreenshotAsync(scene.getEngine(), scene.activeCamera!, size, mimeType);
     }
 }

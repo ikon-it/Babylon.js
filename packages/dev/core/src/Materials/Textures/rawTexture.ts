@@ -1,8 +1,7 @@
 import { Texture } from "./texture";
 import { Constants } from "../../Engines/constants";
-import "../../Engines/Extensions/engine.rawTexture";
 import type { Nullable } from "../../types";
-import type { ThinEngine } from "../../Engines/thinEngine";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 
 import type { Scene } from "../../scene";
 
@@ -12,6 +11,7 @@ import type { Scene } from "../../scene";
  * if you wish to create your texture pixel by pixel.
  */
 export class RawTexture extends Texture {
+    private _waitingForData: boolean;
     /**
      * Instantiates a new RawTexture.
      * Raw texture can help creating a texture directly from an array of data.
@@ -28,6 +28,7 @@ export class RawTexture extends Texture {
      * @param type define the format of the data (int, float... Engine.TEXTURETYPE_xxx)
      * @param creationFlags specific flags to use when creating the texture (Constants.TEXTURE_CREATIONFLAG_STORAGE for storage textures, for eg)
      * @param useSRGBBuffer defines if the texture must be loaded in a sRGB GPU buffer (if supported by the GPU).
+     * @param waitDataToBeReady If set to true Rawtexture will wait data to be set in order to be flaged as ready.
      */
     constructor(
         data: Nullable<ArrayBufferView>,
@@ -37,13 +38,14 @@ export class RawTexture extends Texture {
          * Define the format of the data (RGB, RGBA... Engine.TEXTUREFORMAT_xxx)
          */
         public format: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        type: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         creationFlags?: number,
-        useSRGBBuffer?: boolean
+        useSRGBBuffer?: boolean,
+        waitDataToBeReady?: boolean
     ) {
         super(null, sceneOrEngine, !generateMipMaps, invertY, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, creationFlags);
 
@@ -62,6 +64,7 @@ export class RawTexture extends Texture {
 
         this.wrapU = Texture.CLAMP_ADDRESSMODE;
         this.wrapV = Texture.CLAMP_ADDRESSMODE;
+        this._waitingForData = !!waitDataToBeReady && !data;
     }
 
     /**
@@ -70,6 +73,40 @@ export class RawTexture extends Texture {
      */
     public update(data: ArrayBufferView): void {
         this._getEngine()!.updateRawTexture(this._texture, data, this._texture!.format, this._texture!.invertY, null, this._texture!.type, this._texture!._useSRGBBuffer);
+        this._waitingForData = false;
+    }
+
+    /**
+     * Clones the texture.
+     * @returns the cloned texture
+     */
+    public override clone(): Texture {
+        if (!this._texture) {
+            return super.clone();
+        }
+
+        const rawTexture = new RawTexture(
+            null,
+            this.getSize().width,
+            this.getSize().height,
+            this.format,
+            this.getScene(),
+            this._texture.generateMipMaps,
+            this._invertY,
+            this.samplingMode,
+            this._texture.type,
+            this._texture._creationFlags,
+            this._useSRGBBuffer
+        );
+
+        rawTexture._texture = this._texture;
+        this._texture.incrementReferences();
+
+        return rawTexture;
+    }
+
+    public override isReady(): boolean {
+        return super.isReady() && !this._waitingForData;
     }
 
     /**
@@ -87,7 +124,7 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE
@@ -110,7 +147,7 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE
@@ -133,7 +170,7 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE
@@ -159,11 +196,11 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        type: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         creationFlags: number = 0,
         useSRGBBuffer: boolean = false
     ): RawTexture {
@@ -182,21 +219,36 @@ export class RawTexture extends Texture {
      * @param type define the format of the data (int, float... Engine.TEXTURETYPE_xxx)
      * @param creationFlags specific flags to use when creating the texture (Constants.TEXTURE_CREATIONFLAG_STORAGE for storage textures, for eg)
      * @param useSRGBBuffer defines if the texture must be loaded in a sRGB GPU buffer (if supported by the GPU).
+     * @param waitDataToBeReady if set to true this will force texture to wait for data to be set before it is considered ready.
      * @returns the RGBA texture
      */
     public static CreateRGBATexture(
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        type: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         creationFlags: number = 0,
-        useSRGBBuffer: boolean = false
+        useSRGBBuffer: boolean = false,
+        waitDataToBeReady: boolean = false
     ): RawTexture {
-        return new RawTexture(data, width, height, Constants.TEXTUREFORMAT_RGBA, sceneOrEngine, generateMipMaps, invertY, samplingMode, type, creationFlags, useSRGBBuffer);
+        return new RawTexture(
+            data,
+            width,
+            height,
+            Constants.TEXTUREFORMAT_RGBA,
+            sceneOrEngine,
+            generateMipMaps,
+            invertY,
+            samplingMode,
+            type,
+            creationFlags,
+            useSRGBBuffer,
+            waitDataToBeReady
+        );
     }
 
     /**
@@ -216,11 +268,11 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        type: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         useSRGBBuffer: boolean = false
     ): RawTexture {
         return new RawTexture(
@@ -254,7 +306,7 @@ export class RawTexture extends Texture {
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Texture.TRILINEAR_SAMPLINGMODE,
@@ -275,11 +327,12 @@ export class RawTexture extends Texture {
      * @param type define the format of the data (int, float... Engine.TEXTURETYPE_xxx)
      * @returns the R texture
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public static CreateRStorageTexture(
         data: Nullable<ArrayBufferView>,
         width: number,
         height: number,
-        sceneOrEngine: Nullable<Scene | ThinEngine>,
+        sceneOrEngine: Nullable<Scene | AbstractEngine>,
         generateMipMaps: boolean = true,
         invertY: boolean = false,
         samplingMode: number = Texture.TRILINEAR_SAMPLINGMODE,

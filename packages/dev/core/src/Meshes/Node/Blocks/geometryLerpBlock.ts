@@ -16,7 +16,7 @@ export class GeometryLerpBlock extends NodeGeometryBlock {
 
         this.registerInput("left", NodeGeometryBlockConnectionPointTypes.AutoDetect);
         this.registerInput("right", NodeGeometryBlockConnectionPointTypes.AutoDetect);
-        this.registerInput("gradient", NodeGeometryBlockConnectionPointTypes.Float);
+        this.registerInput("gradient", NodeGeometryBlockConnectionPointTypes.Float, true, 0, 0, 1);
         this.registerOutput("output", NodeGeometryBlockConnectionPointTypes.BasedOnInput);
 
         this._outputs[0]._typeConnectionSource = this._inputs[0];
@@ -31,7 +31,7 @@ export class GeometryLerpBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryLerpBlock";
     }
 
@@ -63,8 +63,8 @@ export class GeometryLerpBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
-        if (!this.left.isConnected || !this.right.isConnected || !this.gradient.isConnected) {
+    protected override _buildBlock() {
+        if (!this.left.isConnected || !this.right.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
             return;
@@ -81,16 +81,16 @@ export class GeometryLerpBlock extends NodeGeometryBlock {
             switch (this.left.type) {
                 case NodeGeometryBlockConnectionPointTypes.Int:
                 case NodeGeometryBlockConnectionPointTypes.Float: {
-                    return func!(gradient, left, right);
+                    return func(gradient, left, right);
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector2: {
-                    return new Vector2(func!(gradient, left.x, right.x), func!(gradient, left.y, right.y));
+                    return new Vector2(func(gradient, left.x, right.x), func(gradient, left.y, right.y));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector3: {
-                    return new Vector3(func!(gradient, left.x, right.x), func!(gradient, left.y, right.y), func!(gradient, left.z, right.z));
+                    return new Vector3(func(gradient, left.x, right.x), func(gradient, left.y, right.y), func(gradient, left.z, right.z));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector4: {
-                    return new Vector4(func!(gradient, left.x, right.x), func!(gradient, left.y, right.y), func!(gradient, left.z, right.z), func!(gradient, left.w, right.w));
+                    return new Vector4(func(gradient, left.x, right.x), func(gradient, left.y, right.y), func(gradient, left.z, right.z), func(gradient, left.w, right.w));
                 }
             }
 

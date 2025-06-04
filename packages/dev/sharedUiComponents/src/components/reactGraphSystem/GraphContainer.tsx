@@ -1,5 +1,5 @@
-import type { FC } from "react";
-import style from "./GraphContainer.modules.scss";
+import type { FC, PropsWithChildren } from "react";
+import * as style from "./GraphContainer.module.scss";
 
 export interface IGraphContainerProps {}
 
@@ -9,6 +9,6 @@ export interface IGraphContainerProps {}
  * @param props
  * @returns
  */
-export const GraphContainer: FC<IGraphContainerProps> = (props) => {
+export const GraphContainer: FC<PropsWithChildren<IGraphContainerProps>> = (props) => {
     return <div className={style.container}>{props.children}</div>;
 };

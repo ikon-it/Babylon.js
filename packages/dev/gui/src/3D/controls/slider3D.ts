@@ -12,6 +12,7 @@ import { SceneLoader } from "core/Loading/sceneLoader";
 import { MRDLSliderBarMaterial } from "../materials/mrdl/mrdlSliderBarMaterial";
 import { MRDLSliderThumbMaterial } from "../materials/mrdl/mrdlSliderThumbMaterial";
 import { MRDLBackplateMaterial } from "../materials/mrdl/mrdlBackplateMaterial";
+import { Tools } from "core/Misc/tools";
 
 const SLIDER_MIN: number = 0;
 const SLIDER_MAX: number = 100;
@@ -27,7 +28,7 @@ export class Slider3D extends Control3D {
     /**
      * Base Url for the models.
      */
-    public static MODEL_BASE_URL: string = "https://assets.babylonjs.com/meshes/MRTK/";
+    public static MODEL_BASE_URL: string = "https://assets.babylonjs.com/core/MRTK/";
 
     /**
      * File name for the 8x4 model.
@@ -70,7 +71,7 @@ export class Slider3D extends Control3D {
     /**
      * Gets the mesh used to render this control
      */
-    public get mesh(): Nullable<AbstractMesh> {
+    public override get mesh(): Nullable<AbstractMesh> {
         if (this.node) {
             return this._sliderThumb;
         }
@@ -173,8 +174,29 @@ export class Slider3D extends Control3D {
         return this._sliderBackplateMaterial;
     }
 
+    /**
+     * Gets the slider bar mesh used by this control
+     */
+    public get sliderBar(): AbstractMesh {
+        return this._sliderBar;
+    }
+
+    /**
+     * Gets the slider thumb mesh used by this control
+     */
+    public get sliderThumb(): AbstractMesh {
+        return this._sliderThumb;
+    }
+
+    /**
+     * Gets the slider backplate mesh used by this control
+     */
+    public get sliderBackplate(): AbstractMesh {
+        return this._sliderBackplate;
+    }
+
     /** Sets a boolean indicating if the control is visible */
-    public set isVisible(value: boolean) {
+    public override set isVisible(value: boolean) {
         if (this._isVisible === value) {
             return;
         }
@@ -185,7 +207,7 @@ export class Slider3D extends Control3D {
     }
 
     // Mesh association
-    protected _createNode(scene: Scene): TransformNode {
+    protected override _createNode(scene: Scene): TransformNode {
         const sliderBackplate = CreateBox(
             `${this.name}_sliderbackplate`,
             {
@@ -198,12 +220,13 @@ export class Slider3D extends Control3D {
         sliderBackplate.isPickable = false;
         sliderBackplate.visibility = 0;
         sliderBackplate.scaling = new Vector3(1, 0.5, 0.8);
-
-        SceneLoader.ImportMeshAsync(undefined, Slider3D.MODEL_BASE_URL, Slider3D.MODEL_FILENAME, scene).then((result) => {
+        const baseUrl = Tools.GetAssetUrl(Slider3D.MODEL_BASE_URL);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
+        SceneLoader.ImportMeshAsync(undefined, baseUrl, Slider3D.MODEL_FILENAME, scene).then((result) => {
             // make all meshes not pickable. Required meshes' pickable state will be set later.
-            result.meshes.forEach((m) => {
+            for (const m of result.meshes) {
                 m.isPickable = false;
-            });
+            }
             const sliderBackplateModel = result.meshes[1];
             const sliderBarModel = result.meshes[1].clone(`${this.name}_sliderbar`, sliderBackplate);
             const sliderThumbModel = result.meshes[1].clone(`${this.name}_sliderthumb`, sliderBackplate);
@@ -245,16 +268,17 @@ export class Slider3D extends Control3D {
             }
 
             this._injectGUI3DReservedDataStore(sliderBackplate).control = this;
-            sliderBackplate.getChildMeshes().forEach((mesh) => {
+            const meshes = sliderBackplate.getChildMeshes();
+            for (const mesh of meshes) {
                 this._injectGUI3DReservedDataStore(mesh).control = this;
-            });
+            }
         });
 
         this._affectMaterial(sliderBackplate);
         return sliderBackplate;
     }
 
-    protected _affectMaterial(mesh: AbstractMesh) {
+    protected override _affectMaterial(mesh: AbstractMesh) {
         this._sliderBackplateMaterial = this._sliderBackplateMaterial ?? new MRDLBackplateMaterial(`${this.name}_sliderbackplate_material`, mesh.getScene());
         this._sliderBarMaterial = this._sliderBarMaterial ?? new MRDLSliderBarMaterial(`${this.name}_sliderbar_material`, mesh.getScene());
         this._sliderThumbMaterial = this._sliderThumbMaterial ?? new MRDLSliderThumbMaterial(`${this.name}_sliderthumb_material`, mesh.getScene());
@@ -291,7 +315,7 @@ export class Slider3D extends Control3D {
     /**
      * Releases all associated resources
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
         this._sliderBar?.dispose();
         this._sliderThumb?.dispose();

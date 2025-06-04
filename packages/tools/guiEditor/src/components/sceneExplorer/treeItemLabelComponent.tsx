@@ -33,7 +33,7 @@ export class TreeItemLabelComponent extends React.Component<ITreeItemLabelCompon
         this.props.setRenaming(false);
     }
 
-    render() {
+    override render() {
         // if editing, overwrite string with local value
         const label = this.props.renaming ? this.state.value : this.props.label || "No Name";
         return (
@@ -49,7 +49,9 @@ export class TreeItemLabelComponent extends React.Component<ITreeItemLabelCompon
                             this.setState({ value: ev.target.value });
                         }}
                         onKeyDown={(ev) => {
-                            if (ev.key === "Enter") this.onBlur();
+                            if (ev.key === "Enter") {
+                                this.onBlur();
+                            }
                         }}
                         className="titleText"
                     />

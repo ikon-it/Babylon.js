@@ -42,7 +42,7 @@ export class LoadManager {
 
     private _cleanHash() {
         const substr = location.hash[1] === "#" ? 2 : 1;
-        const splits = decodeURIComponent(location.hash.substr(substr)).split("#");
+        const splits = decodeURIComponent(location.hash.substring(substr)).split("#");
 
         if (splits.length > 2) {
             splits.splice(2, splits.length - 2);
@@ -141,6 +141,27 @@ export class LoadManager {
                             const decoder = new TextDecoder("utf8");
 
                             code = decoder.decode((DecodeBase64ToBinary || DecodeBase64ToBinaryReproduced)(encodedData));
+                        }
+
+                        // check the engine
+                        if (payload.engine && ["WebGL1", "WebGL2", "WebGPU"].includes(payload.engine)) {
+                            // check if an engine is forced in the URL
+                            const url = new URL(window.location.href);
+                            const engineInURL = url.searchParams.get("engine") || url.search.includes("webgpu");
+                            // get the current engine
+                            const currentEngine = Utilities.ReadStringFromStore("engineVersion", "WebGL2", true);
+                            if (!engineInURL && currentEngine !== payload.engine) {
+                                if (
+                                    window.confirm(
+                                        `The engine version in this playground (${payload.engine}) is different from the one you are currently using (${currentEngine}).
+Confirm to switch to ${payload.engine}, cancel to keep ${currentEngine}`
+                                    )
+                                ) {
+                                    // we need to change the engine
+                                    Utilities.StoreStringToStore("engineVersion", payload.engine, true);
+                                    window.location.reload();
+                                }
+                            }
                         }
 
                         this.globalState.onCodeLoaded.notifyObservers(code);

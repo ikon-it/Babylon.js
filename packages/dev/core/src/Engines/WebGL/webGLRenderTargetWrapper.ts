@@ -5,6 +5,8 @@ import { Constants } from "../constants";
 import type { Engine } from "../engine";
 import { RenderTargetWrapper } from "../renderTargetWrapper";
 import type { ThinEngine } from "../thinEngine";
+import type { WebGLHardwareTexture } from "./webGLHardwareTexture";
+import { HasStencilAspect } from "core/Materials/Textures/textureHelper.functions";
 
 /** @internal */
 export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
@@ -43,13 +45,37 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      */
     public _currentLOD = 0;
 
+    public override setDepthStencilTexture(texture: Nullable<InternalTexture>, disposeExisting = true) {
+        super.setDepthStencilTexture(texture, disposeExisting);
+
+        if (!texture) {
+            return;
+        }
+
+        const engine = this._engine as ThinEngine;
+        const gl = this._context as WebGL2RenderingContext;
+        const hardwareTexture = texture._hardwareTexture as Nullable<WebGLHardwareTexture>;
+
+        if (hardwareTexture && texture._autoMSAAManagement && this._MSAAFramebuffer) {
+            const currentFb = engine._currentFramebuffer;
+            engine._bindUnboundFramebuffer(this._MSAAFramebuffer);
+            gl.framebufferRenderbuffer(
+                gl.FRAMEBUFFER,
+                HasStencilAspect(texture.format) ? gl.DEPTH_STENCIL_ATTACHMENT : gl.DEPTH_ATTACHMENT,
+                gl.RENDERBUFFER,
+                hardwareTexture.getMSAARenderBuffer()
+            );
+            engine._bindUnboundFramebuffer(currentFb);
+        }
+    }
+
     constructor(isMulti: boolean, isCube: boolean, size: TextureSize, engine: ThinEngine, context: WebGLRenderingContext) {
         super(isMulti, isCube, size, engine);
 
         this._context = context;
     }
 
-    protected _cloneRenderTargetWrapper(): Nullable<RenderTargetWrapper> {
+    protected override _cloneRenderTargetWrapper(): Nullable<RenderTargetWrapper> {
         let rtw: Nullable<RenderTargetWrapper> = null;
 
         if (this._colorTextureArray && this._depthStencilTextureArray) {
@@ -62,7 +88,7 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
         return rtw;
     }
 
-    protected _swapRenderTargetWrapper(target: WebGLRenderTargetWrapper): void {
+    protected override _swapRenderTargetWrapper(target: WebGLRenderTargetWrapper): void {
         super._swapRenderTargetWrapper(target);
 
         target._framebuffer = this._framebuffer;
@@ -84,7 +110,7 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      * @param label defines the label to use for the texture (for debugging purpose only)
      * @returns the depth/stencil created texture
      */
-    public createDepthStencilTexture(
+    public override createDepthStencilTexture(
         comparisonFunction: number = 0,
         bilinearFiltering: boolean = true,
         generateStencil: boolean = false,
@@ -93,16 +119,17 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
         label?: string
     ): InternalTexture {
         if (this._depthStencilBuffer) {
+            const engine = this._engine as ThinEngine;
             // Dispose previous depth/stencil render buffers and clear the corresponding attachment.
             // Next time this framebuffer is bound, the new depth/stencil texture will be attached.
-            const currentFrameBuffer = this._engine._currentFramebuffer;
+            const currentFrameBuffer = engine._currentFramebuffer;
             const gl = this._context;
 
-            this._engine._bindUnboundFramebuffer(this._framebuffer);
+            engine._bindUnboundFramebuffer(this._framebuffer);
             gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, null);
             gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null);
             gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, null);
-            this._engine._bindUnboundFramebuffer(currentFrameBuffer);
+            engine._bindUnboundFramebuffer(currentFrameBuffer);
             gl.deleteRenderbuffer(this._depthStencilBuffer);
 
             this._depthStencilBuffer = null;
@@ -113,24 +140,24 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
 
     /**
      * Shares the depth buffer of this render target with another render target.
-     * @internal
      * @param renderTarget Destination renderTarget
      */
-    public _shareDepth(renderTarget: WebGLRenderTargetWrapper): void {
-        super._shareDepth(renderTarget);
+    public override shareDepth(renderTarget: WebGLRenderTargetWrapper): void {
+        super.shareDepth(renderTarget);
 
         const gl = this._context;
         const depthbuffer = this._depthStencilBuffer;
         const framebuffer = renderTarget._MSAAFramebuffer || renderTarget._framebuffer;
+        const engine = this._engine as ThinEngine;
 
         if (renderTarget._depthStencilBuffer && renderTarget._depthStencilBuffer !== depthbuffer) {
             gl.deleteRenderbuffer(renderTarget._depthStencilBuffer);
         }
         renderTarget._depthStencilBuffer = depthbuffer;
         const attachment = renderTarget._generateStencilBuffer ? gl.DEPTH_STENCIL_ATTACHMENT : gl.DEPTH_ATTACHMENT;
-        this._engine._bindUnboundFramebuffer(framebuffer);
+        engine._bindUnboundFramebuffer(framebuffer);
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, attachment, gl.RENDERBUFFER, depthbuffer);
-        this._engine._bindUnboundFramebuffer(null);
+        engine._bindUnboundFramebuffer(null);
     }
 
     /**
@@ -141,41 +168,49 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      * @param lodLevel defines the lod level to bind to the frame buffer
      */
     private _bindTextureRenderTarget(texture: InternalTexture, attachmentIndex: number = 0, faceIndexOrLayer?: number, lodLevel: number = 0) {
-        if (!texture._hardwareTexture) {
+        const hardwareTexture = texture._hardwareTexture as WebGLHardwareTexture;
+        if (!hardwareTexture) {
             return;
         }
 
         const framebuffer = this._framebuffer;
+        const engine = this._engine as ThinEngine;
+        const currentFb = engine._currentFramebuffer;
+        engine._bindUnboundFramebuffer(framebuffer);
 
-        const currentFB = this._engine._currentFramebuffer;
-        this._engine._bindUnboundFramebuffer(framebuffer);
-
-        if (this._engine.webGLVersion > 1) {
+        let attachment: any;
+        if (engine.webGLVersion > 1) {
             const gl = this._context as WebGL2RenderingContext;
 
-            const attachment = (<any>gl)["COLOR_ATTACHMENT" + attachmentIndex];
+            attachment = (<any>gl)["COLOR_ATTACHMENT" + attachmentIndex];
             if (texture.is2DArray || texture.is3D) {
                 faceIndexOrLayer = faceIndexOrLayer ?? this.layerIndices?.[attachmentIndex] ?? 0;
-                gl.framebufferTextureLayer(gl.FRAMEBUFFER, attachment, texture._hardwareTexture.underlyingResource, lodLevel, faceIndexOrLayer);
+                gl.framebufferTextureLayer(gl.FRAMEBUFFER, attachment, hardwareTexture.underlyingResource, lodLevel, faceIndexOrLayer);
             } else if (texture.isCube) {
                 // if face index is not specified, try to query it from faceIndices
                 // default is face 0
                 faceIndexOrLayer = faceIndexOrLayer ?? this.faceIndices?.[attachmentIndex] ?? 0;
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndexOrLayer, texture._hardwareTexture.underlyingResource, lodLevel);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndexOrLayer, hardwareTexture.underlyingResource, lodLevel);
             } else {
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, texture._hardwareTexture.underlyingResource, lodLevel);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, hardwareTexture.underlyingResource, lodLevel);
             }
         } else {
             // Default behavior (WebGL)
             const gl = this._context;
 
-            const attachment = (<any>gl)["COLOR_ATTACHMENT" + attachmentIndex + "_WEBGL"];
+            attachment = (<any>gl)["COLOR_ATTACHMENT" + attachmentIndex + "_WEBGL"];
             const target = faceIndexOrLayer !== undefined ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndexOrLayer : gl.TEXTURE_2D;
 
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, target, texture._hardwareTexture.underlyingResource, lodLevel);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, target, hardwareTexture.underlyingResource, lodLevel);
         }
 
-        this._engine._bindUnboundFramebuffer(currentFB);
+        if (texture._autoMSAAManagement && this._MSAAFramebuffer) {
+            const gl = this._context;
+            engine._bindUnboundFramebuffer(this._MSAAFramebuffer);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, attachment, gl.RENDERBUFFER, hardwareTexture.getMSAARenderBuffer());
+        }
+
+        engine._bindUnboundFramebuffer(currentFb);
     }
 
     /**
@@ -184,7 +219,7 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      * @param index the index in the textures array to set
      * @param disposePrevious If this function should dispose the previous texture
      */
-    public setTexture(texture: InternalTexture, index: number = 0, disposePrevious: boolean = true) {
+    public override setTexture(texture: InternalTexture, index: number = 0, disposePrevious: boolean = true) {
         super.setTexture(texture, index, disposePrevious);
         this._bindTextureRenderTarget(texture, index);
     }
@@ -194,7 +229,7 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      * @param layers The layer of the texture to be set (make negative to not modify)
      * @param faces The face of the texture to be set (make negative to not modify)
      */
-    public setLayerAndFaceIndices(layers: number[], faces: number[]) {
+    public override setLayerAndFaceIndices(layers: number[], faces: number[]) {
         super.setLayerAndFaceIndices(layers, faces);
 
         if (!this.textures || !this.layerIndices || !this.faceIndices) {
@@ -225,7 +260,7 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
      * @param layer The layer of the texture to be set
      * @param face The face of the texture to be set
      */
-    public setLayerAndFaceIndex(index: number = 0, layer?: number, face?: number): void {
+    public override setLayerAndFaceIndex(index: number = 0, layer?: number, face?: number): void {
         super.setLayerAndFaceIndex(index, layer, face);
 
         if (!this.textures || !this.layerIndices || !this.faceIndices) {
@@ -240,7 +275,18 @@ export class WebGLRenderTargetWrapper extends RenderTargetWrapper {
         }
     }
 
-    public dispose(disposeOnlyFramebuffers = this._disposeOnlyFramebuffers): void {
+    public override resolveMSAATextures(): void {
+        const engine = this._engine as ThinEngine;
+        const currentFramebuffer = engine._currentFramebuffer;
+
+        engine._bindUnboundFramebuffer(this._MSAAFramebuffer);
+
+        super.resolveMSAATextures();
+
+        engine._bindUnboundFramebuffer(currentFramebuffer);
+    }
+
+    public override dispose(disposeOnlyFramebuffers = this._disposeOnlyFramebuffers): void {
         const gl = this._context;
 
         if (!disposeOnlyFramebuffers) {

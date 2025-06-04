@@ -26,7 +26,7 @@ export class Grid extends Container {
      * Sets/Gets a boolean indicating that control content must be clipped
      * Please note that not clipping content may generate issues with adt.useInvalidateRectOptimization so it is recommended to turn this optimization off if you want to use unclipped children
      */
-    public set clipContent(value: boolean) {
+    public override set clipContent(value: boolean) {
         this._clipContent = value;
 
         // This value has to be replicated on all of the container cells
@@ -36,7 +36,7 @@ export class Grid extends Container {
     }
 
     @serialize()
-    public get clipContent(): boolean {
+    public override get clipContent(): boolean {
         return this._clipContent;
     }
 
@@ -44,7 +44,7 @@ export class Grid extends Container {
      * Sets/Gets a boolean indicating if the children are clipped to the current control bounds.
      * Please note that not clipping children may generate issues with adt.useInvalidateRectOptimization so it is recommended to turn this optimization off if you want to use unclipped children
      */
-    public set clipChildren(value: boolean) {
+    public override set clipChildren(value: boolean) {
         this._clipChildren = value;
 
         // This value has to be replicated on all of the container cells
@@ -53,7 +53,7 @@ export class Grid extends Container {
         }
     }
 
-    public get clipChildren(): boolean {
+    public override get clipChildren(): boolean {
         return this._clipChildren;
     }
 
@@ -72,7 +72,7 @@ export class Grid extends Container {
     }
 
     /** Gets the list of children */
-    public get children(): Control[] {
+    public override get children(): Control[] {
         return this._childControls;
     }
 
@@ -115,7 +115,7 @@ export class Grid extends Container {
      */
     public addRowDefinition(height: number, isPixel = false): Grid {
         this._rowDefinitions.push(new ValueAndUnit(height, isPixel ? ValueAndUnit.UNITMODE_PIXEL : ValueAndUnit.UNITMODE_PERCENTAGE));
-        this._rowDefinitionObservers.push(this._rowDefinitions[this.rowCount - 1].onChangedObservable.add(() => this._markAsDirty())!);
+        this._rowDefinitionObservers.push(this._rowDefinitions[this.rowCount - 1].onChangedObservable.add(() => this._markAsDirty()));
         this._markAsDirty();
 
         return this;
@@ -129,7 +129,7 @@ export class Grid extends Container {
      */
     public addColumnDefinition(width: number, isPixel = false): Grid {
         this._columnDefinitions.push(new ValueAndUnit(width, isPixel ? ValueAndUnit.UNITMODE_PIXEL : ValueAndUnit.UNITMODE_PERCENTAGE));
-        this._columnDefinitionObservers.push(this._columnDefinitions[this.columnCount - 1].onChangedObservable.add(() => this._markAsDirty())!);
+        this._columnDefinitionObservers.push(this._columnDefinitions[this.columnCount - 1].onChangedObservable.add(() => this._markAsDirty()));
         this._markAsDirty();
 
         return this;
@@ -321,7 +321,7 @@ export class Grid extends Container {
      * @param column defines the column where to add the control (0 by default)
      * @returns the current grid
      */
-    public addControl(control: Control, row: number = 0, column: number = 0): Grid {
+    public override addControl(control: Control, row: number = 0, column: number = 0): Grid {
         if (this._rowDefinitions.length === 0) {
             // Add default row definition
             this.addRowDefinition(1, false);
@@ -367,7 +367,7 @@ export class Grid extends Container {
      * @param control defines the control to remove
      * @returns the current container
      */
-    public removeControl(control: Control): Container {
+    public override removeControl(control: Control): Container {
         const index = this._childControls.indexOf(control);
 
         if (index !== -1) {
@@ -389,11 +389,11 @@ export class Grid extends Container {
      * Creates a new Grid
      * @param name defines control name
      */
-    constructor(public name?: string) {
+    constructor(public override name?: string) {
         super(name);
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "Grid";
     }
 
@@ -466,7 +466,7 @@ export class Grid extends Container {
         definitionCallback(lefts, tops, widths, heights);
     }
 
-    protected _additionalProcessing(parentMeasure: Measure, context: ICanvasRenderingContext): void {
+    protected override _additionalProcessing(parentMeasure: Measure, context: ICanvasRenderingContext): void {
         this._getGridDefinitions((lefts: number[], tops: number[], widths: number[], heights: number[]) => {
             // Setting child sizes
             for (const key in this._cells) {
@@ -492,7 +492,7 @@ export class Grid extends Container {
         super._additionalProcessing(parentMeasure, context);
     }
 
-    public _flagDescendantsAsMatrixDirty(): void {
+    public override _flagDescendantsAsMatrixDirty(): void {
         for (const key in this._cells) {
             if (!Object.prototype.hasOwnProperty.call(this._cells, key)) {
                 continue;
@@ -503,7 +503,7 @@ export class Grid extends Container {
         }
     }
 
-    public _renderHighlightSpecific(context: ICanvasRenderingContext): void {
+    public override _renderHighlightSpecific(context: ICanvasRenderingContext): void {
         super._renderHighlightSpecific(context);
 
         this._getGridDefinitions((lefts: number[], tops: number[], widths: number[], heights: number[]) => {
@@ -530,7 +530,7 @@ export class Grid extends Container {
     }
 
     /** Releases associated resources */
-    public dispose() {
+    public override dispose() {
         super.dispose();
 
         for (const control of this._childControls) {
@@ -554,9 +554,10 @@ export class Grid extends Container {
      * Serializes the current control
      * @param serializationObject defined the JSON serialized object
      * @param force force serialization even if isSerializable === false
+     * @param allowCanvas defines if the control is allowed to use a Canvas2D object to serialize
      */
-    public serialize(serializationObject: any, force: boolean) {
-        super.serialize(serializationObject, force);
+    public override serialize(serializationObject: any, force: boolean, allowCanvas: boolean) {
+        super.serialize(serializationObject, force, allowCanvas);
         if (!this.isSerializable && !force) {
             return;
         }
@@ -575,20 +576,20 @@ export class Grid extends Container {
             const childSerializationObject = { value: rd?.getValue(this.host), unit: rd?.unit };
             serializationObject.rows.push(childSerializationObject);
         }
-        this.children.forEach((child) => {
+        for (const child of this.children) {
             serializationObject.tags.push(child._tag);
-        });
+        }
     }
 
     /**
      * @internal
      */
-    public _parseFromContent(serializedObject: any, host: AdvancedDynamicTexture) {
+    public override _parseFromContent(serializedObject: any, host: AdvancedDynamicTexture) {
         super._parseFromContent(serializedObject, host);
         const children: Control[] = [];
-        this.children.forEach((child) => {
+        for (const child of this.children) {
             children.push(child);
-        });
+        }
         this.removeRowDefinition(0);
         this.removeColumnDefinition(0);
         for (let i = 0; i < serializedObject.columnCount; ++i) {

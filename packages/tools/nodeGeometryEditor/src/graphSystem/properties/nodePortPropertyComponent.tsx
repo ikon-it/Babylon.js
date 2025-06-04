@@ -1,10 +1,13 @@
 import * as React from "react";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { CheckBoxLineComponent } from "../../sharedComponents/checkBoxLineComponent";
 import type { StateManager } from "shared-ui-components/nodeGraphSystem/stateManager";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
 import type { NodePort } from "shared-ui-components/nodeGraphSystem/nodePort";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
+import { NodeGeometryBlockConnectionPointTypes } from "core/Meshes";
+import type { NodeGeometryConnectionPoint } from "core/Meshes";
+import { GetListOfAcceptedTypes } from "shared-ui-components/nodeGraphSystem/tools";
 
 export interface IFrameNodePortPropertyTabComponentProps {
     stateManager: StateManager;
@@ -21,12 +24,23 @@ export class NodePortPropertyTabComponent extends React.Component<IFrameNodePort
         this.props.stateManager.onExposePortOnFrameObservable.notifyObservers(this.props.nodePort.node);
     }
 
-    render() {
+    override render() {
+        const port = this.props.nodePort.portData.data as NodeGeometryConnectionPoint;
+        const acceptedConnectionPointTypes = GetListOfAcceptedTypes(
+            NodeGeometryBlockConnectionPointTypes,
+            NodeGeometryBlockConnectionPointTypes.All,
+            NodeGeometryBlockConnectionPointTypes.AutoDetect,
+            port,
+            [NodeGeometryBlockConnectionPointTypes.BasedOnInput]
+        );
+
         const info = this.props.nodePort.hasLabel() ? (
             <>
                 {this.props.nodePort.hasLabel() && (
                     <TextInputLineComponent lockObject={this.props.stateManager.lockObject} label="Port Label" propertyName="portName" target={this.props.nodePort} />
                 )}
+                <TextLineComponent label="Type" value={NodeGeometryBlockConnectionPointTypes[port.type]} />
+                {acceptedConnectionPointTypes.length > 0 && acceptedConnectionPointTypes.map((t, i) => <TextLineComponent label={i === 0 ? "Accepted Types" : ""} value={t} />)}
                 {this.props.nodePort.node.enclosingFrameId !== -1 && (
                     <CheckBoxLineComponent
                         label="Expose Port on Frame"

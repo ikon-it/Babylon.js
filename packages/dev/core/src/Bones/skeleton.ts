@@ -5,7 +5,7 @@ import type { Scene } from "../scene";
 import type { Nullable } from "../types";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import { RawTexture } from "../Materials/Textures/rawTexture";
-import type { Animatable } from "../Animations/animatable";
+import type { Animatable } from "../Animations/animatable.core";
 import type { AnimationPropertiesOverride } from "../Animations/animationPropertiesOverride";
 import { Animation } from "../Animations/animation";
 import { AnimationRange } from "../Animations/animationRange";
@@ -15,7 +15,7 @@ import { Logger } from "../Misc/logger";
 import { DeepCopier } from "../Misc/deepCopier";
 import type { IInspectable } from "../Misc/iInspectable";
 import type { IAnimatable } from "../Animations/animatable.interface";
-import type { AbstractScene } from "../abstractScene";
+import type { IAssetContainer } from "core/IAssetContainer";
 
 /**
  * Class used to handle skinning animations
@@ -64,7 +64,7 @@ export class Skeleton implements IAnimatable {
     public _hasWaitingData: Nullable<boolean> = null;
 
     /** @internal */
-    public _parentContainer: Nullable<AbstractScene> = null;
+    public _parentContainer: Nullable<IAssetContainer> = null;
 
     /**
      * Specifies if the skeleton should be serialized
@@ -177,8 +177,11 @@ export class Skeleton implements IAnimatable {
      * @param mesh defines the mesh to use to get the root matrix (if needInitialSkinMatrix === true)
      * @returns a Float32Array containing matrices data
      */
-    public getTransformMatrices(mesh: AbstractMesh): Float32Array {
+    public getTransformMatrices(mesh: Nullable<AbstractMesh>): Float32Array {
         if (this.needInitialSkinMatrix) {
+            if (!mesh) {
+                throw new Error("getTransformMatrices: When using the needInitialSkinMatrix flag, a mesh must be provided");
+            }
             if (!mesh._bonesTransformMatrices) {
                 this.prepare(true);
             }
@@ -690,12 +693,12 @@ export class Skeleton implements IAnimatable {
      * @see https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations#animation-blending
      */
     public enableBlending(blendingSpeed = 0.01) {
-        this.bones.forEach((bone) => {
-            bone.animations.forEach((animation: Animation) => {
+        for (const bone of this.bones) {
+            for (const animation of bone.animations) {
                 animation.enableBlending = true;
                 animation.blendingSpeed = blendingSpeed;
-            });
-        });
+            }
+        }
     }
 
     /**
@@ -751,8 +754,8 @@ export class Skeleton implements IAnimatable {
                 index: bone.getIndex(),
                 name: bone.name,
                 id: bone.id,
-                matrix: bone.getBindMatrix().toArray(),
-                rest: bone.getRestMatrix().toArray(),
+                matrix: bone.getBindMatrix().asArray(),
+                rest: bone.getRestMatrix().asArray(),
                 linkedTransformNodeId: bone.getTransformNode()?.id,
             };
 
@@ -901,7 +904,9 @@ export class Skeleton implements IAnimatable {
         visited[index] = true;
 
         const bone = this.bones[index];
-        if (!bone) return;
+        if (!bone) {
+            return;
+        }
 
         if (bone._index === undefined) {
             bone._index = index;
@@ -919,8 +924,8 @@ export class Skeleton implements IAnimatable {
      * Set the current local matrix as the restPose for all bones in the skeleton.
      */
     public setCurrentPoseAsRest(): void {
-        this.bones.forEach((b) => {
+        for (const b of this.bones) {
             b.setCurrentPoseAsRest();
-        });
+        }
     }
 }

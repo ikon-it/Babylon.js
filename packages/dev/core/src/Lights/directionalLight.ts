@@ -7,6 +7,10 @@ import type { AbstractMesh } from "../Meshes/abstractMesh";
 import { Light } from "./light";
 import { ShadowLight } from "./shadowLight";
 import type { Effect } from "../Materials/effect";
+import { RegisterClass } from "../Misc/typeStore";
+import type { Nullable } from "../types";
+import { Constants } from "core/Engines/constants";
+
 Node.AddNodeConstructor("Light_Type_1", (name, scene) => {
     return () => new DirectionalLight(name, Vector3.Zero(), scene);
 });
@@ -141,7 +145,7 @@ export class DirectionalLight extends ShadowLight {
      * Returns the string "DirectionalLight".
      * @returns The class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "DirectionalLight";
     }
 
@@ -149,7 +153,8 @@ export class DirectionalLight extends ShadowLight {
      * Returns the integer 1.
      * @returns The light Type id as a constant defines in Light.LIGHTTYPEID_x
      */
-    public getTypeID(): number {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public override getTypeID(): number {
         return Light.LIGHTTYPEID_DIRECTIONALLIGHT;
     }
 
@@ -199,10 +204,6 @@ export class DirectionalLight extends ShadowLight {
      */
     protected _setDefaultAutoExtendShadowProjectionMatrix(matrix: Matrix, viewMatrix: Matrix, renderList: Array<AbstractMesh>): void {
         const activeCamera = this.getScene().activeCamera;
-
-        if (!activeCamera) {
-            return;
-        }
 
         // Check extends
         if (this.autoUpdateExtends || this._orthoLeft === Number.MAX_VALUE) {
@@ -262,8 +263,8 @@ export class DirectionalLight extends ShadowLight {
         const xOffset = this._orthoRight - this._orthoLeft;
         const yOffset = this._orthoTop - this._orthoBottom;
 
-        const minZ = this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera.minZ;
-        const maxZ = this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera.maxZ;
+        const minZ = this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera?.minZ || Constants.ShadowMinZ;
+        const maxZ = this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera?.maxZ || Constants.ShadowMaxZ;
 
         const useReverseDepthBuffer = this.getScene().getEngine().useReverseDepthBuffer;
 
@@ -319,11 +320,11 @@ export class DirectionalLight extends ShadowLight {
      * Values are fixed on directional lights as it relies on an ortho projection hence the need to convert being
      * -1 and 1 to 0 and 1 doing (depth + min) / (min + max) -> (depth + 1) / (1 + 1) -> (depth * 0.5) + 0.5.
      * (when not using reverse depth buffer / NDC half Z range)
-     * @param activeCamera The camera we are returning the min for
+     * @param _activeCamera The camera we are returning the min for (not used)
      * @returns the depth min z
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public getDepthMinZ(activeCamera: Camera): number {
+    public override getDepthMinZ(_activeCamera: Nullable<Camera>): number {
         const engine = this._scene.getEngine();
         return !engine.useReverseDepthBuffer && engine.isNDCHalfZRange ? 0 : 1;
     }
@@ -334,11 +335,11 @@ export class DirectionalLight extends ShadowLight {
      * Values are fixed on directional lights as it relies on an ortho projection hence the need to convert being
      * -1 and 1 to 0 and 1 doing (depth + min) / (min + max) -> (depth + 1) / (1 + 1) -> (depth * 0.5) + 0.5.
      * (when not using reverse depth buffer / NDC half Z range)
-     * @param activeCamera The camera we are returning the max for
+     * @param _activeCamera The camera we are returning the max for
      * @returns the depth max z
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public getDepthMaxZ(activeCamera: Camera): number {
+    public override getDepthMaxZ(_activeCamera: Nullable<Camera>): number {
         const engine = this._scene.getEngine();
         return engine.useReverseDepthBuffer && engine.isNDCHalfZRange ? 0 : 1;
     }
@@ -352,3 +353,6 @@ export class DirectionalLight extends ShadowLight {
         defines["DIRLIGHT" + lightIndex] = true;
     }
 }
+
+// Register Class Name
+RegisterClass("BABYLON.DirectionalLight", DirectionalLight);

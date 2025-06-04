@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { Logger } from "../../../Misc/logger";
-import { serialize, SerializationHelper } from "../../../Misc/decorators";
+import { serialize } from "../../../Misc/decorators";
+import { SerializationHelper } from "../../../Misc/decorators.serialization";
 import { Vector3, TmpVectors, Vector2 } from "../../../Maths/math.vector";
 import { Camera } from "../../../Cameras/camera";
 import type { Effect } from "../../../Materials/effect";
@@ -17,13 +18,11 @@ import type { PrePassRenderer } from "../../../Rendering/prePassRenderer";
 import type { GeometryBufferRenderer } from "../../../Rendering/geometryBufferRenderer";
 import { Constants } from "../../../Engines/constants";
 import type { Nullable } from "../../../types";
-import { Scalar } from "../../../Maths/math.scalar";
+import { RandomRange } from "../../../Maths/math.scalar.functions";
 import { RawTexture } from "../../../Materials/Textures/rawTexture";
 
 import "../../../PostProcesses/RenderPipeline/postProcessRenderPipelineManagerSceneComponent";
-
-import "../../../Shaders/ssao2.fragment";
-import "../../../Shaders/ssaoCombine.fragment";
+import { ShaderLanguage } from "core/Materials";
 
 /**
  * Render pipeline to produce ssao effect
@@ -272,9 +271,9 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
      * @param ratio The size of the postprocesses. Can be a number shared between passes or an object for more precision: { ssaoRatio: 0.5, blurRatio: 1.0 }
      * @param cameras The array of cameras that the rendering pipeline will be attached to
      * @param forceGeometryBuffer Set to true if you want to use the legacy geometry buffer renderer
-     * @param textureType The texture type used by the different post processes created by SSAO (default: Constants.TEXTURETYPE_UNSIGNED_INT)
+     * @param textureType The texture type used by the different post processes created by SSAO (default: Constants.TEXTURETYPE_UNSIGNED_BYTE)
      */
-    constructor(name: string, scene: Scene, ratio: any, cameras?: Camera[], forceGeometryBuffer = false, textureType = Constants.TEXTURETYPE_UNSIGNED_INT) {
+    constructor(name: string, scene: Scene, ratio: any, cameras?: Camera[], forceGeometryBuffer = false, textureType = Constants.TEXTURETYPE_UNSIGNED_BYTE) {
         super(scene.getEngine(), name);
 
         this._scene = scene;
@@ -376,7 +375,7 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
      * Get the class name
      * @returns "SSAO2RenderingPipeline"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "SSAO2RenderingPipeline";
     }
 
@@ -384,7 +383,7 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
      * Removes the internal pipeline assets and detaches the pipeline from the scene cameras
      * @param disableGeometryBufferRenderer Set to true if you want to disable the Geometry Buffer renderer
      */
-    public dispose(disableGeometryBufferRenderer: boolean = false): void {
+    public override dispose(disableGeometryBufferRenderer: boolean = false): void {
         for (let i = 0; i < this._scene.cameras.length; i++) {
             const camera = this._scene.cameras[i];
 
@@ -403,13 +402,15 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
 
         this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(this._name, this._scene.cameras);
 
+        this._scene.postProcessRenderPipelineManager.removePipeline(this._name);
+
         super.dispose();
     }
 
     // Private Methods
 
     /** @internal */
-    public _rebuild() {
+    public override _rebuild() {
         super._rebuild();
     }
 
@@ -448,7 +449,19 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
             this._scene.getEngine(),
             false,
             defines,
-            textureType
+            textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/ssao2.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/ssao2.fragment"));
+                }
+            }
         );
 
         blurFilter.onApply = (effect: Effect) => {
@@ -456,7 +469,8 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
                 return;
             }
 
-            const ssaoCombineSize = horizontal ? this._ssaoCombinePostProcess.width : this._ssaoCombinePostProcess.height;
+            const ratio = this._ratio.blurRatio || this._ratio;
+            const ssaoCombineSize = horizontal ? this._originalColorPostProcess.width * ratio : this._originalColorPostProcess.height * ratio;
             const originalColorSize = horizontal ? this._originalColorPostProcess.width : this._originalColorPostProcess.height;
 
             effect.setFloat("outSize", ssaoCombineSize > 0 ? ssaoCombineSize : originalColorSize);
@@ -471,6 +485,7 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
         };
 
         blurFilter.samples = this.textureSamples;
+        blurFilter.autoClear = false;
         return blurFilter;
     }
 
@@ -563,8 +578,21 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
             this._scene.getEngine(),
             false,
             defines,
-            textureType
+            textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/ssao2.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/ssao2.fragment"));
+                }
+            }
         );
+        this._ssaoPostProcess.autoClear = false;
 
         this._ssaoPostProcess.onApply = (effect: Effect) => {
             if (!this._scene.activeCamera) {
@@ -626,7 +654,19 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
             this._scene.getEngine(),
             false,
             undefined,
-            textureType
+            textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/ssaoCombine.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/ssaoCombine.fragment"));
+                }
+            }
         );
 
         this._ssaoCombinePostProcess.onApply = (effect: Effect) => {
@@ -634,6 +674,7 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
             effect.setVector4("viewport", TmpVectors.Vector4[0].copyFromFloats(viewport.x, viewport.y, viewport.width, viewport.height));
             effect.setTextureFromPostProcessOutput("originalColor", this._originalColorPostProcess);
         };
+        this._ssaoCombinePostProcess.autoClear = false;
         this._ssaoCombinePostProcess.samples = this.textureSamples;
     }
 
@@ -643,7 +684,7 @@ export class SSAO2RenderingPipeline extends PostProcessRenderPipeline {
         const data = new Uint8Array(size * size * 4);
         const randVector = Vector2.Zero();
         for (let index = 0; index < data.length; ) {
-            randVector.set(Scalar.RandomRange(0, 1), Scalar.RandomRange(0, 1)).normalize().scaleInPlace(255);
+            randVector.set(RandomRange(0, 1), RandomRange(0, 1)).normalize().scaleInPlace(255);
             data[index++] = Math.floor(randVector.x);
             data[index++] = Math.floor(randVector.y);
             data[index++] = 0;

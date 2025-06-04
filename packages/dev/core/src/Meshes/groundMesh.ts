@@ -41,7 +41,7 @@ export class GroundMesh extends Mesh {
      * "GroundMesh"
      * @returns "GroundMesh"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "GroundMesh";
     }
 
@@ -194,7 +194,7 @@ export class GroundMesh extends Mesh {
     private _initHeightQuads(): GroundMesh {
         const subdivisionsX = this._subdivisionsX;
         const subdivisionsY = this._subdivisionsY;
-        this._heightQuads = new Array();
+        this._heightQuads = [];
         for (let row = 0; row < subdivisionsY; row++) {
             for (let col = 0; col < subdivisionsX; col++) {
                 const quad = { slope: Vector2.Zero(), facet1: new Vector4(0.0, 0.0, 0.0, 0.0), facet2: new Vector4(0.0, 0.0, 0.0, 0.0) };
@@ -286,7 +286,7 @@ export class GroundMesh extends Mesh {
      * Serializes this ground mesh
      * @param serializationObject object to write serialization to
      */
-    public serialize(serializationObject: any): void {
+    public override serialize(serializationObject: any): void {
         super.serialize(serializationObject);
         serializationObject.subdivisionsX = this._subdivisionsX;
         serializationObject.subdivisionsY = this._subdivisionsY;
@@ -307,7 +307,7 @@ export class GroundMesh extends Mesh {
      * @param scene the scene to create the ground mesh in
      * @returns the created ground mesh
      */
-    public static Parse(parsedMesh: any, scene: Scene): GroundMesh {
+    public static override Parse(parsedMesh: any, scene: Scene): GroundMesh {
         const result = new GroundMesh(parsedMesh.name, scene);
 
         result._subdivisionsX = parsedMesh.subdivisionsX || 1;

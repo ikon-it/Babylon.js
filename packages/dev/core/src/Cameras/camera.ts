@@ -1,8 +1,8 @@
-import { serialize, SerializationHelper, serializeAsVector3 } from "../Misc/decorators";
+import { serialize, serializeAsVector3 } from "../Misc/decorators";
 import { SmartArray } from "../Misc/smartArray";
 import { Tools } from "../Misc/tools";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
+import type { DeepImmutable, Nullable } from "../types";
 import type { CameraInputsManager } from "./cameraInputsManager";
 import type { Scene } from "../scene";
 import { Matrix, Vector3, Quaternion } from "../Maths/math.vector";
@@ -24,6 +24,7 @@ import type { FreeCamera } from "./freeCamera";
 import type { TargetCamera } from "./targetCamera";
 import type { Ray } from "../Culling/ray";
 import type { ArcRotateCamera } from "./arcRotateCamera";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 
 /**
  * Oblique projection values
@@ -101,6 +102,7 @@ export class Camera extends Node {
     /**
      * Defines that both eyes of the camera should be renderered in a VR mode (carbox).
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public static readonly RIG_MODE_VR = Constants.RIG_MODE_VR;
     /**
      * Custom rig mode allowing rig cameras to be populated manually with any number of cameras
@@ -177,12 +179,12 @@ export class Camera extends Node {
         return x * y;
     }
 
+    private _orthoLeft: Nullable<number> = null;
+
     /**
      * Define the current limit on the left side for an orthographic camera
      * In scene unit
      */
-    private _orthoLeft: Nullable<number> = null;
-
     public set orthoLeft(value: Nullable<number>) {
         this._orthoLeft = value;
 
@@ -196,12 +198,12 @@ export class Camera extends Node {
         return this._orthoLeft;
     }
 
+    private _orthoRight: Nullable<number> = null;
+
     /**
      * Define the current limit on the right side for an orthographic camera
      * In scene unit
      */
-    private _orthoRight: Nullable<number> = null;
-
     public set orthoRight(value: Nullable<number>) {
         this._orthoRight = value;
 
@@ -215,12 +217,12 @@ export class Camera extends Node {
         return this._orthoRight;
     }
 
+    private _orthoBottom: Nullable<number> = null;
+
     /**
      * Define the current limit on the bottom side for an orthographic camera
      * In scene unit
      */
-    private _orthoBottom: Nullable<number> = null;
-
     public set orthoBottom(value: Nullable<number>) {
         this._orthoBottom = value;
 
@@ -234,12 +236,12 @@ export class Camera extends Node {
         return this._orthoBottom;
     }
 
+    private _orthoTop: Nullable<number> = null;
+
     /**
      * Define the current limit on the top side for an orthographic camera
      * In scene unit
      */
-    private _orthoTop: Nullable<number> = null;
-
     public set orthoTop(value: Nullable<number>) {
         this._orthoTop = value;
 
@@ -276,7 +278,7 @@ export class Camera extends Node {
     public minZ = 1;
 
     /**
-     * Define the maximum distance the camera can see to.
+     * Define the maximum distance the camera can see to.  (default is 10000)
      * This is important to note that the depth buffer are not infinite and the further it end
      * the more your scene might encounter depth fighting issue.
      */
@@ -290,10 +292,11 @@ export class Camera extends Node {
     @serialize()
     public inertia = 0.9;
 
+    private _mode = Camera.PERSPECTIVE_CAMERA;
+
     /**
      * Define the mode of the camera (Camera.PERSPECTIVE_CAMERA or Camera.ORTHOGRAPHIC_CAMERA)
      */
-    private _mode = Camera.PERSPECTIVE_CAMERA;
     set mode(mode: number) {
         this._mode = mode;
 
@@ -370,6 +373,8 @@ export class Camera extends Node {
 
     /**
      * Observable triggered when the camera view matrix has changed.
+     * Beware of reentrance! Some methods like Camera.getViewMatrix and Camera.getWorldMatrix can trigger the onViewMatrixChangedObservable
+     * observable, so using them inside an observer will require additional logic to avoid a stack overflow error.
      */
     public onViewMatrixChangedObservable = new Observable<Camera>();
     /**
@@ -435,7 +440,8 @@ export class Camera extends Node {
     public _computedViewMatrix = Matrix.Identity();
     private _doNotComputeProjectionMatrix = false;
     private _transformMatrix = Matrix.Zero();
-    private _frustumPlanes: Plane[];
+    /** @internal */
+    public _frustumPlanes: Plane[];
     private _refreshFrustumPlanes = true;
     private _storedFov: number;
     private _stateStored: boolean;
@@ -451,7 +457,7 @@ export class Camera extends Node {
      * @param setActiveOnSceneIfNoneActive Defines if the camera should be set as active after creation if no other camera have been defined in the scene
      */
     constructor(name: string, position: Vector3, scene?: Scene, setActiveOnSceneIfNoneActive = true) {
-        super(name, scene);
+        super(name, scene, false);
 
         this.getScene().addCamera(this);
 
@@ -474,6 +480,13 @@ export class Camera extends Node {
         return this;
     }
 
+    /**
+     * Returns true if a state has been stored by calling storeState method.
+     * @returns true if state has been stored.
+     */
+    public hasStateStored(): boolean {
+        return !!this._stateStored;
+    }
     /**
      * Restores the camera state values if it has been stored. You must call storeState() first
      * @returns true if restored and false otherwise
@@ -505,7 +518,7 @@ export class Camera extends Node {
      * Gets the class name of the camera.
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "Camera";
     }
 
@@ -517,7 +530,7 @@ export class Camera extends Node {
      * @param fullDetails Defines that a more verbose level of logging is required
      * @returns the string representation
      */
-    public toString(fullDetails?: boolean): string {
+    public override toString(fullDetails?: boolean): string {
         let ret = "Name: " + this.name;
         ret += ", type: " + this.getClassName();
         if (this.animations) {
@@ -566,7 +579,7 @@ export class Camera extends Node {
      * @param completeCheck defines if a complete check (including post processes) has to be done (false by default)
      * @returns true if the camera is ready
      */
-    public isReady(completeCheck = false): boolean {
+    public override isReady(completeCheck = false): boolean {
         if (completeCheck) {
             for (const pp of this._postProcesses) {
                 if (pp && !pp.isReady()) {
@@ -578,7 +591,7 @@ export class Camera extends Node {
     }
 
     /** @internal */
-    public _initCache() {
+    public override _initCache() {
         super._initCache();
 
         this._cache.position = new Vector3(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
@@ -606,7 +619,7 @@ export class Camera extends Node {
     /**
      * @internal
      */
-    public _updateCache(ignoreParentClass?: boolean): void {
+    public override _updateCache(ignoreParentClass?: boolean): void {
         if (!ignoreParentClass) {
             super._updateCache();
         }
@@ -616,7 +629,7 @@ export class Camera extends Node {
     }
 
     /** @internal */
-    public _isSynchronized(): boolean {
+    public override _isSynchronized(): boolean {
         return this._isSynchronizedViewMatrix() && this._isSynchronizedProjectionMatrix();
     }
 
@@ -829,7 +842,7 @@ export class Camera extends Node {
      * Gets the current world matrix of the camera
      * @returns the world matrix
      */
-    public getWorldMatrix(): Matrix {
+    public override getWorldMatrix(): Matrix {
         if (this._isSynchronizedViewMatrix()) {
             return this._worldMatrix;
         }
@@ -1050,7 +1063,8 @@ export class Camera extends Node {
         return (arcRotateCamera.radius || (targetCamera.target ? Vector3.Distance(this.position, targetCamera.target) : this.position.length())) + offset;
     }
 
-    private _updateFrustumPlanes(): void {
+    /** @internal */
+    public _updateFrustumPlanes(): void {
         if (!this._refreshFrustumPlanes) {
             return;
         }
@@ -1078,10 +1092,10 @@ export class Camera extends Node {
 
         if (checkRigCameras && this.rigCameras.length > 0) {
             let result = false;
-            this.rigCameras.forEach((cam) => {
+            for (const cam of this.rigCameras) {
                 cam._updateFrustumPlanes();
                 result = result || target.isInFrustum(cam._frustumPlanes);
-            });
+            }
             return result;
         } else {
             return target.isInFrustum(this._frustumPlanes);
@@ -1132,7 +1146,7 @@ export class Camera extends Node {
      * @param doNotRecurse Set to true to not recurse into each children (recurse into each children by default)
      * @param disposeMaterialAndTextures Set to true to also dispose referenced materials and textures (false by default)
      */
-    public dispose(doNotRecurse?: boolean, disposeMaterialAndTextures = false): void {
+    public override dispose(doNotRecurse?: boolean, disposeMaterialAndTextures = false): void {
         // Observables
         this.onViewMatrixChangedObservable.clear();
         this.onProjectionMatrixChangedObservable.clear();
@@ -1399,7 +1413,7 @@ export class Camera extends Node {
      * @param newParent The cloned camera's new parent (none by default)
      * @returns the cloned camera
      */
-    public clone(name: string, newParent: Nullable<Node> = null): Camera {
+    public override clone(name: string, newParent: Nullable<Node> = null): Camera {
         const camera = SerializationHelper.Clone(
             Camera.GetConstructorFromName(this.getClassName(), name, this.getScene(), this.interaxialDistance, this.isStereoscopicSideBySide),
             this
@@ -1417,7 +1431,7 @@ export class Camera extends Node {
      * @param localAxis Defines the reference axis to provide a relative direction.
      * @returns the direction
      */
-    public getDirection(localAxis: Vector3): Vector3 {
+    public getDirection(localAxis: DeepImmutable<Vector3>): Vector3 {
         const result = Vector3.Zero();
 
         this.getDirectionToRef(localAxis, result);
@@ -1439,7 +1453,7 @@ export class Camera extends Node {
      * @param localAxis Defines the reference axis to provide a relative direction.
      * @param result Defines the vector to store the result in
      */
-    public getDirectionToRef(localAxis: Vector3, result: Vector3): void {
+    public getDirectionToRef(localAxis: DeepImmutable<Vector3>, result: Vector3): void {
         Vector3.TransformNormalToRef(localAxis, this.getWorldMatrix(), result);
     }
 
@@ -1472,7 +1486,7 @@ export class Camera extends Node {
      * Compute the world  matrix of the camera.
      * @returns the camera world matrix
      */
-    public computeWorldMatrix(): Matrix {
+    public override computeWorldMatrix(): Matrix {
         return this.getWorldMatrix();
     }
 

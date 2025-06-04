@@ -121,7 +121,7 @@ if (vClipSpacePosition.x / vClipSpacePosition.w >= vDebugMode.x) {
         gl_FragColor.rgb = clearcoatOut.specularEnvironmentR0;
         #define DEBUGMODE_GAMMA
     #elif DEBUGMODE == 62 && defined(METALLICWORKFLOW)
-        gl_FragColor.rgb = vec3(reflectivityOut.metallicRoughness.r);
+        gl_FragColor.rgb = vec3(reflectivityOut.metallic);
     #elif DEBUGMODE == 71 && defined(METALLICWORKFLOW)
         gl_FragColor.rgb = reflectivityOut.metallicF0;
     #elif DEBUGMODE == 63
@@ -155,12 +155,12 @@ if (vClipSpacePosition.x / vClipSpacePosition.w >= vDebugMode.x) {
 // Misc
     #elif DEBUGMODE == 80 && defined(RADIANCEOCCLUSION)
         gl_FragColor.rgb = vec3(seo);
-    #elif DEBUGMODE == 81 && defined(HORIZONOCCLUSION)
+    #elif DEBUGMODE == 81 && defined(HORIZONOCCLUSION) && defined(BUMP) && defined(REFLECTIONMAP_3D)
         gl_FragColor.rgb = vec3(eho);
     #elif DEBUGMODE == 82 && defined(MS_BRDF_ENERGY_CONSERVATION)
         gl_FragColor.rgb = vec3(energyConservationFactor);
     #elif DEBUGMODE == 83 && defined(ENVIRONMENTBRDF) && !defined(REFLECTIONMAP_SKYBOX)
-        gl_FragColor.rgb = specularEnvironmentReflectance;
+        gl_FragColor.rgb = baseSpecularEnvironmentReflectance;
         #define DEBUGMODE_GAMMA
     #elif DEBUGMODE == 84 && defined(CLEARCOAT) && defined(ENVIRONMENTBRDF) && !defined(REFLECTIONMAP_SKYBOX)
         gl_FragColor.rgb = clearcoatOut.clearCoatEnvironmentReflectance;
@@ -174,10 +174,12 @@ if (vClipSpacePosition.x / vClipSpacePosition.w >= vDebugMode.x) {
         gl_FragColor.rgb = vec3(alpha);
     #elif DEBUGMODE == 88 && defined(ALBEDO)
         gl_FragColor.rgb = vec3(albedoTexture.a);
+    #elif DEBUGMODE == 89
+        gl_FragColor.rgb = aoOut.ambientOcclusionColor.rgb;
     // Does Not Exist
     #else
         float stripeWidth = 30.;
-        float stripePos = floor((gl_FragCoord.x + gl_FragCoord.y) / stripeWidth);
+        float stripePos = floor(gl_FragCoord.x / stripeWidth);
         float whichColor = mod(stripePos, 2.);
         vec3 color1 = vec3(.6,.2,.2);
         vec3 color2 = vec3(.3,.1,.1);

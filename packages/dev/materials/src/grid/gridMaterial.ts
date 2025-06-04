@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3, SerializationHelper, serializeAsVector3 } from "core/Misc/decorators";
+import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3, serializeAsVector3 } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Vector4, Vector3 } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { MaterialFlags } from "core/Materials/materialFlags";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -17,8 +17,23 @@ import { RegisterClass } from "core/Misc/typeStore";
 
 import "./grid.fragment";
 import "./grid.vertex";
+import {
+    BindFogParameters,
+    BindLogDepth,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForMisc,
+} from "core/Materials/materialHelper.functions";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
 
 class GridMaterialDefines extends MaterialDefines {
+    public CLIPPLANE = false;
+    public CLIPPLANE2 = false;
+    public CLIPPLANE3 = false;
+    public CLIPPLANE4 = false;
+    public CLIPPLANE5 = false;
+    public CLIPPLANE6 = false;
     public OPACITY = false;
     public ANTIALIAS = false;
     public TRANSPARENT = false;
@@ -126,15 +141,15 @@ export class GridMaterial extends PushMaterial {
     /**
      * @returns whether or not the grid requires alpha blending.
      */
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.opacity < 1.0 || (this._opacityTexture && this._opacityTexture.isReady());
     }
 
-    public needAlphaBlendingForMesh(mesh: AbstractMesh): boolean {
+    public override needAlphaBlendingForMesh(mesh: AbstractMesh): boolean {
         return mesh.visibility < 1.0 || this.needAlphaBlending();
     }
 
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -189,10 +204,10 @@ export class GridMaterial extends PushMaterial {
             }
         }
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, false, this.fogEnabled, false, defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, false, this.fogEnabled, false, defines);
 
         // Values that need to be evaluated on every frame
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, scene.getEngine(), this, defines, !!useInstances);
+        PrepareDefinesForFrameBoundValues(scene, scene.getEngine(), this, defines, !!useInstances);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -200,7 +215,7 @@ export class GridMaterial extends PushMaterial {
             scene.resetCachedMaterial();
 
             // Attributes
-            MaterialHelper.PrepareDefinesForAttributes(mesh, defines, false, false);
+            PrepareDefinesForAttributes(mesh, defines, false, false);
             const attribs = [VertexBuffer.PositionKind, VertexBuffer.NormalKind];
 
             if (defines.UV1) {
@@ -212,37 +227,41 @@ export class GridMaterial extends PushMaterial {
 
             defines.IMAGEPROCESSINGPOSTPROCESS = scene.imageProcessingConfiguration.applyByPostProcess;
 
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForInstances(attribs, defines);
 
+            const uniforms = [
+                "projection",
+                "mainColor",
+                "lineColor",
+                "gridControl",
+                "gridOffset",
+                "vFogInfos",
+                "vFogColor",
+                "world",
+                "view",
+                "opacityMatrix",
+                "vOpacityInfos",
+                "visibility",
+                "logarithmicDepthConstant",
+            ];
             // Defines
             const join = defines.toString();
+            AddClipPlaneUniforms(uniforms);
             subMesh.setEffect(
-                scene
-                    .getEngine()
-                    .createEffect(
-                        "grid",
-                        attribs,
-                        [
-                            "projection",
-                            "mainColor",
-                            "lineColor",
-                            "gridControl",
-                            "gridOffset",
-                            "vFogInfos",
-                            "vFogColor",
-                            "world",
-                            "view",
-                            "opacityMatrix",
-                            "vOpacityInfos",
-                            "visibility",
-                            "logarithmicDepthConstant",
-                        ],
-                        ["opacitySampler"],
-                        join,
-                        undefined,
-                        this.onCompiled,
-                        this.onError
-                    ),
+                scene.getEngine().createEffect(
+                    "grid",
+                    {
+                        attributes: attribs,
+                        uniformsNames: uniforms,
+                        uniformBuffersNames: ["Scene"],
+                        samplers: ["opacitySampler"],
+                        defines: join,
+                        fallbacks: null,
+                        onCompiled: this.onCompiled,
+                        onError: this.onError,
+                    },
+                    scene.getEngine()
+                ),
                 defines,
                 this._materialContext
             );
@@ -259,7 +278,7 @@ export class GridMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <GridMaterialDefines>subMesh.materialDefines;
@@ -279,8 +298,8 @@ export class GridMaterial extends PushMaterial {
         if (!defines.INSTANCES || defines.THIN_INSTANCE) {
             this.bindOnlyWorldMatrix(world);
         }
-        this._activeEffect.setMatrix("view", scene.getViewMatrix());
-        this._activeEffect.setMatrix("projection", scene.getProjectionMatrix());
+        this.bindView(effect);
+        this.bindViewProjection(effect);
 
         // Uniforms
         if (this._mustRebind(scene, effect, subMesh)) {
@@ -301,13 +320,15 @@ export class GridMaterial extends PushMaterial {
                 this._activeEffect.setMatrix("opacityMatrix", this._opacityTexture.getTextureMatrix());
             }
 
+            // Clip plane
+            BindClipPlane(effect, this, scene);
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
         }
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         this._afterBind(mesh, this._activeEffect, subMesh);
     }
@@ -316,25 +337,25 @@ export class GridMaterial extends PushMaterial {
      * Dispose the material and its associated resources.
      * @param forceDisposeEffect will also dispose the used effect when true
      */
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): GridMaterial {
+    public override clone(name: string): GridMaterial {
         return SerializationHelper.Clone(() => new GridMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.GridMaterial";
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "GridMaterial";
     }
 
-    public static Parse(source: any, scene: Scene, rootUrl: string): GridMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): GridMaterial {
         return SerializationHelper.Parse(() => new GridMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

@@ -1,5 +1,6 @@
 export enum SourceTextureFormat {
     ETC1S,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     UASTC4x4,
 }
 
@@ -17,7 +18,7 @@ export enum TranscodeTarget {
     RG8,
 }
 
-export enum EngineFormat {
+export const enum EngineFormat {
     COMPRESSED_RGBA_BPTC_UNORM_EXT = 0x8e8c,
     COMPRESSED_RGBA_ASTC_4X4_KHR = 0x93b0,
     COMPRESSED_RGB_S3TC_DXT1_EXT = 0x83f0,
@@ -29,6 +30,7 @@ export enum EngineFormat {
     COMPRESSED_RGB_ETC1_WEBGL = 0x8d64,
     RGBA8Format = 0x8058,
     R8Format = 0x8229,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     RG8Format = 0x822b,
 }
 
@@ -228,6 +230,7 @@ export interface IKTX2DecoderOptions {
     forceR8?: boolean;
 
     /** force to always use (uncompressed) RG8 for transcoded format */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     forceRG8?: boolean;
 
     /**

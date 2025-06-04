@@ -34,7 +34,10 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
      */
     protected _buttonsPressed: number;
 
-    private _currentActiveButton: number = -1;
+    /**
+     * Which pointer ID is currently down (only for mouse events, not used for touch events)
+     */
+    private _currentMousePointerIdDown: number = -1;
     private _contextMenuBind: EventListener;
 
     /**
@@ -48,7 +51,6 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
      * @param noPreventDefault Defines whether event caught by the controls should call preventdefault() (https://developer.mozilla.org/en-US/docs/Web/API/Event/preventDefault)
      */
     public attachControl(noPreventDefault?: boolean): void {
-        // eslint-disable-next-line prefer-rest-params
         noPreventDefault = Tools.BackCompatCameraNoPreventDefault(arguments);
         const engine = this.camera.getEngine();
         const element = engine.getInputElement();
@@ -87,9 +89,15 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
                 this.onTouch(null, offsetX, offsetY);
                 this._pointA = null;
                 this._pointB = null;
-            } else if (p.type !== PointerEventTypes.POINTERDOWN && isTouch && this._pointA?.pointerId !== evt.pointerId && this._pointB?.pointerId !== evt.pointerId) {
+            } else if (
+                p.type !== PointerEventTypes.POINTERDOWN &&
+                p.type !== PointerEventTypes.POINTERDOUBLETAP &&
+                isTouch &&
+                this._pointA?.pointerId !== evt.pointerId &&
+                this._pointB?.pointerId !== evt.pointerId
+            ) {
                 return; // If we get a non-down event for a touch that we're not tracking, ignore it
-            } else if (p.type === PointerEventTypes.POINTERDOWN && (this._currentActiveButton === -1 || isTouch)) {
+            } else if (p.type === PointerEventTypes.POINTERDOWN && (this._currentMousePointerIdDown === -1 || isTouch)) {
                 try {
                     srcElement?.setPointerCapture(evt.pointerId);
                 } catch (e) {
@@ -114,18 +122,20 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
                     return; // We are already tracking two pointers so ignore this one
                 }
 
-                if (this._currentActiveButton === -1 && !isTouch) {
-                    this._currentActiveButton = evt.button;
+                if (this._currentMousePointerIdDown === -1 && !isTouch) {
+                    this._currentMousePointerIdDown = evt.pointerId;
                 }
                 this.onButtonDown(evt);
 
                 if (!noPreventDefault) {
                     evt.preventDefault();
-                    element && element.focus();
+                    if (element) {
+                        element.focus();
+                    }
                 }
             } else if (p.type === PointerEventTypes.POINTERDOUBLETAP) {
                 this.onDoubleTap(evt.pointerType);
-            } else if (p.type === PointerEventTypes.POINTERUP && (this._currentActiveButton === evt.button || isTouch)) {
+            } else if (p.type === PointerEventTypes.POINTERUP && (this._currentMousePointerIdDown === evt.pointerId || isTouch)) {
                 try {
                     srcElement?.releasePointerCapture(evt.pointerId);
                 } catch (e) {
@@ -171,7 +181,7 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
                     previousMultiTouchPanPosition = null;
                 }
 
-                this._currentActiveButton = -1;
+                this._currentMousePointerIdDown = -1;
                 this.onButtonUp(evt);
 
                 if (!noPreventDefault) {
@@ -186,10 +196,9 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
                 if (this._pointA && this._pointB === null) {
                     const offsetX = evt.clientX - this._pointA.x;
                     const offsetY = evt.clientY - this._pointA.y;
-                    this.onTouch(this._pointA, offsetX, offsetY);
-
                     this._pointA.x = evt.clientX;
                     this._pointA.y = evt.clientY;
+                    this.onTouch(this._pointA, offsetX, offsetY);
                 }
                 // Two buttons down: pinch
                 else if (this._pointA && this._pointB) {
@@ -230,7 +239,9 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
 
         this._contextMenuBind = (evt: Event) => this.onContextMenu(evt as PointerEvent);
 
-        element && element.addEventListener("contextmenu", this._contextMenuBind, false);
+        if (element) {
+            element.addEventListener("contextmenu", this._contextMenuBind, false);
+        }
 
         const hostWindow = this.camera.getScene().getEngine().getHostWindow();
 
@@ -256,7 +267,9 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
 
             if (this._contextMenuBind) {
                 const inputElement = this.camera.getScene().getEngine().getInputElement();
-                inputElement && inputElement.removeEventListener("contextmenu", this._contextMenuBind);
+                if (inputElement) {
+                    inputElement.removeEventListener("contextmenu", this._contextMenuBind);
+                }
             }
 
             this._onLostFocus = null;
@@ -267,7 +280,7 @@ export abstract class BaseCameraPointersInput implements ICameraInput<Camera> {
         this._metaKey = false;
         this._shiftKey = false;
         this._buttonsPressed = 0;
-        this._currentActiveButton = -1;
+        this._currentMousePointerIdDown = -1;
     }
 
     /**

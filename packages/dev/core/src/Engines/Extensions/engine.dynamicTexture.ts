@@ -1,10 +1,12 @@
+import { GetExponentOfTwo } from "core/Misc/tools.functions";
 import { ThinEngine } from "../../Engines/thinEngine";
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
 import type { ImageSource, Nullable } from "../../types";
 import type { ICanvas } from "../ICanvas";
 
-declare module "../../Engines/thinEngine" {
-    export interface ThinEngine {
+declare module "../../Engines/abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
         /**
          * Creates a dynamic texture
          * @param width defines the width of the texture
@@ -43,8 +45,8 @@ ThinEngine.prototype.createDynamicTexture = function (width: number, height: num
     texture.baseHeight = height;
 
     if (generateMipMaps) {
-        width = this.needPOTTextures ? ThinEngine.GetExponentOfTwo(width, this._caps.maxTextureSize) : width;
-        height = this.needPOTTextures ? ThinEngine.GetExponentOfTwo(height, this._caps.maxTextureSize) : height;
+        width = this.needPOTTextures ? GetExponentOfTwo(width, this._caps.maxTextureSize) : width;
+        height = this.needPOTTextures ? GetExponentOfTwo(height, this._caps.maxTextureSize) : height;
     }
 
     //  this.resetTextureCache();

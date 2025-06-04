@@ -5,6 +5,8 @@ import type { NodeMaterialConnectionPoint } from "../nodeMaterialBlockConnection
 import { NodeMaterialBlockTargets } from "../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../Misc/typeStore";
 import type { Scene } from "../../../scene";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { editableInPropertyPage, PropertyTypeForEdition } from "core/Decorators/nodeDecorator";
 
 /**
  * Types of curves supported by the Curve block
@@ -73,6 +75,39 @@ export class CurveBlock extends NodeMaterialBlock {
     /**
      * Gets or sets the type of the curve applied by the block
      */
+    @editableInPropertyPage("Type", PropertyTypeForEdition.List, "ADVANCED", {
+        notifiers: { rebuild: true },
+        embedded: true,
+        options: [
+            { label: "EaseInSine", value: CurveBlockTypes.EaseInSine },
+            { label: "EaseOutSine", value: CurveBlockTypes.EaseOutSine },
+            { label: "EaseInOutSine", value: CurveBlockTypes.EaseInOutSine },
+            { label: "EaseInQuad", value: CurveBlockTypes.EaseInQuad },
+            { label: "EaseOutQuad", value: CurveBlockTypes.EaseOutQuad },
+            { label: "EaseInOutQuad", value: CurveBlockTypes.EaseInOutQuad },
+            { label: "EaseInCubic", value: CurveBlockTypes.EaseInCubic },
+            { label: "EaseOutCubic", value: CurveBlockTypes.EaseOutCubic },
+            { label: "EaseInOutCubic", value: CurveBlockTypes.EaseInOutCubic },
+            { label: "EaseInQuart", value: CurveBlockTypes.EaseInQuart },
+            { label: "EaseOutQuart", value: CurveBlockTypes.EaseOutQuart },
+            { label: "EaseInOutQuart", value: CurveBlockTypes.EaseInOutQuart },
+            { label: "EaseInQuint", value: CurveBlockTypes.EaseInQuint },
+            { label: "EaseOutQuint", value: CurveBlockTypes.EaseOutQuint },
+            { label: "EaseInOutQuint", value: CurveBlockTypes.EaseInOutQuint },
+            { label: "EaseInExpo", value: CurveBlockTypes.EaseInExpo },
+            { label: "EaseOutExpo", value: CurveBlockTypes.EaseOutExpo },
+            { label: "EaseInOutExpo", value: CurveBlockTypes.EaseInOutExpo },
+            { label: "EaseInCirc", value: CurveBlockTypes.EaseInCirc },
+            { label: "EaseOutCirc", value: CurveBlockTypes.EaseOutCirc },
+            { label: "EaseInOutCirc", value: CurveBlockTypes.EaseInOutCirc },
+            { label: "EaseInBack", value: CurveBlockTypes.EaseInBack },
+            { label: "EaseOutBack", value: CurveBlockTypes.EaseOutBack },
+            { label: "EaseInOutBack", value: CurveBlockTypes.EaseInOutBack },
+            { label: "EaseInElastic", value: CurveBlockTypes.EaseInElastic },
+            { label: "EaseOutElastic", value: CurveBlockTypes.EaseOutElastic },
+            { label: "EaseInOutElastic", value: CurveBlockTypes.EaseInOutElastic },
+        ],
+    })
     public type = CurveBlockTypes.EaseInOutSine;
 
     /**
@@ -96,7 +131,7 @@ export class CurveBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "CurveBlock";
     }
 
@@ -122,13 +157,17 @@ export class CurveBlock extends NodeMaterialBlock {
         return `return ${entry.replace(/VAL/g, "v")}`;
     }
 
-    private _duplicateVector(entry: string, inputType: string) {
-        if (inputType === "float") {
+    private _duplicateVector(entry: string, inputType: string, isWGSL: boolean) {
+        if (inputType === "float" || inputType === "f32") {
             return this._duplicateEntryDirect(entry);
         }
 
         const size = parseInt(inputType.replace("vec", ""));
-        let code = `
+        let code = isWGSL
+            ? `
+            var ret: vec${size}f = vec${size}f(0.0);
+        `
+            : `
             vec${size} ret = vec${size}(0.0);
         `;
 
@@ -140,33 +179,17 @@ export class CurveBlock extends NodeMaterialBlock {
         return code;
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         const output = this._outputs[0];
         let registeredFunction = "";
         let registeredFunctionName = "";
 
-        let inputType = "";
+        const inputType = state._getShaderType(this.input.type);
+        const isWGSL = state.shaderLanguage === ShaderLanguage.WGSL;
 
-        switch (this.input.type) {
-            case NodeMaterialBlockConnectionPointTypes.Float:
-                inputType = "float";
-                break;
-            case NodeMaterialBlockConnectionPointTypes.Vector2:
-                inputType = "vec2";
-                break;
-            case NodeMaterialBlockConnectionPointTypes.Vector3:
-            case NodeMaterialBlockConnectionPointTypes.Color3:
-                inputType = "vec3";
-                break;
-            case NodeMaterialBlockConnectionPointTypes.Vector4:
-            case NodeMaterialBlockConnectionPointTypes.Color4:
-                inputType = "vec4";
-                break;
-        }
-
-        registeredFunctionName = CurveBlockTypes[this.type] + "_" + inputType;
+        registeredFunctionName = CurveBlockTypes[this.type] + "_" + inputType.replace("<", "").replace(">", "");
 
         switch (this.type) {
             case CurveBlockTypes.EaseInSine:
@@ -185,8 +208,8 @@ export class CurveBlock extends NodeMaterialBlock {
                 registeredFunction = `return (1.0 - v) * (1.0 - v)`;
                 break;
             case CurveBlockTypes.EaseInOutQuad: {
-                const entry = "VAL < 0.5 ? 2.0 * VAL * VAL : 1.0 - pow(-2.0 * VAL + 2.0, 2.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("2.0 * VAL * VAL", "1.0 - pow(-2.0 * VAL + 2.0, 2.0) / 2.0", "VAL < 0.5");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInCubic:
@@ -194,12 +217,12 @@ export class CurveBlock extends NodeMaterialBlock {
                 break;
             case CurveBlockTypes.EaseOutCubic: {
                 const entry = "1.0 - pow(1.0 - VAL, 3.0)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutCubic: {
-                const entry = "VAL < 0.5 ? 4.0 * VAL * VAL * VAL : 1.0 - pow(-2.0 * VAL + 2.0, 3.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("4.0 * VAL * VAL * VAL", "1.0 - pow(-2.0 * VAL + 2.0, 3.0) / 2.0", "VAL < 0.5");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInQuart:
@@ -207,12 +230,12 @@ export class CurveBlock extends NodeMaterialBlock {
                 break;
             case CurveBlockTypes.EaseOutQuart: {
                 const entry = "1.0 - pow(1.0 - VAL, 4.0)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutQuart: {
-                const entry = "VAL < 0.5 ? 8.0 * VAL * VAL * VAL * VAL : 1.0 - pow(-2.0 * VAL + 2.0, 4.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("8.0 * VAL * VAL * VAL * VAL", "1.0 - pow(-2.0 * VAL + 2.0, 4.0) / 2.0", "VAL < 0.5");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInQuint:
@@ -220,42 +243,50 @@ export class CurveBlock extends NodeMaterialBlock {
                 break;
             case CurveBlockTypes.EaseOutQuint: {
                 const entry = "1.0 - pow(1.0 - VAL, 5.0)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutQuint: {
-                const entry = "VAL < 0.5 ? 16.0 * VAL * VAL * VAL * VAL * VAL : 1.0 - pow(-2.0 * VAL + 2.0, 5.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("16.0 * VAL * VAL * VAL * VAL * VAL", "1.0 - pow(-2.0 * VAL + 2.0, 5.0) / 2.0", "VAL < 0.5");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInExpo: {
-                const entry = "VAL == 0.0 ? 0.0 : pow(2.0, 10.0 * VAL - 10.0)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("0.0", "pow(2.0, 10.0 * VAL - 10.0)", "VAL == 0.0");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseOutExpo: {
-                const entry = "VAL == 1.0 ? 1.0 : 1.0 - pow(2.0, -10.0 * VAL)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("1.0", "1.0 - pow(2.0, -10.0 * VAL)", "VAL == 1.0");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutExpo: {
-                const entry = "VAL == 0.0 ? 0.0 : VAL == 1.0 ? 1.0 : VAL < 0.5 ? pow(2.0, 20.0 * VAL - 10.0) / 2.0 : (2.0 - pow(2.0, -20.0 * VAL + 10.0)) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary(
+                    "0.0",
+                    state._generateTernary(
+                        "1.0",
+                        state._generateTernary("pow(2.0, 20.0 * VAL - 10.0) / 2.0", "(2.0 - pow(2.0, -20.0 * VAL + 10.0)) / 2.0", "VAL < 0.5"),
+                        "VAL == 1.0"
+                    ),
+                    "VAL == 0.0"
+                );
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInCirc: {
                 const entry = "1.0 - sqrt(1.0 - pow(VAL, 2.0))";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseOutCirc: {
                 const entry = "sqrt(1.0 - pow(VAL - 1.0, 2.0))";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutCirc: {
-                const entry = "VAL < 0.5 ? (1.0 - sqrt(1.0 - pow(2.0 * VAL, 2.0))) / 2.0 : (sqrt(1.0 - pow(-2.0 * VAL + 2.0, 2.0)) + 1.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary("(1.0 - sqrt(1.0 - pow(2.0 * VAL, 2.0))) / 2.0", "(sqrt(1.0 - pow(-2.0 * VAL + 2.0, 2.0)) + 1.0) / 2.0", "VAL < 0.5");
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInBack: {
@@ -264,41 +295,69 @@ export class CurveBlock extends NodeMaterialBlock {
             }
             case CurveBlockTypes.EaseOutBack: {
                 const entry = "2.70158 * pow(VAL - 1.0, 3.0) + 1.70158 * pow(VAL - 1.0, 2.0)";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutBack: {
-                const entry =
-                    "VAL < 0.5 ? (pow(2.0 * VAL, 2.0) * ((3.5949095) * 2.0 * VAL - 2.5949095)) / 2.0 : (pow(2.0 * VAL - 2.0, 2.0) * (3.5949095 * (VAL * 2.0 - 2.0) + 3.5949095) + 2.0) / 2.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary(
+                    "(pow(2.0 * VAL, 2.0) * ((3.5949095) * 2.0 * VAL - 2.5949095)) / 2.0",
+                    "(pow(2.0 * VAL - 2.0, 2.0) * (3.5949095 * (VAL * 2.0 - 2.0) + 3.5949095) + 2.0) / 2.0",
+                    "VAL < 0.5"
+                );
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInElastic: {
-                const entry = "VAL == 0.0 ? 0.0 : VAL == 1.0 ? 1.0 : -pow(2.0, 10.0 * VAL - 10.0) * sin((VAL * 10.0 - 10.75) * ((2.0 * 3.1415) / 3.0))";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary(
+                    "0.0",
+                    state._generateTernary("1.0", "-pow(2.0, 10.0 * VAL - 10.0) * sin((VAL * 10.0 - 10.75) * ((2.0 * 3.1415) / 3.0))", "VAL == 1.0"),
+                    "VAL == 0.0"
+                );
+
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseOutElastic: {
-                const entry = "VAL == 0.0 ? 0.0 : VAL == 1.0 ? 1.0 : pow(2.0, -10.0 * VAL) * sin((VAL * 10.0 - 0.75) * ((2.0 * 3.1415) / 3.0)) + 1.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary(
+                    "0.0",
+                    state._generateTernary("1.0", "pow(2.0, -10.0 * VAL) * sin((VAL * 10.0 - 0.75) * ((2.0 * 3.1415) / 3.0)) + 1.0", "VAL == 1.0"),
+                    "VAL == 0.0"
+                );
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
             case CurveBlockTypes.EaseInOutElastic: {
-                const entry =
-                    "VAL == 0.0 ? 0.0 : VAL == 1.0 ? 1.0 : VAL < 0.5 ? -(pow(2.0, 20.0 * VAL - 10.0) * sin((20.0 * VAL - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0 : (pow(2.0, -20.0 * VAL + 10.0) * sin((20.0 * VAL - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0 + 1.0";
-                registeredFunction = this._duplicateVector(entry, inputType);
+                const entry = state._generateTernary(
+                    "0.0",
+                    state._generateTernary(
+                        "1.0",
+                        state._generateTernary(
+                            "-(pow(2.0, 20.0 * VAL - 10.0) * sin((20.0 * VAL - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0",
+                            "(pow(2.0, -20.0 * VAL + 10.0) * sin((20.0 * VAL - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0 + 1.0",
+                            "VAL < 0.5"
+                        ),
+                        "VAL == 1.0"
+                    ),
+                    "VAL == 0.0"
+                );
+
+                registeredFunction = this._duplicateVector(entry, inputType, isWGSL);
                 break;
             }
         }
 
-        state._emitFunction(registeredFunctionName, `${inputType} ${registeredFunctionName}(${inputType} v) {${registeredFunction};}\n`, "");
+        if (isWGSL) {
+            state._emitFunction(registeredFunctionName, `fn ${registeredFunctionName}(v: ${inputType}) -> ${inputType}  {${registeredFunction};}\n`, "");
+        } else {
+            state._emitFunction(registeredFunctionName, `${inputType} ${registeredFunctionName}(${inputType} v) {${registeredFunction};}\n`, "");
+        }
 
-        state.compilationString += this._declareOutput(output, state) + ` = ${registeredFunctionName}(${this.input.associatedVariableName});\n`;
+        state.compilationString += state._declareOutput(output) + ` = ${registeredFunctionName}(${this.input.associatedVariableName});\n`;
 
         return this;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.curveType = this.type;
@@ -306,13 +365,13 @@ export class CurveBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         this.type = serializationObject.curveType;
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.type = BABYLON.CurveBlockTypes.${CurveBlockTypes[this.type]};\n`;
         return codeString;
     }

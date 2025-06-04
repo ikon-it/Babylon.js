@@ -10,6 +10,9 @@ import { Color3, Color4 } from "core/Maths/math.color";
 import type { Nullable } from "core/types";
 import type { SubMesh } from "core/Meshes/subMesh";
 
+import "core/Shaders/default.vertex";
+import "core/Shaders/default.fragment";
+
 /**
  * Structure of a custom shader
  */
@@ -281,7 +284,7 @@ export class CustomMaterial extends StandardMaterial {
     }
 
     constructor(name: string, scene?: Scene) {
-        super(name, scene);
+        super(name, scene, true);
         this.CustomParts = new ShaderSpecialParts();
         this.customShaderNameResolve = this.Builder;
 
@@ -292,7 +295,7 @@ export class CustomMaterial extends StandardMaterial {
         this._createdShaderName = "custom_" + CustomMaterial.ShaderIndexer;
     }
 
-    protected _afterBind(mesh?: Mesh, effect: Nullable<Effect> = null, subMesh?: SubMesh): void {
+    protected override _afterBind(mesh?: Mesh, effect: Nullable<Effect> = null, subMesh?: SubMesh): void {
         if (!effect) {
             return;
         }
@@ -311,8 +314,8 @@ export class CustomMaterial extends StandardMaterial {
      */
     public AddUniform(name: string, kind: string, param: any): CustomMaterial {
         if (!this._customUniform) {
-            this._customUniform = new Array();
-            this._newUniforms = new Array();
+            this._customUniform = [];
+            this._newUniforms = [];
             this._newSamplerInstances = {};
             this._newUniformInstances = {};
         }

@@ -3,8 +3,8 @@ import type { ImageSourceBlock } from "core/Materials/Node/Blocks/Dual/imageSour
 import { TextureLineComponent } from "../../sharedComponents/textureLineComponent";
 import type { IDisplayManager } from "shared-ui-components/nodeGraphSystem/interfaces/displayManager";
 import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
-import localStyles from "./imageSourceDisplayManager.modules.scss";
-import commonStyles from "./common.modules.scss";
+import * as localStyles from "./imageSourceDisplayManager.module.scss";
+import * as commonStyles from "./common.module.scss";
 
 export class ImageSourceDisplayManager implements IDisplayManager {
     private _previewCanvas: HTMLCanvasElement;
@@ -33,13 +33,14 @@ export class ImageSourceDisplayManager implements IDisplayManager {
             contentArea.classList.add(commonStyles["texture-block"]);
             contentArea.classList.add(localStyles["image-source-block"]);
 
-            this._previewCanvas = contentArea.ownerDocument!.createElement("canvas");
-            this._previewImage = contentArea.ownerDocument!.createElement("img");
+            this._previewCanvas = contentArea.ownerDocument.createElement("canvas");
+            this._previewImage = contentArea.ownerDocument.createElement("img");
             contentArea.appendChild(this._previewImage);
             this._previewImage.classList.add(commonStyles.empty);
         }
 
         if (imageSourceBlock.texture) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             TextureLineComponent.UpdatePreview(
                 this._previewCanvas,
                 imageSourceBlock.texture,

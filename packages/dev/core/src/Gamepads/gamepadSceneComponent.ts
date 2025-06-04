@@ -10,6 +10,7 @@ import { ArcRotateCameraInputsManager } from "../Cameras/arcRotateCameraInputsMa
 import { ArcRotateCameraGamepadInput } from "../Cameras/Inputs/arcRotateCameraGamepadInput";
 
 declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface Scene {
         /** @internal */
         _gamepadManager: Nullable<GamepadManager>;
@@ -43,6 +44,7 @@ declare module "../Cameras/freeCameraInputsManager" {
     /**
      * Interface representing a free camera inputs manager
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface FreeCameraInputsManager {
         /**
          * Adds gamepad input support to the FreeCameraInputsManager.
@@ -65,6 +67,7 @@ declare module "../Cameras/arcRotateCameraInputsManager" {
     /**
      * Interface representing an arc rotate camera inputs manager
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface ArcRotateCameraInputsManager {
         /**
          * Adds gamepad input support to the ArcRotateCamera InputManager.
@@ -109,7 +112,7 @@ export class GamepadSystemSceneComponent implements ISceneComponent {
      * Registers the component in a given scene
      */
     public register(): void {
-        this.scene._beforeCameraUpdateStage.registerStep(SceneComponentConstants.STEP_BEFORECAMERAUPDATE_GAMEPAD, this, this._beforeCameraUpdate);
+        // Nothing to do for gamepads
     }
 
     /**
@@ -128,14 +131,6 @@ export class GamepadSystemSceneComponent implements ISceneComponent {
         if (gamepadManager) {
             gamepadManager.dispose();
             this.scene._gamepadManager = null;
-        }
-    }
-
-    private _beforeCameraUpdate(): void {
-        const gamepadManager = this.scene._gamepadManager;
-
-        if (gamepadManager && gamepadManager._isMonitoring) {
-            gamepadManager._checkGamepadsStatus();
         }
     }
 }

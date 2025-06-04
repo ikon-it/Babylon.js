@@ -190,6 +190,9 @@ export interface INode extends GLTF2.INode, IArrayItem {
 
     /** @internal */
     _numMorphTargets?: number;
+
+    /** @internal */
+    _isJoint?: boolean;
 }
 
 /** @internal */
@@ -295,8 +298,17 @@ export interface IGLTF extends GLTF2.IGLTF {
 /**
  * Loader interface with additional members.
  */
+
+/** @internal */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export interface IKHRLightsPunctual_Light extends GLTF2.IKHRLightsPunctual_Light, IArrayItem {
+    /** @hidden */
+    _babylonLight?: Light;
+}
+
+/** @internal */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export interface IEXTLightsIES_Light extends GLTF2.IEXTLightsIES_Light, IArrayItem {
     /** @hidden */
     _babylonLight?: Light;
 }

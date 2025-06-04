@@ -30,7 +30,7 @@ export class GeometryModBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryModBlock";
     }
 
@@ -55,7 +55,7 @@ export class GeometryModBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         if (!this.left.isConnected || !this.right.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
@@ -72,16 +72,16 @@ export class GeometryModBlock extends NodeGeometryBlock {
             switch (this.left.type) {
                 case NodeGeometryBlockConnectionPointTypes.Int:
                 case NodeGeometryBlockConnectionPointTypes.Float: {
-                    return func!(left, right);
+                    return func(left, right);
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector2: {
-                    return new Vector2(func!(left.x, right.x), func!(left.y, right.y));
+                    return new Vector2(func(left.x, right.x), func(left.y, right.y));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector3: {
-                    return new Vector3(func!(left.x, right.x), func!(left.y, right.y), func!(left.z, right.z));
+                    return new Vector3(func(left.x, right.x), func(left.y, right.y), func(left.z, right.z));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector4: {
-                    return new Vector4(func!(left.x, right.x), func!(left.y, right.y), func!(left.z, right.z), func!(left.w, right.w));
+                    return new Vector4(func(left.x, right.x), func(left.y, right.y), func(left.z, right.z), func(left.w, right.w));
                 }
             }
 

@@ -1,13 +1,13 @@
-import type { ThinEngine } from "../Engines/thinEngine";
 import type { DataBuffer } from "../Buffers/dataBuffer";
 import type { DataArray } from "../types";
+import type { WebGPUEngine } from "core/Engines/webgpuEngine";
 import { Constants } from "../Engines/constants";
 
 /**
  * This class is a small wrapper around a native buffer that can be read and/or written
  */
 export class StorageBuffer {
-    private _engine: ThinEngine;
+    private _engine: WebGPUEngine;
     private _buffer: DataBuffer;
     private _bufferSize: number;
     private _creationFlags: number;
@@ -20,7 +20,7 @@ export class StorageBuffer {
      * @param creationFlags flags to use when creating the buffer (see Constants.BUFFER_CREATIONFLAG_XXX). The BUFFER_CREATIONFLAG_STORAGE flag will be automatically added.
      * @param label defines the label of the buffer (for debug purpose)
      */
-    constructor(engine: ThinEngine, size: number, creationFlags = Constants.BUFFER_CREATIONFLAG_READWRITE, label?: string) {
+    constructor(engine: WebGPUEngine, size: number, creationFlags = Constants.BUFFER_CREATIONFLAG_READWRITE, label?: string) {
         this._engine = engine;
         this._label = label;
         this._engine._storageBuffers.push(this);
@@ -68,8 +68,9 @@ export class StorageBuffer {
      * @param noDelay If true, a call to flushFramebuffer will be issued so that the data can be read back immediately. This can speed up data retrieval, at the cost of a small perf penalty (default: false).
      * @returns If not undefined, returns the (promise) buffer (as provided by the 4th parameter) filled with the data, else it returns a (promise) Uint8Array with the data read from the storage buffer
      */
-    public read(offset?: number, size?: number, buffer?: ArrayBufferView, noDelay?: boolean): Promise<ArrayBufferView> {
-        return this._engine.readFromStorageBuffer(this._buffer, offset, size, buffer, noDelay);
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public async read(offset?: number, size?: number, buffer?: ArrayBufferView, noDelay?: boolean): Promise<ArrayBufferView> {
+        return await this._engine.readFromStorageBuffer(this._buffer, offset, size, buffer, noDelay);
     }
 
     /**

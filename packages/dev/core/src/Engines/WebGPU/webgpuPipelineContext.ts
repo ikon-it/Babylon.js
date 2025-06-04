@@ -8,6 +8,7 @@ import type { WebGPUShaderProcessingContext } from "./webgpuShaderProcessingCont
 import { UniformBuffer } from "../../Materials/uniformBuffer";
 import type { IMatrixLike, IVector2Like, IVector3Like, IVector4Like, IColor3Like, IColor4Like, IQuaternionLike } from "../../Maths/math.like";
 import { WebGPUShaderProcessor } from "./webgpuShaderProcessor";
+import type { AbstractEngine } from "../abstractEngine";
 
 /** @internal */
 export interface IWebGPURenderPipelineStageDescriptor {
@@ -46,6 +47,7 @@ export class WebGPUPipelineContext implements IPipelineContext {
     // Default implementation.
     public onCompiled?: () => void;
 
+    // eslint-disable-next-line no-restricted-syntax
     public get isAsync() {
         return false;
     }
@@ -133,6 +135,7 @@ export class WebGPUPipelineContext implements IPipelineContext {
             return;
         }
 
+        this.uniformBuffer?.dispose();
         this.uniformBuffer = new UniformBuffer(this.engine, undefined, undefined, "leftOver-" + this._name);
 
         for (const leftOverUniform of this.shaderProcessingContext.leftOverUniforms) {
@@ -143,6 +146,10 @@ export class WebGPUPipelineContext implements IPipelineContext {
         }
 
         this.uniformBuffer.create();
+    }
+
+    public setEngine(engine: AbstractEngine): void {
+        this.engine = engine as WebGPUEngine;
     }
 
     /**

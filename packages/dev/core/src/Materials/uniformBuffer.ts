@@ -4,11 +4,9 @@ import type { IMatrixLike, IVector3Like, IVector4Like, IColor3Like, IColor4Like 
 import type { Effect } from "./effect";
 import type { ThinTexture } from "../Materials/Textures/thinTexture";
 import type { DataBuffer } from "../Buffers/dataBuffer";
-import type { ThinEngine } from "../Engines/thinEngine";
 import type { InternalTexture } from "./Textures/internalTexture";
 import { Tools } from "../Misc/tools";
-
-import "../Engines/Extensions/engine.uniformBuffer";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 
 /**
  * Uniform buffer objects.
@@ -24,7 +22,7 @@ export class UniformBuffer {
     /** @internal */
     public static _UpdatedUbosInFrame: { [name: string]: number } = {};
 
-    private _engine: ThinEngine;
+    private _engine: AbstractEngine;
     private _buffer: Nullable<DataBuffer>;
     private _buffers: Array<[DataBuffer, Float32Array | undefined]>;
     private _bufferIndex: number;
@@ -239,7 +237,7 @@ export class UniformBuffer {
      * @param name to assign to the buffer (debugging purpose)
      * @param forceNoUniformBuffer define that this object must not rely on UBO objects
      */
-    constructor(engine: ThinEngine, data?: number[], dynamic?: boolean, name?: string, forceNoUniformBuffer = false) {
+    constructor(engine: AbstractEngine, data?: number[], dynamic?: boolean, name?: string, forceNoUniformBuffer = false) {
         this._engine = engine;
         this._noUBO = !engine.supportsUniformBuffers || forceNoUniformBuffer;
         this._dynamic = dynamic;
@@ -438,7 +436,6 @@ export class UniformBuffer {
                 data = size;
                 size = data.length;
             } else {
-                size = <number>size;
                 data = [];
 
                 // Fill with zeros
@@ -446,12 +443,12 @@ export class UniformBuffer {
                     data.push(0);
                 }
             }
-            this._fillAlignment(<number>size);
+            this._fillAlignment(size);
         }
 
-        this._uniformSizes[name] = <number>size;
+        this._uniformSizes[name] = size;
         this._uniformLocations[name] = this._uniformLocationPointer;
-        this._uniformLocationPointer += <number>size;
+        this._uniformLocationPointer += size;
 
         for (let i = 0; i < size; i++) {
             this._data.push(data[i]);
@@ -466,7 +463,7 @@ export class UniformBuffer {
      * @param mat A 4x4 matrix.
      */
     public addMatrix(name: string, mat: IMatrixLike) {
-        this.addUniform(name, Array.prototype.slice.call(mat.toArray()));
+        this.addUniform(name, Array.prototype.slice.call(mat.asArray()));
     }
 
     /**
@@ -941,7 +938,7 @@ export class UniformBuffer {
 
     private _updateMatrixForUniform(name: string, mat: IMatrixLike) {
         if (this._cacheMatrix(name, mat)) {
-            this.updateUniform(name, <any>mat.toArray(), 16);
+            this.updateUniform(name, <any>mat.asArray(), 16);
         }
     }
 
@@ -1105,6 +1102,14 @@ export class UniformBuffer {
     }
 
     /**
+     * Sets an array of sampler uniforms on the effect.
+     * @param name Define the name of uniform.
+     * @param textures Define the textures to set in the array of samplers
+     */
+    public setTextureArray(name: string, textures: ThinTexture[]) {
+        this._currentEffect.setTextureArray(name, textures);
+    }
+    /**
      * Sets a sampler uniform on the effect.
      * @param name Define the name of the sampler.
      * @param texture Define the (internal) texture to set in the sampler
@@ -1169,6 +1174,13 @@ export class UniformBuffer {
                 this._buffer = dataBuffer;
                 this._createBufferOnWrite = false;
                 this._currentEffect = undefined as any;
+                if (this._buffers[b][1]) {
+                    this._bufferData.set(this._buffers[b][1]!);
+                }
+                this._valueCache = {};
+                // The following line prevents the current buffer (_buffer / _bufferIndex) from being updated during subsequent calls to updateXXX() due to a call to _checkNewFrame()
+                // If we called setDataBuffer, it means that we want to update the buffer we just defined and not another one (_checkNewFrame() can modify the current buffer).
+                this._currentFrameId = this._engine.frameId;
                 return true;
             }
         }
@@ -1195,7 +1207,7 @@ export class UniformBuffer {
         if (this._engine._features.trackUbosInFrame && this._buffers) {
             for (let i = 0; i < this._buffers.length; ++i) {
                 const buffer = this._buffers[i][0];
-                this._engine._releaseBuffer(buffer!);
+                this._engine._releaseBuffer(buffer);
             }
         } else if (this._buffer && this._engine._releaseBuffer(this._buffer)) {
             this._buffer = null;

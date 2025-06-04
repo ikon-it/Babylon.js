@@ -1,7 +1,6 @@
 import type { Nullable } from "../types";
 import { Vector3, Quaternion, TmpVectors } from "../Maths/math.vector";
 import { Color3 } from "../Maths/math.color";
-import { AbstractMesh } from "../Meshes/abstractMesh";
 import { Mesh } from "../Meshes/mesh";
 import type { IGizmo } from "./gizmo";
 import { Gizmo } from "./gizmo";
@@ -57,7 +56,7 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
      */
     constructor(gizmoLayer: UtilityLayerRenderer = UtilityLayerRenderer.DefaultUtilityLayer) {
         super(gizmoLayer);
-        this.attachedMesh = new AbstractMesh("", this.gizmoLayer.utilityLayerScene);
+        this.attachedMesh = new Mesh("", this.gizmoLayer.utilityLayerScene);
         this._attachedMeshParent = new TransformNode("parent", this.gizmoLayer.utilityLayerScene);
 
         this.attachedMesh.parent = this._attachedMeshParent;
@@ -83,10 +82,10 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
      * It will return the attached mesh (if any) and setting an attached node will log
      * a warning
      */
-    public get attachedNode() {
+    public override get attachedNode() {
         return this.attachedMesh;
     }
-    public set attachedNode(value: Nullable<Node>) {
+    public override set attachedNode(value: Nullable<Node>) {
         Logger.Warn("Nodes cannot be attached to LightGizmo. Attach to a mesh instead.");
     }
 
@@ -110,9 +109,10 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
             } else {
                 this._lightMesh = LightGizmo._CreatePointLightMesh(this.gizmoLayer.utilityLayerScene);
             }
-            this._lightMesh.getChildMeshes(false).forEach((m) => {
+            const children = this._lightMesh.getChildMeshes(false);
+            for (const m of children) {
                 m.material = this._material;
-            });
+            }
             this._lightMesh.parent = this._rootMesh;
 
             // Add lighting to the light gizmo
@@ -174,7 +174,7 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
      * @internal
      * Updates the gizmo to match the attached mesh's position/rotation
      */
-    protected _update() {
+    protected override _update() {
         super._update();
         if (!this._light) {
             return;
@@ -255,7 +255,7 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
             return linePivot;
         }
         for (let i = 0; i < 4; i++) {
-            const l = linePivot.clone("lineParentClone")!;
+            const l = linePivot.clone("lineParentClone");
             l.rotation.z = Math.PI / 4;
             l.rotation.y = Math.PI / 2 + (Math.PI / 2) * i;
 
@@ -298,7 +298,7 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
     /**
      * Disposes of the light gizmo
      */
-    public dispose() {
+    public override dispose() {
         this.onClickedObservable.clear();
         this.gizmoLayer.utilityLayerScene.onPointerObservable.remove(this._pointerObserver);
         this._material.dispose();
@@ -375,11 +375,11 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
         );
         line.parent = mesh;
 
-        let left = line.clone(root.name)!;
+        let left = line.clone(root.name);
         left.scaling.y = 0.5;
         left.position.x += 1.25;
 
-        let right = line.clone(root.name)!;
+        let right = line.clone(root.name);
         right.scaling.y = 0.5;
         right.position.x += -1.25;
 

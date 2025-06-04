@@ -1,14 +1,14 @@
 import type { PostProcessOptions } from "./postProcess";
 import { PostProcess } from "./postProcess";
 import type { Nullable } from "../types";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Effect } from "../Materials/effect";
 import type { Camera } from "../Cameras/camera";
 import { Constants } from "../Engines/constants";
 
-import "../Shaders/bloomMerge.fragment";
 import { RegisterClass } from "../Misc/typeStore";
 import { serialize } from "../Misc/decorators";
+import { ThinBloomMergePostProcess } from "./thinBloomMergePostProcess";
 
 /**
  * The BloomMergePostProcess merges blurred images with the original based on the values of the circle of confusion.
@@ -16,15 +16,23 @@ import { serialize } from "../Misc/decorators";
 export class BloomMergePostProcess extends PostProcess {
     /** Weight of the bloom to be added to the original input. */
     @serialize()
-    public weight = 1;
+    public get weight() {
+        return this._effectWrapper.weight;
+    }
+
+    public set weight(value: number) {
+        this._effectWrapper.weight = value;
+    }
 
     /**
      * Gets a string identifying the name of the class
      * @returns "BloomMergePostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "BloomMergePostProcess";
     }
+
+    protected override _effectWrapper: ThinBloomMergePostProcess;
 
     /**
      * Creates a new instance of @see BloomMergePostProcess
@@ -44,26 +52,42 @@ export class BloomMergePostProcess extends PostProcess {
         name: string,
         originalFromInput: PostProcess,
         blurred: PostProcess,
-        /** Weight of the bloom to be added to the original input. */
         weight: number,
         options: number | PostProcessOptions,
-        camera: Nullable<Camera>,
+        camera: Nullable<Camera> = null,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         blockCompilation = false
     ) {
-        super(name, "bloomMerge", ["bloomWeight"], ["bloomBlur"], options, camera, samplingMode, engine, reusable, null, textureType, undefined, null, true);
+        const blockCompilationFinal = typeof options === "number" ? blockCompilation : !!options.blockCompilation;
+        const localOptions = {
+            uniforms: ThinBloomMergePostProcess.Uniforms,
+            samplers: ThinBloomMergePostProcess.Samplers,
+            size: typeof options === "number" ? options : undefined,
+            camera,
+            samplingMode,
+            engine,
+            reusable,
+            textureType,
+            ...(options as PostProcessOptions),
+            blockCompilation: true,
+        };
+
+        super(name, ThinBloomMergePostProcess.FragmentUrl, {
+            effectWrapper: typeof options === "number" || !options.effectWrapper ? new ThinBloomMergePostProcess(name, engine, localOptions) : undefined,
+            ...localOptions,
+        });
+
         this.weight = weight;
         this.externalTextureSamplerBinding = true;
         this.onApplyObservable.add((effect: Effect) => {
             effect.setTextureFromPostProcess("textureSampler", originalFromInput);
             effect.setTextureFromPostProcessOutput("bloomBlur", blurred);
-            effect.setFloat("bloomWeight", this.weight);
         });
 
-        if (!blockCompilation) {
+        if (!blockCompilationFinal) {
             this.updateEffect();
         }
     }

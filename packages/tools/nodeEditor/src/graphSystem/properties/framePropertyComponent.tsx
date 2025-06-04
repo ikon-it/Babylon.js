@@ -1,5 +1,5 @@
 import * as React from "react";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import type { GlobalState } from "../../globalState";
 import type { Nullable } from "core/types";
 import type { Observer } from "core/Misc/observable";
@@ -23,25 +23,25 @@ export class FramePropertyTabComponent extends React.Component<IFramePropertyTab
         super(props);
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         this._onFrameExpandStateChangedObserver = this.props.frame.onExpandStateChanged.add(() => this.forceUpdate());
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onFrameExpandStateChangedObserver) {
             this.props.frame.onExpandStateChanged.remove(this._onFrameExpandStateChangedObserver);
             this._onFrameExpandStateChangedObserver = null;
         }
     }
 
-    render() {
+    override render() {
         let configurableInputBlocks: InputBlock[] = [];
-        this.props.frame.nodes.forEach((node) => {
+        for (const node of this.props.frame.nodes) {
             const block = node.content.data as NodeMaterialBlock;
             if (block.isInput && block.visibleOnFrame) {
                 configurableInputBlocks.push(block as InputBlock);
             }
-        });
+        }
 
         configurableInputBlocks = configurableInputBlocks.sort((a, b) => {
             return a.name.localeCompare(b.name);
@@ -62,7 +62,7 @@ export class FramePropertyTabComponent extends React.Component<IFramePropertyTab
                             <ButtonLineComponent
                                 label="Collapse"
                                 onClick={() => {
-                                    this.props.frame!.isCollapsed = true;
+                                    this.props.frame.isCollapsed = true;
                                 }}
                             />
                         )}
@@ -70,14 +70,14 @@ export class FramePropertyTabComponent extends React.Component<IFramePropertyTab
                             <ButtonLineComponent
                                 label="Expand"
                                 onClick={() => {
-                                    this.props.frame!.isCollapsed = false;
+                                    this.props.frame.isCollapsed = false;
                                 }}
                             />
                         )}
                         <ButtonLineComponent
                             label="Export"
                             onClick={() => {
-                                this.props.frame!.export();
+                                this.props.frame.export();
                             }}
                         />
                     </LineContainerComponent>

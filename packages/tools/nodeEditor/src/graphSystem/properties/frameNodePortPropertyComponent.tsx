@@ -1,5 +1,5 @@
 import * as React from "react";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import type { GlobalState } from "../../globalState";
 import type { Nullable } from "core/types";
 import type { Observer } from "core/Misc/observable";
@@ -46,12 +46,12 @@ export class FrameNodePortPropertyTabComponent extends React.Component<IFrameNod
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.frameNodePort.onFramePortPositionChangedObservable.remove(this._onFramePortPositionChangedObserver);
         this.props.stateManager.onSelectionChangedObservable.remove(this._onSelectionChangedObserver);
     }
 
-    render() {
+    override render() {
         return (
             <div id="propertyTab">
                 <div id="header">

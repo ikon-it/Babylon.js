@@ -50,7 +50,7 @@ export interface IGetSetVerticesData {
      * @param updatable defines if the vertex must be flagged as updatable (false as default)
      * @param stride defines the stride to use (0 by default). This value is deduced from the kind value if not specified
      */
-    setVerticesData(kind: string, data: FloatArray, updatable: boolean): void;
+    setVerticesData(kind: string, data: FloatArray, updatable: boolean, stride?: number): void;
     /**
      * Update a specific associated vertex buffer
      * @param kind defines which buffer to write to (positions, indices, normals, etc). Possible `kind` values :
@@ -95,9 +95,89 @@ export class VertexDataMaterialInfo {
 }
 
 /**
+ * Interface used to define a object like a vertex data structure
+ */
+export interface IVertexDataLike {
+    /**
+     * An array of the x, y, z position of each vertex  [...., x, y, z, .....]
+     */
+    positions: Nullable<FloatArray>;
+
+    /**
+     * An array of the x, y, z normal vector of each vertex  [...., x, y, z, .....]
+     */
+    normals?: Nullable<FloatArray>;
+
+    /**
+     * An array of the x, y, z tangent vector of each vertex  [...., x, y, z, .....]
+     */
+    tangents?: Nullable<FloatArray>;
+
+    /**
+     * An array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs?: Nullable<FloatArray>;
+
+    /**
+     * A second array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs2?: Nullable<FloatArray>;
+
+    /**
+     * A third array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs3?: Nullable<FloatArray>;
+
+    /**
+     * A fourth array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs4?: Nullable<FloatArray>;
+
+    /**
+     * A fifth array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs5?: Nullable<FloatArray>;
+
+    /**
+     * A sixth array of u,v which maps a texture image onto each vertex  [...., u, v, .....]
+     */
+    uvs6?: Nullable<FloatArray>;
+
+    /**
+     * An array of the r, g, b, a, color of each vertex  [...., r, g, b, a, .....]
+     */
+    colors?: Nullable<FloatArray>;
+
+    /**
+     * An array containing the list of indices to the array of matrices produced by bones, each vertex have up to 4 indices (8 if the matricesIndicesExtra is set).
+     */
+    matricesIndices?: Nullable<FloatArray>;
+
+    /**
+     * An array containing the list of weights defining the weight of each indexed matrix in the final computation
+     */
+    matricesWeights?: Nullable<FloatArray>;
+
+    /**
+     * An array extending the number of possible indices
+     */
+    matricesIndicesExtra?: Nullable<FloatArray>;
+
+    /**
+     * An array extending the number of possible weights when the number of indices is extended
+     */
+    matricesWeightsExtra?: Nullable<FloatArray>;
+
+    /**
+     * An array of i, j, k the three vertex indices required for each triangular facet  [...., i, j, k .....]
+     */
+    indices?: Nullable<IndicesArray>;
+}
+
+/**
  * This class contains the various kinds of data on every vertex of a mesh used in determining its shape and appearance
  */
-export class VertexData {
+export class VertexData implements IVertexDataLike {
     /**
      * Mesh side orientation : usually the external or front surface
      */
@@ -115,7 +195,7 @@ export class VertexData {
      */
     public static readonly DEFAULTSIDE = 0;
 
-    private static _UniqueIDGenerator = 0;
+    private static _UniqueIdGenerator = 0;
 
     /**
      * An array of the x, y, z position of each vertex  [...., x, y, z, .....]
@@ -208,11 +288,16 @@ export class VertexData {
     public metadata: any = {};
 
     /**
+     * Gets or sets a value indicating that the mesh must be flagged with hasVertexAlpha = true
+     */
+    public hasVertexAlpha: boolean;
+
+    /**
      * Creates a new VertexData
      */
     public constructor() {
-        this.uniqueId = VertexData._UniqueIDGenerator;
-        VertexData._UniqueIDGenerator++;
+        this.uniqueId = VertexData._UniqueIdGenerator;
+        VertexData._UniqueIdGenerator++;
     }
 
     /**
@@ -385,7 +470,12 @@ export class VertexData {
         }
 
         if (this.colors) {
-            meshOrGeometry.setVerticesData(VertexBuffer.ColorKind, this.colors, updatable);
+            const stride = this.positions && this.colors.length === this.positions.length ? 3 : 4;
+            meshOrGeometry.setVerticesData(VertexBuffer.ColorKind, this.colors, updatable, stride);
+            if (this.hasVertexAlpha && (meshOrGeometry as any).hasVertexAlpha !== undefined) {
+                (meshOrGeometry as any).hasVertexAlpha = true;
+            }
+
             if (isAsync) {
                 yield;
             }
@@ -581,6 +671,7 @@ export class VertexData {
      * Generates an array of vertex data where each vertex data only has one material info
      * @returns An array of VertexData
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public splitBasedOnMaterialID() {
         if (!this.materialInfos || this.materialInfos.length < 2) {
             return [this];
@@ -1073,6 +1164,9 @@ export class VertexData {
                 transform,
                 vertexDatas.map((other) => [other.vertexData.colors, other.transform])
             );
+            if (root.hasVertexAlpha !== undefined || vertexDatas.some((other) => other.vertexData.hasVertexAlpha !== undefined)) {
+                this.hasVertexAlpha = root.hasVertexAlpha || vertexDatas.some((other) => other.vertexData.hasVertexAlpha);
+            }
             if (isAsync) {
                 yield;
             }
@@ -1301,11 +1395,12 @@ export class VertexData {
 
         if (this.colors) {
             serializationObject.colors = Array.from(this.colors);
+            serializationObject.hasVertexAlpha = this.hasVertexAlpha;
         }
 
         if (this.matricesIndices) {
             serializationObject.matricesIndices = Array.from(this.matricesIndices);
-            serializationObject.matricesIndices._isExpanded = true;
+            serializationObject.matricesIndicesExpanded = true;
         }
 
         if (this.matricesWeights) {
@@ -1314,14 +1409,14 @@ export class VertexData {
 
         if (this.matricesIndicesExtra) {
             serializationObject.matricesIndicesExtra = Array.from(this.matricesIndicesExtra);
-            serializationObject.matricesIndicesExtra._isExpanded = true;
+            serializationObject.matricesIndicesExtraExpanded = true;
         }
 
         if (this.matricesWeightsExtra) {
             serializationObject.matricesWeightsExtra = Array.from(this.matricesWeightsExtra);
         }
 
-        serializationObject.indices = Array.from(this.indices as number[]);
+        serializationObject.indices = this.indices ? Array.from(this.indices as number[]) : [];
 
         if (this.materialInfos) {
             serializationObject.materialInfos = [];
@@ -1403,7 +1498,23 @@ export class VertexData {
         }
 
         if (meshOrGeometry.isVerticesDataPresent(VertexBuffer.ColorKind)) {
-            result.colors = meshOrGeometry.getVerticesData(VertexBuffer.ColorKind, copyWhenShared, forceCopy);
+            const geometry = (meshOrGeometry as Mesh).geometry || (meshOrGeometry as Geometry);
+            const vertexBuffer = geometry.getVertexBuffer(VertexBuffer.ColorKind)!;
+            const colors = geometry.getVerticesData(VertexBuffer.ColorKind, copyWhenShared, forceCopy)!;
+            if (vertexBuffer.getSize() === 3) {
+                const newColors = new Float32Array((colors.length * 4) / 3);
+                for (let i = 0, j = 0; i < colors.length; i += 3, j += 4) {
+                    newColors[j] = colors[i];
+                    newColors[j + 1] = colors[i + 1];
+                    newColors[j + 2] = colors[i + 2];
+                    newColors[j + 3] = 1;
+                }
+                result.colors = newColors;
+            } else if (vertexBuffer.getSize() === 4) {
+                result.colors = colors;
+            } else {
+                throw new Error(`Unexpected number of color components: ${vertexBuffer.getSize()}`);
+            }
         }
 
         if (meshOrGeometry.isVerticesDataPresent(VertexBuffer.MatricesIndicesKind)) {
@@ -2071,26 +2182,26 @@ export class VertexData {
                 const b3y = Math.floor((positions[v3y] - options.bInfo.minimum.y * ratio) * ySubRatio);
                 const b3z = Math.floor((positions[v3z] - options.bInfo.minimum.z * ratio) * zSubRatio);
 
-                const block_idx_v1 = b1x + options.subDiv.max * b1y + subSq * b1z;
-                const block_idx_v2 = b2x + options.subDiv.max * b2y + subSq * b2z;
-                const block_idx_v3 = b3x + options.subDiv.max * b3y + subSq * b3z;
-                const block_idx_o = ox + options.subDiv.max * oy + subSq * oz;
+                const blockIdxV1 = b1x + options.subDiv.max * b1y + subSq * b1z;
+                const blockIdxV2 = b2x + options.subDiv.max * b2y + subSq * b2z;
+                const blockIdxV3 = b3x + options.subDiv.max * b3y + subSq * b3z;
+                const blockIdxV4 = ox + options.subDiv.max * oy + subSq * oz;
 
-                options.facetPartitioning[block_idx_o] = options.facetPartitioning[block_idx_o] ? options.facetPartitioning[block_idx_o] : new Array();
-                options.facetPartitioning[block_idx_v1] = options.facetPartitioning[block_idx_v1] ? options.facetPartitioning[block_idx_v1] : new Array();
-                options.facetPartitioning[block_idx_v2] = options.facetPartitioning[block_idx_v2] ? options.facetPartitioning[block_idx_v2] : new Array();
-                options.facetPartitioning[block_idx_v3] = options.facetPartitioning[block_idx_v3] ? options.facetPartitioning[block_idx_v3] : new Array();
+                options.facetPartitioning[blockIdxV4] = options.facetPartitioning[blockIdxV4] ? options.facetPartitioning[blockIdxV4] : [];
+                options.facetPartitioning[blockIdxV1] = options.facetPartitioning[blockIdxV1] ? options.facetPartitioning[blockIdxV1] : [];
+                options.facetPartitioning[blockIdxV2] = options.facetPartitioning[blockIdxV2] ? options.facetPartitioning[blockIdxV2] : [];
+                options.facetPartitioning[blockIdxV3] = options.facetPartitioning[blockIdxV3] ? options.facetPartitioning[blockIdxV3] : [];
 
                 // push each facet index in each block containing the vertex
-                options.facetPartitioning[block_idx_v1].push(index);
-                if (block_idx_v2 != block_idx_v1) {
-                    options.facetPartitioning[block_idx_v2].push(index);
+                options.facetPartitioning[blockIdxV1].push(index);
+                if (blockIdxV2 != blockIdxV1) {
+                    options.facetPartitioning[blockIdxV2].push(index);
                 }
-                if (!(block_idx_v3 == block_idx_v2 || block_idx_v3 == block_idx_v1)) {
-                    options.facetPartitioning[block_idx_v3].push(index);
+                if (!(blockIdxV3 == blockIdxV2 || blockIdxV3 == blockIdxV1)) {
+                    options.facetPartitioning[blockIdxV3].push(index);
                 }
-                if (!(block_idx_o == block_idx_v1 || block_idx_o == block_idx_v2 || block_idx_o == block_idx_v3)) {
-                    options.facetPartitioning[block_idx_o].push(index);
+                if (!(blockIdxV4 == blockIdxV1 || blockIdxV4 == blockIdxV2 || blockIdxV4 == blockIdxV3)) {
+                    options.facetPartitioning[blockIdxV4].push(index);
                 }
             }
 
@@ -2270,6 +2381,9 @@ export class VertexData {
         const colors = parsedVertexData.colors;
         if (colors) {
             vertexData.set(Color4.CheckColors4(colors, positions.length / 3), VertexBuffer.ColorKind);
+            if (parsedVertexData.hasVertexAlpha !== undefined) {
+                vertexData.hasVertexAlpha = parsedVertexData.hasVertexAlpha;
+            }
         }
 
         // matricesIndices

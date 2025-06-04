@@ -1,9 +1,9 @@
 import * as React from "react";
 import { GeneralPropertyTabComponent } from "./genericNodePropertyComponent";
 import type { IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import type { GeometryTextureBlock } from "core/Meshes/Node/Blocks/Textures/geometryTextureBlock";
-import { FileButtonLineComponent } from "../../sharedComponents/fileButtonLineComponent";
+import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { CheckBoxLineComponent } from "../../sharedComponents/checkBoxLineComponent";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 
@@ -12,6 +12,7 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
         super(props);
     }
 
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     async loadTextureData(file: File) {
         const block = this.props.nodeData.data as GeometryTextureBlock;
         await block.loadTextureFromFileAsync(file);
@@ -27,14 +28,14 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
         this.props.stateManager.onRebuildRequiredObservable.notifyObservers();
     }
 
-    render() {
+    override render() {
         const block = this.props.nodeData.data as GeometryTextureBlock;
 
         return (
             <div>
                 <GeneralPropertyTabComponent stateManager={this.props.stateManager} nodeData={this.props.nodeData} />
                 <LineContainerComponent title="PROPERTIES">
-                    <FileButtonLineComponent label="Load" onClick={(file) => this.loadTextureData(file)} accept=".jpg, .png" />
+                    <FileButtonLine label="Load" onClick={async (file) => await this.loadTextureData(file)} accept=".jpg, .png, .tga, .exr" />
                     {block.textureData && <ButtonLineComponent label="Remove" onClick={() => this.removeData()} />}
                 </LineContainerComponent>
                 <LineContainerComponent title="ADVANCED">

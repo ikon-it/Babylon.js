@@ -5,7 +5,7 @@ import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineCo
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
-import copyIcon from "shared-ui-components/lines/copy.svg";
+import copyIcon from "shared-ui-components/imgs/copy.svg";
 
 import "./metadataPropertyGrid.scss";
 import { Logger } from "core/Misc/logger";
@@ -57,7 +57,7 @@ export class MetadataGridComponent extends React.Component<
     }
 
     /** @ignorenaming */
-    componentDidMount() {
+    override componentDidMount() {
         if (this.props.globalState) {
             this.refreshSelected();
         }
@@ -66,9 +66,9 @@ export class MetadataGridComponent extends React.Component<
     /**
      * @param prevProps - previous component props
      */
-    componentDidUpdate(prevProps: Readonly<IMetadataComponentProps>): void {
+    override componentDidUpdate(prevProps: Readonly<IMetadataComponentProps>): void {
         if (this.props.entity) {
-            if (!prevProps.entity || prevProps.entity.id !== this.props.entity.id) {
+            if (prevProps.entity !== this.props.entity) {
                 this.refreshSelected();
             }
         }
@@ -135,9 +135,15 @@ export class MetadataGridComponent extends React.Component<
     getEntityType(entity: any): MetadataTypes {
         if (Object.prototype.hasOwnProperty.call(entity, "metadata")) {
             const meta = entity.metadata;
-            if (this.isString(meta)) return MetadataTypes.STRING;
-            if (meta === null) return MetadataTypes.NULL;
-            if (!this.objectCanSafelyStringify(meta)) return MetadataTypes.OBJECT;
+            if (this.isString(meta)) {
+                return MetadataTypes.STRING;
+            }
+            if (meta === null) {
+                return MetadataTypes.NULL;
+            }
+            if (!this.objectCanSafelyStringify(meta)) {
+                return MetadataTypes.OBJECT;
+            }
             return MetadataTypes.JSON;
         }
         return MetadataTypes.UNDEFINED;
@@ -155,8 +161,10 @@ export class MetadataGridComponent extends React.Component<
      * @param object - any object
      * @returns is parsable
      */
-    parsableJson(object: Object): boolean {
-        if (!object) return false;
+    parsableJson(object: object): boolean {
+        if (!object) {
+            return false;
+        }
         try {
             return !!JSON.parse(JSON.stringify(object));
         } catch (error) {
@@ -184,8 +192,12 @@ export class MetadataGridComponent extends React.Component<
      * @returns parsed metadata
      */
     parseMetaObject(validJson: boolean, metadata: any) {
-        if (validJson) return JSON.stringify(metadata, undefined, this.state.prettyJson ? 2 : undefined);
-        if (this.isString(metadata)) return metadata;
+        if (validJson) {
+            return JSON.stringify(metadata, undefined, this.state.prettyJson ? 2 : undefined);
+        }
+        if (this.isString(metadata)) {
+            return metadata;
+        }
         return String(metadata);
     }
 
@@ -194,12 +206,18 @@ export class MetadataGridComponent extends React.Component<
      * @param o Any Object, String or number
      * @returns Boolean
      */
-    objectCanSafelyStringify(o: Object | string | number): boolean {
-        if (typeof o === "function") return false;
-        if (o === null || o === true || o === false || typeof o === "number" || this.isString(o)) return true;
+    objectCanSafelyStringify(o: object | string | number | boolean): boolean {
+        if (typeof o === "function") {
+            return false;
+        }
+        if (o === null || o === true || o === false || typeof o === "number" || this.isString(o)) {
+            return true;
+        }
 
         if (typeof o === "object") {
-            if (Object.values(o).length === 0) return true;
+            if (Object.values(o).length === 0) {
+                return true;
+            }
             return Object.values(o as Record<string, any>).every((value) => this.objectCanSafelyStringify(value));
         }
 
@@ -258,6 +276,7 @@ export class MetadataGridComponent extends React.Component<
             const textAreaElement = this._textAreaHost.current?.firstChild?.firstChild as HTMLTextAreaElement;
             textAreaElement.select();
             textAreaElement.setSelectionRange(0, 99999); // For mobile devices
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             navigator.clipboard.writeText(textAreaElement.value);
         } catch (error) {
             window.alert("Could not copy to clipboard, see log.");
@@ -308,7 +327,7 @@ export class MetadataGridComponent extends React.Component<
     /** render
      * @returns the component
      */
-    render() {
+    override render() {
         const protectObj = this.state.preventObjCorruption && this.state.metadataPropType === MetadataTypes.OBJECT;
         return (
             <LineContainerComponent title="METADATA" closed={true} selection={this.props.globalState}>
@@ -345,7 +364,9 @@ export class MetadataGridComponent extends React.Component<
                         multilines
                         value={this.state.selectedEntityMetadata}
                         onChange={(value) => {
-                            if (value === this.state.selectedEntityMetadata) return;
+                            if (value === this.state.selectedEntityMetadata) {
+                                return;
+                            }
                             this.setState({
                                 dirty: true,
                                 prettyJson: false,

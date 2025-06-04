@@ -6,14 +6,16 @@ import { Buffer } from "../../Buffers/buffer";
 import type { Vector3 } from "../../Maths/math.vector";
 import { VertexData } from "../mesh.vertexData";
 import { DeepCopier } from "../../Misc/deepCopier";
-import { GreasedLineSimpleMaterial } from "../../Materials/GreasedLine/greasedLineSimpleMaterial";
-import type { Engine } from "../../Engines/engine";
+import { GreasedLineSimpleMaterial, GreasedLineUseOffsetsSimpleMaterialDefine } from "../../Materials/GreasedLine/greasedLineSimpleMaterial";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
+import type { FloatArray, IndicesArray } from "../../types";
+import { GreasedLineTools } from "../../Misc/greasedLineTools";
 
 /**
  * In POINTS_MODE_POINTS every array of points will become the center (backbone) of the ribbon. The ribbon will be expanded by `width / 2` to `+direction` and `-direction` as well.
  * In POINTS_MODE_PATHS every array of points specifies an edge. These will be used to build one ribbon.
  */
-export enum GreasedLineRibbonPointsMode {
+export const enum GreasedLineRibbonPointsMode {
     POINTS_MODE_POINTS = 0,
     POINTS_MODE_PATHS = 1,
 }
@@ -23,7 +25,7 @@ export enum GreasedLineRibbonPointsMode {
  * FACES_MODE_SINGLE_SIDED_NO_BACKFACE_CULLING single sided without back face culling. Sets backFaceCulling = false on the material so it affects all line ribbons added to the line ribbon instance.
  * FACES_MODE_DOUBLE_SIDED extra back faces are created. This doubles the amount of faces of the mesh.
  */
-export enum GreasedLineRibbonFacesMode {
+export const enum GreasedLineRibbonFacesMode {
     FACES_MODE_SINGLE_SIDED = 0,
     FACES_MODE_SINGLE_SIDED_NO_BACKFACE_CULLING = 1,
     FACES_MODE_DOUBLE_SIDED = 2,
@@ -34,12 +36,14 @@ export enum GreasedLineRibbonFacesMode {
  * AUTO_DIRECTIONS_FROM_FIRST_SEGMENT sets the direction (slope) of the ribbon from the direction of the first line segment. Recommended.
  * AUTO_DIRECTIONS_FROM_ALL_SEGMENTS in this mode the direction (slope) will be calculated for each line segment according to the direction vector between each point of the line segments. Slow method.
  * AUTO_DIRECTIONS_ENHANCED in this mode the direction (slope) will be calculated for each line segment according to the direction vector between each point of the line segments using a more sophisitcaed algorithm. Slowest method.
+ * AUTO_DIRECTIONS_FACE_TO in this mode the direction (slope) will be calculated for each line segment according to the direction vector between each point of the line segments and a direction (face-to) vector specified in direction. The resulting line will face to the direction of this face-to vector.
  * AUTO_DIRECTIONS_NONE you have to set the direction (slope) manually. Recommended.
  */
-export enum GreasedLineRibbonAutoDirectionMode {
+export const enum GreasedLineRibbonAutoDirectionMode {
     AUTO_DIRECTIONS_FROM_FIRST_SEGMENT = 0,
     AUTO_DIRECTIONS_FROM_ALL_SEGMENTS = 1,
     AUTO_DIRECTIONS_ENHANCED = 2,
+    AUTO_DIRECTIONS_FACE_TO = 3,
     AUTO_DIRECTIONS_NONE = 99,
 }
 
@@ -83,15 +87,30 @@ export type GreasedLineRibbonOptions = {
 export type GreasedLinePoints = Vector3[] | Vector3[][] | Float32Array | Float32Array[] | number[][] | number[];
 
 /**
+ * Options for converting the points to the internal number[][] format used by GreasedLine
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export interface GreasedLinePointsOptions {
+    /**
+     * If defined and a Float32Array is used for the points parameter,
+     * it will create multiple disconnected lines.
+     * This parameter defines how many entries from the array to use for one line.
+     * One entry = 3 float values.
+     */
+    floatArrayStride?: number;
+}
+
+/**
  * Options for creating a GreasedLineMesh
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface GreasedLineMeshOptions {
     /**
      * Points of the line.
      */
     points: GreasedLinePoints;
     /**
-     * Each line segmment (from point to point) can have it's width multiplier. Final width = widths[segmentIdx] * width.
+     * Each line segment (from point to point) can have it's width multiplier. Final width = widths[segmentIdx] * width.
      * Defaults to empty array.
      */
     widths?: number[];
@@ -108,7 +127,7 @@ export interface GreasedLineMeshOptions {
     /**
      * UVs for the mesh
      */
-    uvs?: number[];
+    uvs?: FloatArray;
     /**
      * If true, offsets and widths are updatable.
      * Defaults to false.
@@ -125,15 +144,19 @@ export interface GreasedLineMeshOptions {
      * If this option is set the line switches automatically to a non camera facing mode.
      */
     ribbonOptions?: GreasedLineRibbonOptions;
+    /**
+     * Options for converting the points.
+     */
+    pointsOptions?: GreasedLinePointsOptions;
 }
 
 /**
  * GreasedLineBaseMesh
  */
 export abstract class GreasedLineBaseMesh extends Mesh {
-    protected _vertexPositions: number[];
-    protected _indices: number[];
-    protected _uvs: number[];
+    protected _vertexPositions: FloatArray;
+    protected _indices: IndicesArray;
+    protected _uvs: FloatArray;
     protected _points: number[][];
     protected _offsets: number[];
     protected _colorPointers: number[];
@@ -146,10 +169,10 @@ export abstract class GreasedLineBaseMesh extends Mesh {
     protected _lazy = false;
     protected _updatable = false;
 
-    protected _engine: Engine;
+    protected _engine: AbstractEngine;
 
     constructor(
-        public readonly name: string,
+        public override readonly name: string,
         scene: Scene,
         protected _options: GreasedLineMeshOptions
     ) {
@@ -172,7 +195,7 @@ export abstract class GreasedLineBaseMesh extends Mesh {
      * "GreasedLineMesh"
      * @returns "GreasedLineMesh"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "GreasedLineMesh";
     }
 
@@ -200,7 +223,7 @@ export abstract class GreasedLineBaseMesh extends Mesh {
             this._updateColorPointers();
         }
         this._createVertexBuffers(this._options.ribbonOptions?.smoothShading);
-        this.refreshBoundingInfo();
+        !this.doNotSyncBoundingInfo && this.refreshBoundingInfo();
 
         this.greasedLineMaterial?.updateLazy();
     }
@@ -222,13 +245,14 @@ export abstract class GreasedLineBaseMesh extends Mesh {
 
     /**
      * Dispose the line and it's resources
+     * @param doNotRecurse Set to true to not recurse into each children (recurse into each children by default)
+     * @param disposeMaterialAndTextures Set to true to also dispose referenced materials and textures (false by default)
      */
-    public dispose() {
-        super.dispose();
+    public override dispose(doNotRecurse?: boolean, disposeMaterialAndTextures = false) {
+        super.dispose(doNotRecurse, disposeMaterialAndTextures);
     }
 
     /**
-     *
      * @returns true if the mesh was created in lazy mode
      */
     public isLazy(): boolean {
@@ -236,6 +260,23 @@ export abstract class GreasedLineBaseMesh extends Mesh {
     }
 
     /**
+     * Returns the UVs
+     */
+    get uvs() {
+        return this._uvs;
+    }
+
+    /**
+     * Sets the UVs
+     * @param uvs the UVs
+     */
+    set uvs(uvs: FloatArray) {
+        this._uvs = uvs instanceof Float32Array ? uvs : new Float32Array(uvs);
+        this._createVertexBuffers();
+    }
+
+    /**
+     * Returns the points offsets
      * Return the points offsets
      */
     get offsets() {
@@ -247,6 +288,9 @@ export abstract class GreasedLineBaseMesh extends Mesh {
      * @param offsets offset table [x,y,z, x,y,z, ....]
      */
     set offsets(offsets: number[]) {
+        if (this.material instanceof GreasedLineSimpleMaterial) {
+            this.material.setDefine(GreasedLineUseOffsetsSimpleMaterialDefine, offsets?.length > 0);
+        }
         this._offsets = offsets;
         if (!this._offsetsBuffer) {
             this._createOffsetsBuffer(offsets);
@@ -319,13 +363,13 @@ export abstract class GreasedLineBaseMesh extends Mesh {
      * @param points points table
      * @param options optional options
      */
-    public setPoints(points: number[][], options?: GreasedLineMeshOptions) {
-        this._points = points;
+    public setPoints(points: GreasedLinePoints, options?: GreasedLineMeshOptions) {
+        this._points = GreasedLineTools.ConvertPoints(points, options?.pointsOptions ?? this._options.pointsOptions);
         this._updateWidths();
         if (!options?.colorPointers) {
             this._updateColorPointers();
         }
-        this._setPoints(points, options);
+        this._setPoints(this._points, options);
     }
 
     protected _initGreasedLine() {
@@ -351,7 +395,7 @@ export abstract class GreasedLineBaseMesh extends Mesh {
      * Serializes this GreasedLineMesh
      * @param serializationObject object to write serialization to
      */
-    public serialize(serializationObject: any): void {
+    public override serialize(serializationObject: any): void {
         super.serialize(serializationObject);
         serializationObject.type = this.getClassName();
 

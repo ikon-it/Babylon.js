@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { ThinEngine } from "../../Engines/thinEngine";
+import { AbstractEngine } from "../../Engines/abstractEngine";
 
-declare module "../../Engines/thinEngine" {
-    export interface ThinEngine {
+declare module "../../Engines/abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
         /** @internal */
         _debugPushGroup(groupName: string, targetObject?: number): void;
 
@@ -17,10 +18,10 @@ declare module "../../Engines/thinEngine" {
     }
 }
 
-ThinEngine.prototype._debugPushGroup = function (groupName: string, targetObject?: number): void {};
+AbstractEngine.prototype._debugPushGroup = function (groupName: string, targetObject?: number): void {};
 
-ThinEngine.prototype._debugPopGroup = function (targetObject?: number): void {};
+AbstractEngine.prototype._debugPopGroup = function (targetObject?: number): void {};
 
-ThinEngine.prototype._debugInsertMarker = function (text: string, targetObject?: number): void {};
+AbstractEngine.prototype._debugInsertMarker = function (text: string, targetObject?: number): void {};
 
-ThinEngine.prototype._debugFlushPendingCommands = function (): void {};
+AbstractEngine.prototype._debugFlushPendingCommands = function (): void {};

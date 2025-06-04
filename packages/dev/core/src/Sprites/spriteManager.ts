@@ -12,6 +12,7 @@ import { SceneComponentConstants } from "../sceneComponent";
 import { Logger } from "../Misc/logger";
 import { Tools } from "../Misc/tools";
 import { WebRequest } from "../Misc/webRequest";
+import type { SpriteRendererOptions } from "./spriteRenderer";
 import { SpriteRenderer } from "./spriteRenderer";
 import type { ThinSprite } from "./thinSprite";
 import type { ISize } from "../Maths/math.size";
@@ -100,6 +101,20 @@ export interface ISpriteManager extends IDisposable {
      * Rebuilds the manager (after a context lost, for eg)
      */
     rebuild(): void;
+
+    /**
+     * Serializes the sprite manager to a JSON object
+     */
+    serialize(serializeTexture?: boolean): any;
+}
+
+/**
+ * Options for the SpriteManager
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export interface SpriteManagerOptions {
+    /** Options for the sprite renderer */
+    spriteRendererOptions: SpriteRendererOptions;
 }
 
 /**
@@ -208,6 +223,14 @@ export class SpriteManager implements ISpriteManager {
         this._spriteRenderer.fogEnabled = value;
     }
 
+    /** Gets or sets a boolean indicating if the manager must use logarithmic depth when rendering */
+    public get useLogarithmicDepth(): boolean {
+        return this._spriteRenderer.useLogarithmicDepth;
+    }
+    public set useLogarithmicDepth(value: boolean) {
+        this._spriteRenderer.useLogarithmicDepth = value;
+    }
+
     /**
      * Blend mode use to render the particle, it can be any of
      * the static Constants.ALPHA_x properties provided in this class.
@@ -273,6 +296,7 @@ export class SpriteManager implements ISpriteManager {
      * @param samplingMode defines the sampling mode to use with spritesheet
      * @param fromPacked set to false; do not alter
      * @param spriteJSON null otherwise a JSON object defining sprite sheet data; do not alter
+     * @param options options used to create the SpriteManager instance
      */
     constructor(
         /** defines the manager's name */
@@ -284,7 +308,8 @@ export class SpriteManager implements ISpriteManager {
         epsilon: number = 0.01,
         samplingMode: number = Texture.TRILINEAR_SAMPLINGMODE,
         fromPacked: boolean = false,
-        spriteJSON: any | null = null
+        spriteJSON: null | string = null,
+        options?: SpriteManagerOptions
     ) {
         if (!scene) {
             scene = EngineStore.LastCreatedScene!;
@@ -297,7 +322,7 @@ export class SpriteManager implements ISpriteManager {
 
         this._scene = scene;
         const engine = this._scene.getEngine();
-        this._spriteRenderer = new SpriteRenderer(engine, capacity, epsilon, scene);
+        this._spriteRenderer = new SpriteRenderer(engine, capacity, epsilon, scene, options?.spriteRendererOptions);
 
         if (cellSize.width && cellSize.height) {
             this.cellWidth = cellSize.width;
@@ -396,13 +421,14 @@ export class SpriteManager implements ISpriteManager {
     }
 
     private _checkTextureAlpha(sprite: Sprite, ray: Ray, distance: number, min: Vector3, max: Vector3) {
-        if (!sprite.useAlphaForPicking || !this.texture) {
+        if (!sprite.useAlphaForPicking || !this.texture?.isReady()) {
             return true;
         }
 
         const textureSize = this.texture.getSize();
         if (!this._textureContent) {
             this._textureContent = new Uint8Array(textureSize.width * textureSize.height * 4);
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             this.texture.readPixels(0, 0, this._textureContent);
         }
 
@@ -420,7 +446,7 @@ export class SpriteManager implements ISpriteManager {
         const u = (sprite._xOffset * textureSize.width + contactPointU * sprite._xSize) | 0;
         const v = (sprite._yOffset * textureSize.height + contactPointV * sprite._ySize) | 0;
 
-        const alpha = this._textureContent![(u + v * textureSize.width) * 4 + 3];
+        const alpha = this._textureContent[(u + v * textureSize.width) * 4 + 3];
 
         return alpha > 0.5;
     }
@@ -667,6 +693,7 @@ export class SpriteManager implements ISpriteManager {
         serializationObject.blendMode = this.blendMode;
         serializationObject.disableDepthWrite = this.disableDepthWrite;
         serializationObject.pixelPerfect = this.pixelPerfect;
+        serializationObject.useLogarithmicDepth = this.useLogarithmicDepth;
 
         if (this.texture) {
             if (serializeTexture) {
@@ -719,6 +746,9 @@ export class SpriteManager implements ISpriteManager {
         if (parsedManager.pixelPerfect !== undefined) {
             manager.pixelPerfect = parsedManager.pixelPerfect;
         }
+        if (parsedManager.useLogarithmicDepth !== undefined) {
+            manager.useLogarithmicDepth = parsedManager.useLogarithmicDepth;
+        }
 
         if (parsedManager.metadata !== undefined) {
             manager.metadata = parsedManager.metadata;
@@ -745,8 +775,8 @@ export class SpriteManager implements ISpriteManager {
      * @param rootUrl defines the root URL to use to load textures and relative dependencies
      * @returns a promise that will resolve to the new sprite manager
      */
-    public static ParseFromFileAsync(name: Nullable<string>, url: string, scene: Scene, rootUrl: string = ""): Promise<SpriteManager> {
-        return new Promise((resolve, reject) => {
+    public static async ParseFromFileAsync(name: Nullable<string>, url: string, scene: Scene, rootUrl: string = ""): Promise<SpriteManager> {
+        return await new Promise((resolve, reject) => {
             const request = new WebRequest();
             request.addEventListener("readystatechange", () => {
                 if (request.readyState == 4) {
@@ -760,6 +790,7 @@ export class SpriteManager implements ISpriteManager {
 
                         resolve(output);
                     } else {
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                         reject("Unable to load the sprite manager");
                     }
                 }
@@ -777,6 +808,7 @@ export class SpriteManager implements ISpriteManager {
      * @param rootUrl defines the root URL to use to load textures and relative dependencies
      * @returns a promise that will resolve to the new sprite manager
      */
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     public static ParseFromSnippetAsync(snippetId: string, scene: Scene, rootUrl: string = ""): Promise<SpriteManager> {
         if (snippetId === "_BLANK") {
             return Promise.resolve(new SpriteManager("Default sprite manager", "//playground.babylonjs.com/textures/player.png", 500, 64, scene));
@@ -795,6 +827,7 @@ export class SpriteManager implements ISpriteManager {
 
                         resolve(output);
                     } else {
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                         reject("Unable to load the snippet " + snippetId);
                     }
                 }

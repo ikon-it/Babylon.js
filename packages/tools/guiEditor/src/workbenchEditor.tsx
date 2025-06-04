@@ -22,10 +22,10 @@ import "./scss/header.scss";
 import toolbarExpandIcon from "./imgs/toolbarExpandIcon.svg";
 import toolbarCollapseIcon from "./imgs/toolbarCollapseIcon.svg";
 import type { Observer } from "core/Misc/observable";
-import { Logger } from "core/Misc/logger";
 
 interface IGraphEditorProps {
     globalState: GlobalState;
+    onReady?: () => Promise<void>;
 }
 
 interface IGraphEditorState {
@@ -44,16 +44,19 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
     private _draggedItem: Nullable<string>;
     private _rootRef: React.RefObject<HTMLDivElement>;
     private _onErrorMessageObserver: Nullable<Observer<string>>;
+    private _workbenchRef: React.RefObject<WorkbenchComponent> = React.createRef();
 
-    componentDidMount() {
+    override componentDidMount() {
         if (navigator.userAgent.indexOf("Mobile") !== -1) {
             ((this.props.globalState.hostDocument || document).querySelector(".blocker") as HTMLElement).style.visibility = "visible";
         }
         document.addEventListener("keydown", this.addToolControls);
         document.addEventListener("keyup", this.removePressToolControls);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this.props.onReady?.();
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         document.removeEventListener("keydown", this.addToolControls);
         document.removeEventListener("keyup", this.removePressToolControls);
         if (this._onErrorMessageObserver) {
@@ -128,13 +131,17 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
     }
 
     onPointerDown(evt: React.PointerEvent<HTMLDivElement>) {
-        if (evt.button !== 0) return;
+        if (evt.button !== 0) {
+            return;
+        }
         this._moveInProgress = true;
         evt.currentTarget.setPointerCapture(evt.pointerId);
     }
 
     onPointerUp(evt: React.PointerEvent<HTMLDivElement>) {
-        if (evt.button !== 0) return;
+        if (evt.button !== 0) {
+            return;
+        }
         this._moveInProgress = false;
         evt.currentTarget.releasePointerCapture(evt.pointerId);
     }
@@ -144,7 +151,7 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
             return;
         }
 
-        const rootElement = evt.currentTarget.ownerDocument!.getElementById("gui-editor-workbench-root") as HTMLDivElement;
+        const rootElement = evt.currentTarget.ownerDocument.getElementById("gui-editor-workbench-root") as HTMLDivElement;
 
         const maxWidth = this.props.globalState.hostWindow.innerWidth;
 
@@ -176,81 +183,6 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
         this._popUpWindow.close();
     };
 
-    createPopupWindow = (title: string, windowVariableName: string, width = 500, height = 500): Window | null => {
-        const windowCreationOptionsList = {
-            width: width,
-            height: height,
-            top: (this.props.globalState.hostWindow.innerHeight - width) / 2 + window.screenY,
-            left: (this.props.globalState.hostWindow.innerWidth - height) / 2 + window.screenX,
-        };
-
-        const windowCreationOptions = Object.keys(windowCreationOptionsList)
-            .map((key) => key + "=" + (windowCreationOptionsList as any)[key])
-            .join(",");
-
-        const popupWindow = this.props.globalState.hostWindow.open("", title, windowCreationOptions);
-        if (!popupWindow) {
-            return null;
-        }
-
-        const parentDocument = popupWindow.document;
-
-        parentDocument.title = title;
-        parentDocument.body.style.width = "100%";
-        parentDocument.body.style.height = "100%";
-        parentDocument.body.style.margin = "0";
-        parentDocument.body.style.padding = "0";
-
-        const parentControl = parentDocument.createElement("div");
-        parentControl.style.width = "100%";
-        parentControl.style.height = "100%";
-        parentControl.style.margin = "0";
-        parentControl.style.padding = "0";
-        parentControl.style.display = "grid";
-        parentControl.style.gridTemplateRows = "40px auto";
-        parentControl.id = "gui-editor-workbench-root";
-        parentControl.className = "right-panel";
-
-        popupWindow.document.body.appendChild(parentControl);
-
-        this.copyStyles(this.props.globalState.hostWindow.document, parentDocument);
-
-        (this as any)[windowVariableName] = popupWindow;
-
-        this._popUpWindow = popupWindow;
-
-        return popupWindow;
-    };
-
-    copyStyles = (sourceDoc: HTMLDocument, targetDoc: HTMLDocument) => {
-        const styleContainer = [];
-        for (let index = 0; index < sourceDoc.styleSheets.length; index++) {
-            const styleSheet: any = sourceDoc.styleSheets[index];
-            try {
-                if (styleSheet.href) {
-                    // for <link> elements loading CSS from a URL
-                    const newLinkEl = sourceDoc.createElement("link");
-
-                    newLinkEl.rel = "stylesheet";
-                    newLinkEl.href = styleSheet.href;
-                    targetDoc.head!.appendChild(newLinkEl);
-                    styleContainer.push(newLinkEl);
-                } else if (styleSheet.cssRules) {
-                    // for <style> elements
-                    const newStyleEl = sourceDoc.createElement("style");
-
-                    for (const cssRule of styleSheet.cssRules) {
-                        newStyleEl.appendChild(sourceDoc.createTextNode(cssRule.cssText));
-                    }
-
-                    targetDoc.head!.appendChild(newStyleEl);
-                    styleContainer.push(newStyleEl);
-                }
-            } catch (e) {
-                Logger.Log(e);
-            }
-        }
-    };
     switchExpandedState(): void {
         this.setState({ toolbarExpand: !this.state.toolbarExpand });
         if (!this.state.toolbarExpand) {
@@ -260,7 +192,7 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
         }
     }
 
-    render() {
+    override render() {
         const classForElement = this.state.toolbarExpand ? "left-panel" : "left-panel expand";
         return (
             <Portal globalState={this.props.globalState}>
@@ -306,7 +238,7 @@ export class WorkbenchEditor extends React.Component<IGraphEditorProps, IGraphEd
                         }}
                     >
                         <ArtBoardComponent globalState={this.props.globalState} />
-                        <WorkbenchComponent ref={"workbenchCanvas"} globalState={this.props.globalState} />
+                        <WorkbenchComponent ref={this._workbenchRef} globalState={this.props.globalState} />
                         <GizmoWrapper globalState={this.props.globalState} />
                     </div>
                     {/* Property tab */}

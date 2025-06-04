@@ -25,7 +25,7 @@ export class BoundingBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "BoundingBlock";
     }
 
@@ -50,7 +50,7 @@ export class BoundingBlock extends NodeGeometryBlock {
         return this._outputs[1];
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         this.min._storedFunction = (state) => {
             const geometry = this.geometry.getConnectedValue(state);
 
@@ -58,7 +58,7 @@ export class BoundingBlock extends NodeGeometryBlock {
                 return null;
             }
 
-            const boundingInfo = extractMinAndMax(geometry.positions!, 0, geometry.positions!.length / 3);
+            const boundingInfo = extractMinAndMax(geometry.positions, 0, geometry.positions!.length / 3);
             return boundingInfo.minimum;
         };
 
@@ -69,7 +69,7 @@ export class BoundingBlock extends NodeGeometryBlock {
                 return null;
             }
 
-            const boundingInfo = extractMinAndMax(geometry.positions!, 0, geometry.positions!.length / 3);
+            const boundingInfo = extractMinAndMax(geometry.positions, 0, geometry.positions!.length / 3);
             return boundingInfo.maximum;
         };
     }

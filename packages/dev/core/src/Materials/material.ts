@@ -1,4 +1,4 @@
-import { serialize, SerializationHelper } from "../Misc/decorators";
+import { serialize } from "../Misc/decorators";
 import { Tools } from "../Misc/tools";
 import type { IAnimatable } from "../Animations/animatable.interface";
 import type { SmartArray } from "../Misc/smartArray";
@@ -19,13 +19,11 @@ import { Logger } from "../Misc/logger";
 import type { IInspectable } from "../Misc/iInspectable";
 import { Plane } from "../Maths/math.plane";
 import type { ShadowDepthWrapper } from "./shadowDepthWrapper";
-import { MaterialHelper } from "./materialHelper";
 import type { IMaterialContext } from "../Engines/IMaterialContext";
 import { DrawWrapper } from "./drawWrapper";
 import { MaterialStencilState } from "./materialStencilState";
 import { ScenePerformancePriority } from "../scene";
 import type { Scene } from "../scene";
-import type { AbstractScene } from "../abstractScene";
 import type {
     MaterialPluginDisposed,
     MaterialPluginIsReadyForSubMesh,
@@ -50,6 +48,10 @@ import type { PrePassRenderer } from "../Rendering/prePassRenderer";
 import type { Mesh } from "../Meshes/mesh";
 import type { Animation } from "../Animations/animation";
 import type { InstancedMesh } from "../Meshes/instancedMesh";
+import { BindSceneUniformBuffer } from "./materialHelper.functions";
+import { SerializationHelper } from "../Misc/decorators.serialization";
+import { ShaderLanguage } from "./shaderLanguage";
+import type { IAssetContainer } from "core/IAssetContainer";
 
 declare let BABYLON: any;
 
@@ -128,6 +130,11 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * Stores the counter clock-wise side orientation
      */
     public static readonly CounterClockWiseSideOrientation = Constants.MATERIAL_CounterClockWiseSideOrientation;
+
+    /**
+     * The dirty image processing flag value
+     */
+    public static readonly ImageProcessingDirtyFlag = Constants.MATERIAL_ImageProcessingDirtyFlag;
 
     /**
      * The dirty texture flag value
@@ -226,6 +233,28 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * This is mostly used when shader parallel compilation is supported (true by default)
      */
     public allowShaderHotSwapping = true;
+
+    /** Shader language used by the material */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    protected _forceGLSL = false;
+
+    /** @internal */
+    public get _supportGlowLayer() {
+        return false;
+    }
+
+    /** @internal */
+    public set _glowModeEnabled(value: boolean) {
+        // Do nothing here
+    }
+
+    /**
+     * Gets the shader language used in this material.
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
 
     /**
      * The ID of the material
@@ -414,7 +443,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * Stores the value for side orientation
      */
     @serialize()
-    public sideOrientation: number;
+    public sideOrientation: Nullable<number> = null;
 
     /**
      * Callback triggered when the material is compiled
@@ -853,7 +882,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
     public meshMap: Nullable<{ [id: string]: AbstractMesh | undefined }> = null;
 
     /** @internal */
-    public _parentContainer: Nullable<AbstractScene> = null;
+    public _parentContainer: Nullable<IAssetContainer> = null;
 
     /** @internal */
     public _dirtyCallbacks: { [code: number]: () => void };
@@ -908,8 +937,9 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @param name defines the name of the material
      * @param scene defines the scene to reference
      * @param doNotAdd specifies if the material should be added to the scene
+     * @param forceGLSL Use the GLSL code generation for the shader (even on WebGPU). Default is false
      */
-    constructor(name: string, scene?: Nullable<Scene>, doNotAdd?: boolean) {
+    constructor(name: string, scene?: Nullable<Scene>, doNotAdd?: boolean, forceGLSL = false) {
         this.name = name;
         const setScene = scene || EngineStore.LastCreatedScene;
         if (!setScene) {
@@ -917,6 +947,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         }
         this._scene = setScene;
         this._dirtyCallbacks = {};
+        this._forceGLSL = forceGLSL;
 
         this._dirtyCallbacks[Constants.MATERIAL_TextureDirtyFlag] = this._markAllSubMeshesAsTexturesDirty.bind(this);
         this._dirtyCallbacks[Constants.MATERIAL_LightDirtyFlag] = this._markAllSubMeshesAsLightsDirty.bind(this);
@@ -932,14 +963,10 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         this._drawWrapper = new DrawWrapper(this._scene.getEngine(), false);
         this._drawWrapper.materialContext = this._materialContext;
 
-        if (this._scene.useRightHandedSystem) {
-            this.sideOrientation = Material.ClockWiseSideOrientation;
-        } else {
-            this.sideOrientation = Material.CounterClockWiseSideOrientation;
-        }
-
         this._uniformBuffer = new UniformBuffer(this._scene.getEngine(), undefined, undefined, name);
         this._useUBO = this.getScene().getEngine().supportsUniformBuffers;
+
+        this._createUniformBuffer();
 
         if (!doNotAdd) {
             this._scene.addMaterial(this);
@@ -950,6 +977,23 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         }
 
         Material.OnEventObservable.notifyObservers(this, MaterialPluginEvent.Created);
+    }
+
+    /** @internal */
+    public _createUniformBuffer() {
+        const engine = this.getScene().getEngine();
+
+        this._uniformBuffer?.dispose();
+
+        if (engine.isWebGPU && !this._forceGLSL) {
+            // Switch main UBO to non UBO to connect to leftovers UBO in webgpu
+            this._uniformBuffer = new UniformBuffer(engine, undefined, undefined, this.name, true);
+            this._shaderLanguage = ShaderLanguage.WGSL;
+        } else {
+            this._uniformBuffer = new UniformBuffer(this._scene.getEngine(), undefined, undefined, this.name);
+        }
+
+        this._uniformBufferLayoutBuilt = false;
     }
 
     /**
@@ -1047,10 +1091,10 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         return this._scene;
     }
 
-    /**
-     * Enforces alpha test in opaque or blend mode in order to improve the performances of some situations.
-     */
-    protected _forceAlphaTest = false;
+    /** @internal */
+    public _getEffectiveOrientation(mesh: Mesh): number {
+        return this.sideOrientation !== null ? this.sideOrientation : mesh.sideOrientation;
+    }
 
     /**
      * The transparency mode of the material.
@@ -1083,9 +1127,19 @@ export class Material implements IAnimatable, IClipPlanesHolder {
 
         this._transparencyMode = value;
 
-        this._forceAlphaTest = value === Material.MATERIAL_ALPHATESTANDBLEND;
-
         this._markAllSubMeshesAsTexturesAndMiscDirty();
+    }
+
+    protected get _hasTransparencyMode(): boolean {
+        return this._transparencyMode != null;
+    }
+
+    protected get _transparencyModeIsBlend(): boolean {
+        return this._transparencyMode === Material.MATERIAL_ALPHABLEND || this._transparencyMode === Material.MATERIAL_ALPHATESTANDBLEND;
+    }
+
+    protected get _transparencyModeIsTest(): boolean {
+        return this._transparencyMode === Material.MATERIAL_ALPHATEST || this._transparencyMode === Material.MATERIAL_ALPHATESTANDBLEND;
     }
 
     /**
@@ -1098,8 +1152,13 @@ export class Material implements IAnimatable, IClipPlanesHolder {
     /**
      * Specifies whether or not this material should be rendered in alpha blend mode.
      * @returns a boolean specifying if alpha blending is needed
+     * @deprecated Please use needAlphaBlendingForMesh instead
      */
     public needAlphaBlending(): boolean {
+        if (this._hasTransparencyMode) {
+            return this._transparencyModeIsBlend;
+        }
+
         if (this._disableAlphaBlending) {
             return false;
         }
@@ -1113,6 +1172,10 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @returns a boolean specifying if alpha blending is needed for the mesh
      */
     public needAlphaBlendingForMesh(mesh: AbstractMesh): boolean {
+        if (this._hasTransparencyMode) {
+            return this._transparencyModeIsBlend;
+        }
+
         if (mesh.visibility < 1.0) {
             return true;
         }
@@ -1127,10 +1190,11 @@ export class Material implements IAnimatable, IClipPlanesHolder {
     /**
      * Specifies whether or not this material should be rendered in alpha test mode.
      * @returns a boolean specifying if an alpha test is needed.
+     * @deprecated Please use needAlphaTestingForMesh instead
      */
     public needAlphaTesting(): boolean {
-        if (this._forceAlphaTest) {
-            return true;
+        if (this._hasTransparencyMode) {
+            return this._transparencyModeIsTest;
         }
 
         return false;
@@ -1141,7 +1205,11 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @param mesh defines the mesh to check
      * @returns a boolean specifying if alpha testing should be turned on for the mesh
      */
-    protected _shouldTurnAlphaTestOn(mesh: AbstractMesh): boolean {
+    public needAlphaTestingForMesh(mesh: AbstractMesh): boolean {
+        if (this._hasTransparencyMode) {
+            return this._transparencyModeIsTest;
+        }
+
         return !this.needAlphaBlendingForMesh(mesh) && this.needAlphaTesting();
     }
 
@@ -1296,12 +1364,12 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @param effect defines the effect used to bind the material
      * @param _subMesh defines the subMesh that the material has been bound for
      */
-    protected _afterBind(mesh?: Mesh, effect: Nullable<Effect> = null, _subMesh?: SubMesh): void {
+    protected _afterBind(mesh?: AbstractMesh, effect: Nullable<Effect> = null, _subMesh?: SubMesh): void {
         this._scene._cachedMaterial = this;
         if (this._needToBindSceneUbo) {
             if (effect) {
                 this._needToBindSceneUbo = false;
-                MaterialHelper.BindSceneUniformBuffer(effect, this.getScene().getSceneUniformBuffer());
+                BindSceneUniformBuffer(effect, this.getScene().getSceneUniformBuffer());
                 this._scene.finalizeSceneUbo();
             }
         }
@@ -1338,6 +1406,8 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * Unbinds the material from the mesh
      */
     public unbind(): void {
+        this._scene.getSceneUniformBuffer().unbindEffect();
+
         if (this._onUnBindObservable) {
             this._onUnBindObservable.notifyObservers(this);
         }
@@ -1526,8 +1596,8 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @param options defines additional options for compiling the shaders
      * @returns a promise that resolves when the compilation completes
      */
-    public forceCompilationAsync(mesh: AbstractMesh, options?: Partial<IMaterialCompilationOptions>): Promise<void> {
-        return new Promise((resolve, reject) => {
+    public async forceCompilationAsync(mesh: AbstractMesh, options?: Partial<IMaterialCompilationOptions>): Promise<void> {
+        return await new Promise((resolve, reject) => {
             this.forceCompilation(
                 mesh,
                 () => {
@@ -1535,6 +1605,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
                 },
                 options,
                 (reason) => {
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject(reason);
                 }
             );
@@ -1577,6 +1648,10 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         }
 
         Material._DirtyCallbackArray.length = 0;
+
+        if (flag & Material.ImageProcessingDirtyFlag) {
+            Material._DirtyCallbackArray.push(Material._ImageProcessingDirtyCallBack);
+        }
 
         if (flag & Material.TextureDirtyFlag) {
             Material._DirtyCallbackArray.push(Material._TextureDirtyCallBack);
@@ -1633,18 +1708,20 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * @param func defines a function which checks material defines against the submeshes
      */
     protected _markAllSubMeshesAsDirty(func: (defines: MaterialDefines) => void) {
-        if (this.getScene().blockMaterialDirtyMechanism || this._blockDirtyMechanism) {
+        const scene = this.getScene();
+        if (scene.blockMaterialDirtyMechanism || this._blockDirtyMechanism) {
             return;
         }
 
-        const meshes = this.getScene().meshes;
+        const meshes = scene.meshes;
         for (const mesh of meshes) {
             if (!mesh.subMeshes) {
                 continue;
             }
             for (const subMesh of mesh.subMeshes) {
                 // We want to skip the submeshes which are not using this material or which have not yet rendered at least once
-                if (subMesh.getMaterial(false) !== this) {
+                const material = subMesh.getMaterial() || (scene._hasDefaultMaterial ? scene.defaultMaterial : null);
+                if (material !== this) {
                     continue;
                 }
 
@@ -1734,7 +1811,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
      * Indicates that prepass needs to be re-calculated for all submeshes
      */
     protected _markAllSubMeshesAsPrePassDirty() {
-        this._markAllSubMeshesAsDirty(Material._MiscDirtyCallBack);
+        this._markAllSubMeshesAsDirty(Material._PrePassDirtyCallBack);
     }
 
     /**
@@ -1771,11 +1848,11 @@ export class Material implements IAnimatable, IClipPlanesHolder {
 
     /**
      * Disposes the material
-     * @param forceDisposeEffect specifies if effects should be forcefully disposed
+     * @param _forceDisposeEffect kept for backward compat. We reference count the effect now.
      * @param forceDisposeTextures specifies if textures should be forcefully disposed
      * @param notBoundToMesh specifies if the material that is being disposed is known to be not bound to any mesh
      */
-    public dispose(forceDisposeEffect?: boolean, forceDisposeTextures?: boolean, notBoundToMesh?: boolean): void {
+    public dispose(_forceDisposeEffect?: boolean, forceDisposeTextures?: boolean, notBoundToMesh?: boolean): void {
         const scene = this.getScene();
         // Animations
         scene.stopAnimation(this);
@@ -1800,18 +1877,12 @@ export class Material implements IAnimatable, IClipPlanesHolder {
             if (this.meshMap) {
                 for (const meshId in this.meshMap) {
                     const mesh = this.meshMap[meshId];
-                    if (mesh) {
-                        mesh.material = null; // will set the entry in the map to undefined
-                        this.releaseVertexArrayObject(mesh, forceDisposeEffect);
-                    }
+                    this._disposeMeshResources(mesh);
                 }
             } else {
                 const meshes = scene.meshes;
                 for (const mesh of meshes) {
-                    if (mesh.material === this && !(mesh as InstancedMesh).sourceMesh) {
-                        mesh.material = null;
-                        this.releaseVertexArrayObject(mesh, forceDisposeEffect);
-                    }
+                    this._disposeMeshResources(mesh);
                 }
             }
         }
@@ -1819,7 +1890,7 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         this._uniformBuffer.dispose();
 
         // Shader are kept in cache for further use but we can get rid of this by using forceDisposeEffect
-        if (forceDisposeEffect && this._drawWrapper.effect) {
+        if (this._drawWrapper.effect) {
             if (!this._storeEffectOnSubMeshes) {
                 this._drawWrapper.effect.dispose();
             }
@@ -1850,25 +1921,36 @@ export class Material implements IAnimatable, IClipPlanesHolder {
         }
     }
 
-    /**
-     * @internal
-     */
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    private releaseVertexArrayObject(mesh: AbstractMesh, forceDisposeEffect?: boolean) {
+    private _disposeMeshResources(mesh: AbstractMesh | undefined) {
+        if (!mesh) {
+            return;
+        }
+
         const geometry = (<Mesh>mesh).geometry;
-        if (geometry) {
-            if (this._storeEffectOnSubMeshes) {
-                if (mesh.subMeshes) {
-                    for (const subMesh of mesh.subMeshes) {
-                        geometry._releaseVertexArrayObject(subMesh.effect);
-                        if (forceDisposeEffect && subMesh.effect) {
-                            subMesh.effect.dispose();
+        const materialForRenderPass = mesh._internalAbstractMeshDataInfo._materialForRenderPass;
+        if (this._storeEffectOnSubMeshes) {
+            if (mesh.subMeshes && materialForRenderPass) {
+                for (const subMesh of mesh.subMeshes) {
+                    const drawWrappers = subMesh._drawWrappers;
+                    for (let renderPassIndex = 0; renderPassIndex < drawWrappers.length; renderPassIndex++) {
+                        const effect = drawWrappers[renderPassIndex]?.effect;
+                        if (!effect) {
+                            continue;
+                        }
+                        const material = materialForRenderPass[renderPassIndex];
+                        if (material === this) {
+                            geometry?._releaseVertexArrayObject(effect);
+                            subMesh._removeDrawWrapper(renderPassIndex, true, true);
                         }
                     }
                 }
-            } else {
-                geometry._releaseVertexArrayObject(this._drawWrapper.effect);
             }
+        } else {
+            geometry?._releaseVertexArrayObject(this._drawWrapper.effect);
+        }
+
+        if (mesh.material === this && !(mesh as InstancedMesh).sourceMesh) {
+            mesh.material = null;
         }
     }
 
@@ -1892,7 +1974,9 @@ export class Material implements IAnimatable, IClipPlanesHolder {
 
         if (this.pluginManager) {
             for (const plugin of this.pluginManager._plugins) {
-                serializationObject.plugins[plugin.getClassName()] = plugin.serialize();
+                if (!plugin.doNotSerialize) {
+                    serializationObject.plugins[plugin.getClassName()] = plugin.serialize();
+                }
             }
         }
     }

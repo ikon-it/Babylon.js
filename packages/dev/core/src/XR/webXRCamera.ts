@@ -183,7 +183,7 @@ export class WebXRCamera extends FreeCamera {
      * Gets the current instance class name ("WebXRCamera").
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "WebXRCamera";
     }
 
@@ -192,7 +192,7 @@ export class WebXRCamera extends FreeCamera {
      * Note that this only rotates around the Y axis, as opposed to the default behavior of other cameras
      * @param target the target to set the camera to look at
      */
-    public setTarget(target: Vector3): void {
+    public override setTarget(target: Vector3): void {
         // only rotate around the y axis!
         const tmpVector = TmpVectors.Vector3[1];
         target.subtractToRef(this.position, tmpVector);
@@ -203,9 +203,10 @@ export class WebXRCamera extends FreeCamera {
         Quaternion.FromEulerAnglesToRef(tmpVector.x, yRotation, tmpVector.z, this.rotationQuaternion);
     }
 
-    public dispose() {
+    public override dispose() {
         super.dispose();
         this._lastXRViewerPose = undefined;
+        this.onTrackingStateChanged.clear();
     }
 
     private _updateDepthNearFar() {
@@ -255,6 +256,8 @@ export class WebXRCamera extends FreeCamera {
                 this._referencedPosition.z *= -1;
                 this._referenceQuaternion.z *= -1;
                 this._referenceQuaternion.w *= -1;
+            } else {
+                this._referenceQuaternion.multiplyInPlace(this._rotate180);
             }
 
             if (this._firstFrame) {
@@ -278,7 +281,8 @@ export class WebXRCamera extends FreeCamera {
             this._updateNumberOfRigCameras(pose.views.length);
         }
 
-        pose.views.forEach((view: XRView, i: number) => {
+        for (let i = 0; i < pose.views.length; i++) {
+            const view = pose.views[i];
             const currentRig = <TargetCamera>this.rigCameras[i];
             // update right and left, where applicable
             if (!currentRig.isLeftCamera && !currentRig.isRightCamera) {
@@ -286,6 +290,16 @@ export class WebXRCamera extends FreeCamera {
                     currentRig._isRightCamera = true;
                 } else if (view.eye === "left") {
                     currentRig._isLeftCamera = true;
+                }
+            }
+            // add any custom render targets to this camera, if available in the scene
+            const customRenderTargets = this.getScene().customRenderTargets;
+            // use a for loop
+            for (let i = 0; i < customRenderTargets.length; i++) {
+                const rt = customRenderTargets[i];
+                // make sure we don't add the same render target twice
+                if (currentRig.customRenderTargets.indexOf(rt) === -1) {
+                    currentRig.customRenderTargets.push(rt);
                 }
             }
             // Update view/projection matrix
@@ -309,8 +323,12 @@ export class WebXRCamera extends FreeCamera {
                 currentRig._projectionMatrix.toggleProjectionMatrixHandInPlace();
             }
 
+            // fov
+            const fov = Math.atan2(1, view.projectionMatrix[5]) * 2;
+            currentRig.fov = fov;
             // first camera?
             if (i === 0) {
+                this.fov = fov;
                 this._projectionMatrix.copyFrom(currentRig._projectionMatrix);
             }
 
@@ -333,7 +351,7 @@ export class WebXRCamera extends FreeCamera {
 
             // Replicate parent rig camera behavior
             currentRig.layerMask = this.layerMask;
-        });
+        }
     }
 
     private _updateNumberOfRigCameras(viewCount = 1) {

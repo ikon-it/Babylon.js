@@ -3,7 +3,7 @@ import { Vector2 } from "../Maths/math.vector";
 import type { Camera } from "../Cameras/camera";
 import type { Effect } from "../Materials/effect";
 import { PostProcess } from "./postProcess";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 
 import "../Shaders/stereoscopicInterlace.fragment";
 
@@ -18,7 +18,7 @@ export class StereoscopicInterlacePostProcessI extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "StereoscopicInterlacePostProcessI" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "StereoscopicInterlacePostProcessI";
     }
 
@@ -32,7 +32,15 @@ export class StereoscopicInterlacePostProcessI extends PostProcess {
      * @param engine The engine which the post process will be applied. (default: current engine)
      * @param reusable If the post process can be reused on the same frame. (default: false)
      */
-    constructor(name: string, rigCameras: Camera[], isStereoscopicHoriz: boolean, isStereoscopicInterlaced: boolean, samplingMode?: number, engine?: Engine, reusable?: boolean) {
+    constructor(
+        name: string,
+        rigCameras: Camera[],
+        isStereoscopicHoriz: boolean,
+        isStereoscopicInterlaced: boolean,
+        samplingMode?: number,
+        engine?: AbstractEngine,
+        reusable?: boolean
+    ) {
         super(
             name,
             "stereoscopicInterlace",
@@ -69,7 +77,7 @@ export class StereoscopicInterlacePostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "StereoscopicInterlacePostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "StereoscopicInterlacePostProcess";
     }
 
@@ -82,7 +90,7 @@ export class StereoscopicInterlacePostProcess extends PostProcess {
      * @param engine The engine which the post process will be applied. (default: current engine)
      * @param reusable If the post process can be reused on the same frame. (default: false)
      */
-    constructor(name: string, rigCameras: Camera[], isStereoscopicHoriz: boolean, samplingMode?: number, engine?: Engine, reusable?: boolean) {
+    constructor(name: string, rigCameras: Camera[], isStereoscopicHoriz: boolean, samplingMode?: number, engine?: AbstractEngine, reusable?: boolean) {
         super(
             name,
             "stereoscopicInterlace",

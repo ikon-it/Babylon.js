@@ -1,3 +1,5 @@
+/* eslint-disable no-await-in-loop */
+/* eslint-disable @typescript-eslint/no-floating-promises */
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 
 // import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution';
@@ -8,7 +10,7 @@ import * as languageFeatures from "monaco-editor/esm/vs/language/typescript/lang
 import type { GlobalState } from "../globalState";
 import { Utilities } from "./utilities";
 import { CompilationError } from "../components/errorDisplayComponent";
-import { Observable } from "@dev/core";
+import { Observable, Logger } from "@dev/core";
 import { debounce } from "ts-debounce";
 
 import type { editor } from "monaco-editor/esm/vs/editor/editor.api";
@@ -22,6 +24,9 @@ export class MonacoManager {
     private _hostElement: HTMLDivElement;
     private _templates: {
         label: string;
+        key: string;
+        documentation: string;
+        insertText: string;
         language: string;
         kind: number;
         sortText: string;
@@ -31,6 +36,11 @@ export class MonacoManager {
     private _isDirty = false;
 
     public constructor(public globalState: GlobalState) {
+        this._templates = [];
+        this._load(globalState);
+    }
+
+    private _load(globalState: GlobalState) {
         window.addEventListener("beforeunload", (evt) => {
             if (this._isDirty && Utilities.ReadBoolFromStore("safe-mode", false)) {
                 const message = "Are you sure you want to leave. You have unsaved work.";
@@ -44,6 +54,10 @@ export class MonacoManager {
                 this._setNewContent();
                 this._resetEditor(true);
             }
+        });
+
+        globalState.onInsertSnippetRequiredObservable.add((snippetKey: string) => {
+            this._insertSnippet(snippetKey);
         });
 
         globalState.onClearRequiredObservable.add(() => {
@@ -173,6 +187,51 @@ class Playground {
         }
     }
 
+    private _indentCode(code: string, indentation: number): string {
+        const indent = " ".repeat(indentation);
+        const lines = code.split("\n");
+        const indentedCode = lines.map((line) => indent + line).join("\n");
+        return indentedCode;
+    }
+
+    private _getCode(key: string): string {
+        let code = "";
+        this._templates.forEach(function (item) {
+            if (item.key === key) {
+                // Remove monaco placeholders
+                const regex = /\$\{[0-9]+:([^}]+)\}|\$\{[0-9]+\}/g;
+                code = item.insertText.replace(regex, (match, p1) => p1 || "");
+            }
+        });
+        return code + "\n";
+    }
+
+    private _insertCodeAtCursor(code: string) {
+        if (this._editor) {
+            // Get the current position of the cursor
+            const position = this._editor.getPosition();
+            if (position) {
+                // Fix indent regarding current position
+                if (position.column && position.column > 1) {
+                    code = this._indentCode(code, position.column - 1).slice(position.column - 1);
+                }
+                // Insert code
+                this._editor.executeEdits("", [
+                    {
+                        range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                        text: code,
+                        forceMoveMarkers: true,
+                    },
+                ]);
+            }
+        }
+    }
+
+    private _insertSnippet(snippetKey: string) {
+        const snippet = this._getCode(snippetKey);
+        this._insertCodeAtCursor(snippet);
+    }
+
     private _resetEditor(resetMetadata?: boolean) {
         location.hash = "";
         if (resetMetadata) {
@@ -209,7 +268,7 @@ class Playground {
 
         this._editor = monaco.editor.create(this._hostElement, editorOptions as any);
 
-        const analyzeCodeDebounced = debounce(() => this._analyzeCodeAsync(), 500);
+        const analyzeCodeDebounced = debounce(async () => await this._analyzeCodeAsync(), 500);
         this._editor.onDidChangeModelContent(() => {
             const newCode = this._editor.getValue();
             if (this.globalState.currentCode !== newCode) {
@@ -220,10 +279,10 @@ class Playground {
         });
 
         if (this.globalState.currentCode) {
-            this._editor!.setValue(this.globalState.currentCode);
+            this._editor.setValue(this.globalState.currentCode);
         }
 
-        this.globalState.getCompiledCode = () => this._getRunCode();
+        this.globalState.getCompiledCode = async () => await this._getRunCodeAsync();
 
         if (this.globalState.currentCode) {
             this.globalState.onRunRequiredObservable.notifyObservers();
@@ -244,6 +303,7 @@ class Playground {
             "https://preview.babylonjs.com/serializers/babylonjs.serializers.d.ts",
             "https://preview.babylonjs.com/inspector/babylon.inspector.d.ts",
             "https://preview.babylonjs.com/accessibility/babylon.accessibility.d.ts",
+            "https://preview.babylonjs.com/addons/babylonjs.addons.d.ts",
         ];
 
         let snapshot = "";
@@ -253,7 +313,7 @@ class Playground {
             // cleanup, just in case
             snapshot = snapshot.split("&")[0];
             for (let index = 0; index < declarations.length; index++) {
-                declarations[index] = declarations[index].replace("https://preview.babylonjs.com", "https://babylonsnapshots.z22.web.core.windows.net/" + snapshot);
+                declarations[index] = declarations[index].replace("https://preview.babylonjs.com", "https://snapshots-cvgtc2eugrd3cgfd.z01.azurefd.net/" + snapshot);
             }
         }
 
@@ -277,10 +337,10 @@ class Playground {
         declarations.push("https://preview.babylonjs.com/glTF2Interface/babylon.glTF2Interface.d.ts");
         declarations.push("https://assets.babylonjs.com/generated/Assets.d.ts");
 
-        // Check for Unity Toolkit
-        if (location.href.indexOf("UnityToolkit") !== -1 || Utilities.ReadBoolFromStore("unity-toolkit", false) || Utilities.ReadBoolFromStore("unity-toolkit-used", false)) {
-            declarations.push("https://cdn.jsdelivr.net/gh/BabylonJS/UnityExporter@master/Redist/Runtime/babylon.toolkit.d.ts");
-            declarations.push("https://cdn.jsdelivr.net/gh/BabylonJS/UnityExporter@master/Redist/Runtime/unity.playground.d.ts");
+        // Check for Babylon Toolkit
+        if (location.href.indexOf("BabylonToolkit") !== -1 || Utilities.ReadBoolFromStore("babylon-toolkit", false) || Utilities.ReadBoolFromStore("babylon-toolkit-used", false)) {
+            declarations.push("https://cdn.jsdelivr.net/gh/BabylonJS/BabylonToolkit@master/Runtime/babylon.toolkit.d.ts");
+            declarations.push("https://cdn.jsdelivr.net/gh/BabylonJS/BabylonToolkit@master/Runtime/default.playground.d.ts");
         }
 
         const timestamp = typeof globalThis !== "undefined" && (globalThis as any).__babylonSnapshotTimestamp__ ? (globalThis as any).__babylonSnapshotTimestamp__ : 0;
@@ -293,8 +353,8 @@ class Playground {
         }
 
         let libContent = "";
-        const responses = await Promise.all(declarations.map((declaration) => fetch(declaration)));
-        const fallbackUrl = "https://babylonsnapshots.z22.web.core.windows.net/refs/heads/master";
+        const responses = await Promise.all(declarations.map(async (declaration) => await fetch(declaration)));
+        const fallbackUrl = "https://snapshots-cvgtc2eugrd3cgfd.z01.azurefd.net/refs/heads/master";
         for (const response of responses) {
             if (!response.ok) {
                 // attempt a fallback
@@ -331,20 +391,22 @@ declare var canvas: HTMLCanvasElement;
         this._setupMonacoColorProvider();
 
         if (initialCall) {
-            // Load code templates
-            const response = await fetch("templates.json");
-            if (response.ok) {
-                this._templates = await response.json();
+            try {
+                // Fetch JSON data for templates code
+                const templatesCodeUrl = "templates.json?uncacher=" + Date.now();
+                this._templates = await (await fetch(templatesCodeUrl)).json();
+
+                // enhance templates with extra properties
+                for (const template of this._templates) {
+                    template.kind = monaco.languages.CompletionItemKind.Snippet;
+                    template.sortText = "!" + template.label; // make sure templates are on top of the completion window
+                    template.insertTextRules = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
+                }
+            } catch {
+                Logger.Log("Error loading templates code");
             }
 
-            // enhance templates with extra properties
-            for (const template of this._templates) {
-                template.kind = monaco.languages.CompletionItemKind.Snippet;
-                template.sortText = "!" + template.label; // make sure templates are on top of the completion window
-                template.insertTextRules = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
-            }
-
-            this._hookMonacoCompletionProvider();
+            this._hookMonacoCompletionProviderAsync();
         }
 
         if (!this.globalState.loadingCodeInProgress) {
@@ -529,7 +591,7 @@ declare var canvas: HTMLCanvasElement;
         }
 
         const model = this._editor.getModel();
-        if (!model) {
+        if (!model || model.isDisposed()) {
             return;
         }
 
@@ -557,10 +619,18 @@ declare var canvas: HTMLCanvasElement;
         }[] = [];
 
         for (const candidate of this._tagCandidates) {
+            if (model.isDisposed()) {
+                continue;
+            }
             const matches = model.findMatches(candidate.name, false, false, true, null, false);
-            if (!matches) continue;
+            if (!matches) {
+                continue;
+            }
 
             for (const match of matches) {
+                if (model.isDisposed()) {
+                    continue;
+                }
                 const position = {
                     lineNumber: match.range.startLineNumber,
                     column: match.range.startColumn,
@@ -580,7 +650,9 @@ declare var canvas: HTMLCanvasElement;
                 // the following is time consuming on all suggestions, that's why we precompute tag candidate names in the definition worker to filter calls
                 // @see setupDefinitionWorker
                 const details = await languageService.getCompletionEntryDetails(uri.toString(), offset, wordInfo.word);
-                if (!details || !details.tags) continue;
+                if (!details || !details.tags) {
+                    continue;
+                }
 
                 const tag = details.tags.find((t: { name: string }) => t.name === candidate.tagName);
                 if (tag) {
@@ -626,18 +698,19 @@ declare var canvas: HTMLCanvasElement;
             return tag.text;
         }
 
-        if (tag?.text instanceof Array)
+        if (tag?.text instanceof Array) {
             return tag.text
                 .filter((i: { kind: string }) => i.kind === "text")
                 .map((i: { text: any }) => (i.text.indexOf("data:") === 0 ? `<img src="${i.text}">` : i.text))
                 .join(", ");
+        }
 
         return "";
     }
 
     // This is our hook in the Monaco suggest adapter, we are called everytime a completion UI is displayed
     // So we need to be super fast.
-    private async _hookMonacoCompletionProvider() {
+    private async _hookMonacoCompletionProviderAsync() {
         const oldProvideCompletionItems = languageFeatures.SuggestAdapter.prototype.provideCompletionItems;
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         const owner = this;
@@ -663,7 +736,9 @@ declare var canvas: HTMLCanvasElement;
                     const model = monaco.editor.getModel(uri);
                     const details = await worker.getCompletionEntryDetails(uri.toString(), model!.getOffsetAt(position), suggestion.label);
 
-                    if (!details || !details.tags) continue;
+                    if (!details || !details.tags) {
+                        continue;
+                    }
 
                     const tag = details.tags.find((t: { name: string }) => t.name === candidate.tagName);
                     if (tag) {
@@ -694,7 +769,7 @@ declare var canvas: HTMLCanvasElement;
         };
     }
 
-    private async _getRunCode() {
+    private async _getRunCodeAsync() {
         if (this.globalState.language == "JS") {
             return this._editor.getValue();
         } else {

@@ -5,6 +5,7 @@ import type { Scene } from "core/scene";
 import type { FloatArray, Nullable } from "core/types";
 
 import { FluidRenderingObject } from "./fluidRenderingObject";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Defines a rendering object based on a list of custom buffers
@@ -18,7 +19,7 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
     /**
      * @returns the name of the class
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "FluidRenderingObjectCustomParticles";
     }
 
@@ -34,9 +35,10 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
      * @param scene The scene the particles should be rendered into
      * @param buffers The list of buffers (must contain at least one "position" buffer!). Note that you don't have to pass all (or any!) buffers at once in the constructor, you can use the addBuffers method to add more later.
      * @param numParticles Number of vertices to take into account from the buffers
+     * @param shaderLanguage The shader language to use
      */
-    constructor(scene: Scene, buffers: { [key: string]: FloatArray }, numParticles: number) {
-        super(scene);
+    constructor(scene: Scene, buffers: { [key: string]: FloatArray }, numParticles: number, shaderLanguage?: ShaderLanguage) {
+        super(scene, shaderLanguage);
 
         this._numParticles = numParticles;
         this._diffuseEffectWrapper = null;
@@ -67,7 +69,7 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
         }
     }
 
-    protected _createEffects(): void {
+    protected override _createEffects(): void {
         super._createEffects();
 
         const uniformNames = ["view", "projection", "size"];
@@ -81,6 +83,14 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
             attributeNames,
             uniformNames,
             samplerNames: [],
+            shaderLanguage: this._shaderLanguage,
+            extraInitializationsAsync: async () => {
+                if (this._shaderLanguage === ShaderLanguage.WGSL) {
+                    await import("../../ShadersWGSL/fluidRenderingParticleDiffuse.fragment");
+                } else {
+                    await import("../../Shaders/fluidRenderingParticleDiffuse.fragment");
+                }
+            },
         });
     }
 
@@ -88,7 +98,7 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
      * Indicates if the object is ready to be rendered
      * @returns True if everything is ready for the object to be rendered, otherwise false
      */
-    public isReady(): boolean {
+    public override isReady(): boolean {
         if (!this._vertexBuffers["offset"]) {
             this._vertexBuffers["offset"] = new VertexBuffer(this._engine, [0, 0, 1, 0, 0, 1, 1, 1], "offset", false, false, 2);
         }
@@ -115,14 +125,14 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
     /**
      * Render the diffuse texture for this object
      */
-    public renderDiffuseTexture(): void {
+    public override renderDiffuseTexture(): void {
         const numParticles = this.numParticles;
 
         if (!this._diffuseEffectWrapper || numParticles === 0) {
             return;
         }
 
-        const diffuseDrawWrapper = this._diffuseEffectWrapper._drawWrapper;
+        const diffuseDrawWrapper = this._diffuseEffectWrapper.drawWrapper;
         const diffuseEffect = diffuseDrawWrapper.effect!;
 
         this._engine.enableEffect(diffuseDrawWrapper);
@@ -142,9 +152,9 @@ export class FluidRenderingObjectCustomParticles extends FluidRenderingObject {
     }
 
     /**
-     * Releases the ressources used by the class
+     * Releases the resources used by the class
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
 
         this._diffuseEffectWrapper?.dispose();

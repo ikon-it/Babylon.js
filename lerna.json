@@ -1,11 +1,5 @@
 {
-    "packages": [
-        "packages/**/*"
-    ],
+    "packages": ["packages/**/*"],
     "version": "independent",
-    "allowBranch": [
-        "master",
-        "preview",
-        "feature/xr-session-migration"
-    ]
+    "allowBranch": ["master", "preview", "feature/xr-session-migration"]
 }

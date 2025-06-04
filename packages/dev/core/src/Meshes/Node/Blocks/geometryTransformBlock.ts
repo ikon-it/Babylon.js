@@ -15,13 +15,15 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
     private _scalingMatrix = new Matrix();
     private _translationMatrix = new Matrix();
     private _scalingRotationMatrix = new Matrix();
+    private _pivotMatrix = new Matrix();
+    private _backPivotMatrix = new Matrix();
     private _transformMatrix = new Matrix();
 
     /**
      * Gets or sets a boolean indicating that this block can evaluate context
      * Build performance is improved when this value is set to false as the system will cache values instead of reevaluating everything per context change
      */
-    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { rebuild: true } })
+    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
     public evaluateContext = true;
 
     /**
@@ -36,6 +38,7 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
         this.registerInput("translation", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.Zero());
         this.registerInput("rotation", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.Zero());
         this.registerInput("scaling", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.One());
+        this.registerInput("pivot", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.Zero());
 
         this.registerOutput("output", NodeGeometryBlockConnectionPointTypes.BasedOnInput);
 
@@ -49,7 +52,7 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryTransformBlock";
     }
 
@@ -89,13 +92,20 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
     }
 
     /**
+     * Gets the pivot input component
+     */
+    public get pivot(): NodeGeometryConnectionPoint {
+        return this._inputs[5];
+    }
+
+    /**
      * Gets the output component
      */
     public get output(): NodeGeometryConnectionPoint {
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         if (!this.value.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
@@ -114,16 +124,19 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
             if (this.matrix.isConnected) {
                 matrix = this.matrix.getConnectedValue(state);
             } else {
-                const scaling = this.scaling.getConnectedValue(state);
-                const rotation = this.rotation.getConnectedValue(state);
-                const translation = this.translation.getConnectedValue(state);
+                const scaling = this.scaling.getConnectedValue(state) || Vector3.OneReadOnly;
+                const rotation = this.rotation.getConnectedValue(state) || Vector3.ZeroReadOnly;
+                const translation = this.translation.getConnectedValue(state) || Vector3.ZeroReadOnly;
+                const pivot = this.pivot.getConnectedValue(state) || Vector3.ZeroReadOnly;
 
                 // Transform
+                Matrix.TranslationToRef(-pivot.x, -pivot.y, -pivot.z, this._pivotMatrix);
                 Matrix.ScalingToRef(scaling.x, scaling.y, scaling.z, this._scalingMatrix);
                 Matrix.RotationYawPitchRollToRef(rotation.y, rotation.x, rotation.z, this._rotationMatrix);
-                Matrix.TranslationToRef(translation.x, translation.y, translation.z, this._translationMatrix);
+                Matrix.TranslationToRef(translation.x + pivot.x, translation.y + pivot.y, translation.z + pivot.z, this._translationMatrix);
 
-                this._scalingMatrix.multiplyToRef(this._rotationMatrix, this._scalingRotationMatrix);
+                this._pivotMatrix.multiplyToRef(this._scalingMatrix, this._backPivotMatrix);
+                this._backPivotMatrix.multiplyToRef(this._rotationMatrix, this._scalingRotationMatrix);
                 this._scalingRotationMatrix.multiplyToRef(this._translationMatrix, this._transformMatrix);
                 matrix = this._transformMatrix;
             }
@@ -153,7 +166,7 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.evaluateContext = ${this.evaluateContext ? "true" : "false"};\n`;
         return codeString;
     }
@@ -162,7 +175,7 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.evaluateContext = this.evaluateContext;
@@ -170,7 +183,7 @@ export class GeometryTransformBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         if (serializationObject.evaluateContext !== undefined) {

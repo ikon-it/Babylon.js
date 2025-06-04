@@ -8,6 +8,7 @@ import { TouchHolographicMenu } from "./touchHolographicMenu";
 import type { Observer } from "core/Misc/observable";
 import type { Vector3 } from "core/Maths/math.vector";
 import type { PickingInfo } from "core/Collisions/pickingInfo";
+import { Tools } from "core/Misc/tools";
 
 /**
  * NearMenu that displays buttons and follows the camera
@@ -17,7 +18,7 @@ export class NearMenu extends TouchHolographicMenu {
     /**
      * Base Url for the assets.
      */
-    private static _ASSETS_BASE_URL: string = "https://assets.babylonjs.com/meshes/MRTK/";
+    private static _ASSETS_BASE_URL: string = "https://assets.babylonjs.com/core/MRTK/";
     /**
      * File name for the close icon.
      */
@@ -66,7 +67,8 @@ export class NearMenu extends TouchHolographicMenu {
 
     private _createPinButton(parent: TransformNode) {
         const control = new TouchHolographicButton("pin" + this.name, false);
-        control.imageUrl = NearMenu._ASSETS_BASE_URL + NearMenu._PIN_ICON_FILENAME;
+        const baseUrl = Tools.GetAssetUrl(NearMenu._ASSETS_BASE_URL);
+        control.imageUrl = baseUrl + NearMenu._PIN_ICON_FILENAME;
         control.parent = this;
         control._host = this._host;
         control.isToggleButton = true;
@@ -86,7 +88,7 @@ export class NearMenu extends TouchHolographicMenu {
         return control;
     }
 
-    protected _createNode(scene: Scene): Nullable<TransformNode> {
+    protected override _createNode(scene: Scene): Nullable<TransformNode> {
         const node = super._createNode(scene)! as Mesh;
 
         this._pinButton = this._createPinButton(node);
@@ -105,7 +107,7 @@ export class NearMenu extends TouchHolographicMenu {
         return node;
     }
 
-    protected _finalProcessing() {
+    protected override _finalProcessing() {
         super._finalProcessing();
 
         this._pinButton.position.copyFromFloats((this._backPlate.scaling.x + TouchHolographicMenu.MENU_BUTTON_SCALE) / 2, this._backPlate.scaling.y / 2, 0);
@@ -129,7 +131,7 @@ export class NearMenu extends TouchHolographicMenu {
     /**
      * Disposes the near menu
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
 
         this._defaultBehavior.sixDofDragBehavior.onDragObservable.remove(this._dragObserver);

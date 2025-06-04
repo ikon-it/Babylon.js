@@ -1,4 +1,4 @@
-import { serialize, SerializationHelper, serializeAsColor3, expandToProperty } from "../Misc/decorators";
+import { serialize, serializeAsColor3, expandToProperty } from "../Misc/decorators";
 import type { Nullable } from "../types";
 import type { Scene } from "../scene";
 import type { Matrix } from "../Maths/math.vector";
@@ -13,7 +13,7 @@ import { GetClass } from "../Misc/typeStore";
 import type { ISortableLight } from "./lightConstants";
 import { LightConstants } from "./lightConstants";
 import type { Camera } from "../Cameras/camera";
-
+import { SerializationHelper } from "../Misc/decorators.serialization";
 /**
  * Base class of all the lights in Babylon. It groups all the generic information about lights.
  * Lights are used, as you would expect, to affect how meshes are seen, in terms of both illumination and colour.
@@ -105,6 +105,11 @@ export abstract class Light extends Node implements ISortableLight {
      * Light type const id of the hemispheric light.
      */
     public static readonly LIGHTTYPEID_HEMISPHERICLIGHT = LightConstants.LIGHTTYPEID_HEMISPHERICLIGHT;
+
+    /**
+     * Light type const id of the area light.
+     */
+    public static readonly LIGHTTYPEID_RECT_AREALIGHT = LightConstants.LIGHTTYPEID_RECT_AREALIGHT;
 
     /**
      * Diffuse gives the basic color to an object.
@@ -369,7 +374,7 @@ export abstract class Light extends Node implements ISortableLight {
      * @param scene The scene the light belongs too
      */
     constructor(name: string, scene?: Scene) {
-        super(name, scene);
+        super(name, scene, false);
         this.getScene().addLight(this);
         this._uniformBuffer = new UniformBuffer(this.getScene().getEngine(), undefined, undefined, name);
         this._buildUniformLayout();
@@ -464,7 +469,7 @@ export abstract class Light extends Node implements ISortableLight {
      * Returns the string "Light".
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "Light";
     }
 
@@ -476,7 +481,7 @@ export abstract class Light extends Node implements ISortableLight {
      * @param fullDetails Supports for multiple levels of logging within scene loading
      * @returns the human readable light info
      */
-    public toString(fullDetails?: boolean): string {
+    public override toString(fullDetails?: boolean): string {
         let ret = "Name: " + this.name;
         ret += ", type: " + ["Point", "Directional", "Spot", "Hemispheric"][this.getTypeID()];
         if (this.animations) {
@@ -488,7 +493,7 @@ export abstract class Light extends Node implements ISortableLight {
     }
 
     /** @internal */
-    protected _syncParentEnabledState() {
+    protected override _syncParentEnabledState() {
         super._syncParentEnabledState();
         if (!this.isDisposed()) {
             this._resyncMeshes();
@@ -499,7 +504,7 @@ export abstract class Light extends Node implements ISortableLight {
      * Set the enabled state of this node.
      * @param value - the new enabled state
      */
-    public setEnabled(value: boolean): void {
+    public override setEnabled(value: boolean): void {
         super.setEnabled(value);
 
         this._resyncMeshes();
@@ -568,7 +573,7 @@ export abstract class Light extends Node implements ISortableLight {
      * @param doNotRecurse Set to true to not recurse into each children (recurse into each children by default)
      * @param disposeMaterialAndTextures Set to true to also dispose referenced materials and textures (false by default)
      */
-    public dispose(doNotRecurse?: boolean, disposeMaterialAndTextures = false): void {
+    public override dispose(doNotRecurse?: boolean, disposeMaterialAndTextures = false): void {
         if (this._shadowGenerators) {
             const iterator = this._shadowGenerators.values();
             for (let key = iterator.next(); key.done !== true; key = iterator.next()) {
@@ -605,6 +610,7 @@ export abstract class Light extends Node implements ISortableLight {
      * Returns the light type ID (integer).
      * @returns The light Type id as a constant defines in Light.LIGHTTYPEID_x
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public getTypeID(): number {
         return 0;
     }
@@ -623,7 +629,7 @@ export abstract class Light extends Node implements ISortableLight {
      * @param newParent The parent of this light, if it has one
      * @returns the new created light
      */
-    public clone(name: string, newParent: Nullable<Node> = null): Nullable<Light> {
+    public override clone(name: string, newParent: Nullable<Node> = null): Nullable<Light> {
         const constructor = Light.GetConstructorFromName(this.getTypeID(), name, this.getScene());
 
         if (!constructor) {
@@ -662,16 +668,16 @@ export abstract class Light extends Node implements ISortableLight {
         // Inclusion / exclusions
         if (this.excludedMeshes.length > 0) {
             serializationObject.excludedMeshesIds = [];
-            this.excludedMeshes.forEach((mesh: AbstractMesh) => {
+            for (const mesh of this.excludedMeshes) {
                 serializationObject.excludedMeshesIds.push(mesh.id);
-            });
+            }
         }
 
         if (this.includedOnlyMeshes.length > 0) {
             serializationObject.includedOnlyMeshesIds = [];
-            this.includedOnlyMeshes.forEach((mesh: AbstractMesh) => {
+            for (const mesh of this.includedOnlyMeshes) {
                 serializationObject.includedOnlyMeshesIds.push(mesh.id);
-            });
+            }
         }
 
         // Animations
@@ -923,4 +929,11 @@ export abstract class Light extends Node implements ISortableLight {
      * @param lightIndex defines the index of the light for the effect
      */
     public abstract prepareLightSpecificDefines(defines: any, lightIndex: number): void;
+
+    /**
+     * @internal
+     */
+    public _isReady() {
+        return true;
+    }
 }

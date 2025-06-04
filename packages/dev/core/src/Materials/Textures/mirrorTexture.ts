@@ -102,7 +102,7 @@ export class MirrorTexture extends RenderTargetTexture {
         this.blurKernelY = this._adaptiveBlurKernel * dh;
     }
 
-    protected _onRatioRescale(): void {
+    protected override _onRatioRescale(): void {
         if (this._sizeRatio) {
             this.resize(this._initialSizeParameter);
             if (!this._adaptiveBlurKernel) {
@@ -159,7 +159,7 @@ export class MirrorTexture extends RenderTargetTexture {
         size: number | { width: number; height: number } | { ratio: number },
         scene?: Scene,
         generateMipMaps?: boolean,
-        type: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         samplingMode = Texture.BILINEAR_SAMPLINGMODE,
         generateDepthBuffer = true
     ) {
@@ -183,42 +183,34 @@ export class MirrorTexture extends RenderTargetTexture {
             this._sceneUBO = scene.createSceneUniformBuffer(`Scene for Mirror Texture (name "${name}")`);
         }
 
-        this.onBeforeBindObservable.add(() => {
-            engine._debugPushGroup?.(`mirror generation for ${name}`, 1);
-        });
-
-        this.onAfterUnbindObservable.add(() => {
-            engine._debugPopGroup?.(1);
-        });
-
         let saveClipPlane: Nullable<Plane>;
 
         this.onBeforeRenderObservable.add(() => {
             if (this._sceneUBO) {
-                this._currentSceneUBO = scene!.getSceneUniformBuffer();
-                scene!.setSceneUniformBuffer(this._sceneUBO);
-                scene!.getSceneUniformBuffer().unbindEffect();
+                this._currentSceneUBO = scene.getSceneUniformBuffer();
+                scene.setSceneUniformBuffer(this._sceneUBO);
+                scene.getSceneUniformBuffer().unbindEffect();
             }
 
             Matrix.ReflectionToRef(this.mirrorPlane, this._mirrorMatrix);
-            this._mirrorMatrix.multiplyToRef(scene!.getViewMatrix(), this._transformMatrix);
+            this._mirrorMatrix.multiplyToRef(scene.getViewMatrix(), this._transformMatrix);
 
-            scene!.setTransformMatrix(this._transformMatrix, scene!.getProjectionMatrix());
+            scene.setTransformMatrix(this._transformMatrix, scene.getProjectionMatrix());
 
-            saveClipPlane = scene!.clipPlane;
-            scene!.clipPlane = this.mirrorPlane;
+            saveClipPlane = scene.clipPlane;
+            scene.clipPlane = this.mirrorPlane;
 
-            scene!._mirroredCameraPosition = Vector3.TransformCoordinates((<Camera>scene!.activeCamera).globalPosition, this._mirrorMatrix);
+            scene._mirroredCameraPosition = Vector3.TransformCoordinates((<Camera>scene.activeCamera).globalPosition, this._mirrorMatrix);
         });
 
         this.onAfterRenderObservable.add(() => {
             if (this._sceneUBO) {
-                scene!.setSceneUniformBuffer(this._currentSceneUBO);
+                scene.setSceneUniformBuffer(this._currentSceneUBO);
             }
-            scene!.updateTransformMatrix();
-            scene!._mirroredCameraPosition = null;
+            scene.updateTransformMatrix();
+            scene._mirroredCameraPosition = null;
 
-            scene!.clipPlane = saveClipPlane;
+            scene.clipPlane = saveClipPlane;
         });
     }
 
@@ -284,7 +276,7 @@ export class MirrorTexture extends RenderTargetTexture {
      * Clone the mirror texture.
      * @returns the cloned texture
      */
-    public clone(): MirrorTexture {
+    public override clone(): MirrorTexture {
         const scene = this.getScene();
 
         if (!scene) {
@@ -319,7 +311,7 @@ export class MirrorTexture extends RenderTargetTexture {
      * Serialize the texture to a JSON representation you could use in Parse later on
      * @returns the serialized JSON representation
      */
-    public serialize(): any {
+    public override serialize(): any {
         if (!this.name) {
             return null;
         }
@@ -334,7 +326,7 @@ export class MirrorTexture extends RenderTargetTexture {
     /**
      * Dispose the texture and release its associated resources.
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
         const scene = this.getScene();
 

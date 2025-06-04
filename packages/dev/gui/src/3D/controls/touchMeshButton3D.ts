@@ -55,19 +55,21 @@ export class TouchMeshButton3D extends TouchButton3D {
         };
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "TouchMeshButton3D";
     }
 
     // Mesh association
-    protected _createNode(): TransformNode {
-        this._currentMesh.getChildMeshes().forEach((mesh) => {
+    protected override _createNode(): TransformNode {
+        const meshes = this._currentMesh.getChildMeshes();
+
+        for (const mesh of meshes) {
             this._injectGUI3DReservedDataStore(mesh).control = this;
-        });
+        }
 
         return this._currentMesh;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    protected _affectMaterial(mesh: AbstractMesh) {}
+    protected override _affectMaterial(mesh: AbstractMesh) {}
 }

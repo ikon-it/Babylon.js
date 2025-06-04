@@ -4,11 +4,11 @@ import type { FollowCamera } from "../../Cameras/followCamera";
 import { serialize } from "../../Misc/decorators";
 import type { Nullable } from "../../types";
 import type { Observer } from "../../Misc/observable";
-import type { Engine } from "../../Engines/engine";
 import type { KeyboardInfo } from "../../Events/keyboardEvents";
 import { KeyboardEventTypes } from "../../Events/keyboardEvents";
 import type { Scene } from "../../scene";
 import { Tools } from "../../Misc/tools";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 
 /**
  * Manage the keyboard inputs to control the movement of a follow camera.
@@ -132,9 +132,9 @@ export class FollowCameraKeyboardMoveInput implements ICameraInput<FollowCamera>
     private _ctrlPressed: boolean;
     private _altPressed: boolean;
     private _shiftPressed: boolean;
-    private _onCanvasBlurObserver: Nullable<Observer<Engine>>;
+    private _onCanvasBlurObserver: Nullable<Observer<AbstractEngine>>;
     private _onKeyboardObserver: Nullable<Observer<KeyboardInfo>>;
-    private _engine: Engine;
+    private _engine: AbstractEngine;
     private _scene: Scene;
 
     /**
@@ -142,7 +142,6 @@ export class FollowCameraKeyboardMoveInput implements ICameraInput<FollowCamera>
      * @param noPreventDefault Defines whether event caught by the controls should call preventdefault() (https://developer.mozilla.org/en-US/docs/Web/API/Event/preventDefault)
      */
     public attachControl(noPreventDefault?: boolean): void {
-        // eslint-disable-next-line prefer-rest-params
         noPreventDefault = Tools.BackCompatCameraNoPreventDefault(arguments);
         if (this._onCanvasBlurObserver) {
             return;
@@ -233,7 +232,7 @@ export class FollowCameraKeyboardMoveInput implements ICameraInput<FollowCamera>
      */
     public checkInputs(): void {
         if (this._onKeyboardObserver) {
-            this._keys.forEach((keyCode) => {
+            for (const keyCode of this._keys) {
                 if (this.keysHeightOffsetIncr.indexOf(keyCode) !== -1 && this._modifierHeightOffset()) {
                     this.camera.heightOffset += this.heightSensibility;
                 } else if (this.keysHeightOffsetDecr.indexOf(keyCode) !== -1 && this._modifierHeightOffset()) {
@@ -249,7 +248,7 @@ export class FollowCameraKeyboardMoveInput implements ICameraInput<FollowCamera>
                 } else if (this.keysRadiusDecr.indexOf(keyCode) !== -1 && this._modifierRadius()) {
                     this.camera.radius -= this.radiusSensibility;
                 }
-            });
+            }
         }
     }
 

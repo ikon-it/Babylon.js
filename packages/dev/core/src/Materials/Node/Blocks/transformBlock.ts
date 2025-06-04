@@ -8,6 +8,8 @@ import type { Scene } from "../../../scene";
 import type { InputBlock } from "./Input/inputBlock";
 import type { AbstractMesh } from "../../../Meshes/abstractMesh";
 import type { NodeMaterial, NodeMaterialDefines } from "../nodeMaterial";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { editableInPropertyPage, PropertyTypeForEdition } from "core/Decorators/nodeDecorator";
 
 /**
  * Block used to transform a vector (2, 3 or 4) with a matrix. It will generate a Vector4
@@ -22,6 +24,19 @@ export class TransformBlock extends NodeMaterialBlock {
      * Defines the value to use to complement z value to transform it to a Vector4
      */
     public complementZ = 0;
+
+    /**
+     * Boolean indicating if the transformation is made for a direction vector and not a position vector
+     * If set to true the complementW value will be set to 0 else it will be set to 1
+     */
+    @editableInPropertyPage("Transform as direction", PropertyTypeForEdition.Boolean, undefined, { embedded: true })
+    public get transformAsDirection() {
+        return this.complementW === 0;
+    }
+
+    public set transformAsDirection(value: boolean) {
+        this.complementW = value ? 0 : 1;
+    }
 
     /**
      * Creates a new TransformBlock
@@ -52,7 +67,7 @@ export class TransformBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "TransformBlock";
     }
 
@@ -84,38 +99,45 @@ export class TransformBlock extends NodeMaterialBlock {
         return this._inputs[1];
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         const vector = this.vector;
         const transform = this.transform;
 
+        const vec4 = state._getShaderType(NodeMaterialBlockConnectionPointTypes.Vector4);
+        const vec3 = state._getShaderType(NodeMaterialBlockConnectionPointTypes.Vector3);
+
         if (vector.connectedPoint) {
             // None uniform scaling case.
-            if (this.complementW === 0) {
+            if (this.complementW === 0 || this.transformAsDirection) {
                 const comments = `//${this.name}`;
                 state._emitFunctionFromInclude("helperFunctions", comments);
                 state.sharedData.blocksWithDefines.push(this);
 
                 const transformName = state._getFreeVariableName(`${transform.associatedVariableName}_NUS`);
-                state.compilationString += `mat3 ${transformName} = mat3(${transform.associatedVariableName});\n`;
+                if (state.shaderLanguage === ShaderLanguage.WGSL) {
+                    state.compilationString += `var ${transformName}: mat3x3f = mat3x3f(${transform.associatedVariableName}[0].xyz, ${transform.associatedVariableName}[1].xyz, ${transform.associatedVariableName}[2].xyz);\n`;
+                } else {
+                    state.compilationString += `mat3 ${transformName} = mat3(${transform.associatedVariableName});\n`;
+                }
                 state.compilationString += `#ifdef NONUNIFORMSCALING\n`;
                 state.compilationString += `${transformName} = transposeMat3(inverseMat3(${transformName}));\n`;
                 state.compilationString += `#endif\n`;
                 switch (vector.connectedPoint.type) {
                     case NodeMaterialBlockConnectionPointTypes.Vector2:
                         state.compilationString +=
-                            this._declareOutput(this.output, state) +
-                            ` = vec4(${transformName} * vec3(${vector.associatedVariableName}, ${this._writeFloat(this.complementZ)}), ${this._writeFloat(this.complementW)});\n`;
+                            state._declareOutput(this.output) +
+                            ` = ${vec4}(${transformName} * ${vec3}(${vector.associatedVariableName}, ${this._writeFloat(this.complementZ)}), ${this._writeFloat(this.complementW)});\n`;
                         break;
                     case NodeMaterialBlockConnectionPointTypes.Vector3:
                     case NodeMaterialBlockConnectionPointTypes.Color3:
                         state.compilationString +=
-                            this._declareOutput(this.output, state) + ` = vec4(${transformName} * ${vector.associatedVariableName}, ${this._writeFloat(this.complementW)});\n`;
+                            state._declareOutput(this.output) + ` = ${vec4}(${transformName} * ${vector.associatedVariableName}, ${this._writeFloat(this.complementW)});\n`;
                         break;
                     default:
                         state.compilationString +=
-                            this._declareOutput(this.output, state) + ` = vec4(${transformName} * ${vector.associatedVariableName}.xyz, ${this._writeFloat(this.complementW)});\n`;
+                            state._declareOutput(this.output) + ` = ${vec4}(${transformName} * ${vector.associatedVariableName}.xyz, ${this._writeFloat(this.complementW)});\n`;
                         break;
                 }
             } else {
@@ -123,22 +145,22 @@ export class TransformBlock extends NodeMaterialBlock {
                 switch (vector.connectedPoint.type) {
                     case NodeMaterialBlockConnectionPointTypes.Vector2:
                         state.compilationString +=
-                            this._declareOutput(this.output, state) +
-                            ` = ${transformName} * vec4(${vector.associatedVariableName}, ${this._writeFloat(this.complementZ)}, ${this._writeFloat(this.complementW)});\n`;
+                            state._declareOutput(this.output) +
+                            ` = ${transformName} * ${vec4}(${vector.associatedVariableName}, ${this._writeFloat(this.complementZ)}, ${this._writeFloat(this.complementW)});\n`;
                         break;
                     case NodeMaterialBlockConnectionPointTypes.Vector3:
                     case NodeMaterialBlockConnectionPointTypes.Color3:
                         state.compilationString +=
-                            this._declareOutput(this.output, state) + ` = ${transformName} * vec4(${vector.associatedVariableName}, ${this._writeFloat(this.complementW)});\n`;
+                            state._declareOutput(this.output) + ` = ${transformName} * ${vec4}(${vector.associatedVariableName}, ${this._writeFloat(this.complementW)});\n`;
                         break;
                     default:
-                        state.compilationString += this._declareOutput(this.output, state) + ` = ${transformName} * ${vector.associatedVariableName};\n`;
+                        state.compilationString += state._declareOutput(this.output) + ` = ${transformName} * ${vector.associatedVariableName};\n`;
                         break;
                 }
             }
 
             if (this.xyz.hasEndpoints) {
-                state.compilationString += this._declareOutput(this.xyz, state) + ` = ${this.output.associatedVariableName}.xyz;\n`;
+                state.compilationString += state._declareOutput(this.xyz) + ` = ${this.output.associatedVariableName}.xyz;\n`;
             }
         }
 
@@ -151,14 +173,14 @@ export class TransformBlock extends NodeMaterialBlock {
      * @param nodeMaterial defines the node material requesting the update
      * @param defines defines the material defines to update
      */
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         // Do nothing
         if (mesh.nonUniformScaling) {
             defines.setValue("NONUNIFORMSCALING", true);
         }
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.complementZ = this.complementZ;
@@ -167,14 +189,14 @@ export class TransformBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         this.complementZ = serializationObject.complementZ !== undefined ? serializationObject.complementZ : 0.0;
         this.complementW = serializationObject.complementW !== undefined ? serializationObject.complementW : 1.0;
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         let codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.complementZ = ${this.complementZ};\n`;
 
         codeString += `${this._codeVariableName}.complementW = ${this.complementW};\n`;

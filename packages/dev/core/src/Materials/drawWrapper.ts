@@ -2,9 +2,10 @@ import type { IDrawContext } from "../Engines/IDrawContext";
 import type { IMaterialContext } from "../Engines/IMaterialContext";
 import type { Nullable } from "../types";
 
-import type { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Effect } from "./effect";
 import type { MaterialDefines } from "./materialDefines";
+import { TimingTools } from "core/Misc/timingTools";
 
 /** @internal */
 export class DrawWrapper {
@@ -31,15 +32,11 @@ export class DrawWrapper {
      */
     public _wasPreviouslyUsingInstances: Nullable<boolean> = null;
 
-    public static IsWrapper(effect: Effect | DrawWrapper): effect is DrawWrapper {
-        return (effect as Effect).getPipelineContext === undefined;
-    }
-
     public static GetEffect(effect: Effect | DrawWrapper): Nullable<Effect> {
         return (effect as Effect).getPipelineContext === undefined ? (effect as DrawWrapper).effect : (effect as Effect);
     }
 
-    constructor(engine: ThinEngine, createMaterialContext = true) {
+    constructor(engine: AbstractEngine, createMaterialContext = true) {
         this.effect = null;
         this.defines = null;
         this.drawContext = engine.createDrawContext();
@@ -58,7 +55,25 @@ export class DrawWrapper {
         }
     }
 
-    public dispose(): void {
+    /**
+     * Dispose the effect wrapper and its resources
+     * @param immediate if the effect should be disposed immediately or on the next frame.
+     * If dispose() is not called during a scene or engine dispose, we want to delay the dispose of the underlying effect. Mostly to give a chance to user code to reuse the effect in some way.
+     */
+    public dispose(immediate = false): void {
+        if (this.effect) {
+            const effect = this.effect;
+            if (immediate) {
+                effect.dispose();
+            } else {
+                TimingTools.SetImmediate(() => {
+                    effect.getEngine().onEndFrameObservable.addOnce(() => {
+                        effect.dispose();
+                    });
+                });
+            }
+            this.effect = null;
+        }
         this.drawContext?.dispose();
     }
 }

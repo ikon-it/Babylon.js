@@ -1,17 +1,30 @@
+import { ThinWebGPUEngine } from "core/Engines/thinWebGPUEngine";
 import { InternalTexture, InternalTextureSource } from "../../../Materials/Textures/internalTexture";
 import type { RenderTargetCreationOptions } from "../../../Materials/Textures/textureCreationOptions";
 import { Constants } from "../../constants";
 import type { RenderTargetWrapper } from "../../renderTargetWrapper";
-import { WebGPUEngine } from "../../webgpuEngine";
 
-WebGPUEngine.prototype.createRenderTargetCubeTexture = function (size: number, options?: RenderTargetCreationOptions): RenderTargetWrapper {
+declare module "../../abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
+        /**
+         * Creates a new render target cube wrapper
+         * @param size defines the size of the texture
+         * @param options defines the options used to create the texture
+         * @returns a new render target cube wrapper
+         */
+        createRenderTargetCubeTexture(size: number, options?: RenderTargetCreationOptions): RenderTargetWrapper;
+    }
+}
+
+ThinWebGPUEngine.prototype.createRenderTargetCubeTexture = function (size: number, options?: RenderTargetCreationOptions): RenderTargetWrapper {
     const rtWrapper = this._createHardwareRenderTargetWrapper(false, true, size);
 
     const fullOptions = {
         generateMipMaps: true,
         generateDepthBuffer: true,
         generateStencilBuffer: false,
-        type: Constants.TEXTURETYPE_UNSIGNED_INT,
+        type: Constants.TEXTURETYPE_UNSIGNED_BYTE,
         samplingMode: Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
         format: Constants.TEXTUREFORMAT_RGBA,
         samples: 1,

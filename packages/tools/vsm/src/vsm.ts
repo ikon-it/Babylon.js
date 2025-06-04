@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import * as React from "react";
-import * as ReactDOM from "react-dom";
-import { Popup } from "shared-ui-components/lines/popup";
+import { createRoot } from "react-dom/client";
 import { Workbench } from "./workbench";
+import { CreatePopup } from "shared-ui-components/popupHelper";
 
 export interface IVSMOptions {
     hostElement?: HTMLElement;
@@ -11,16 +12,21 @@ export interface IVSMOptions {
  * Class used to create a VSM
  */
 export class VSM {
+    private static _PopupWindow: Window | null = null;
     public static async Show(options: IVSMOptions) {
         let hostElement = options.hostElement;
         if (!hostElement) {
-            const popupWindow = (Popup as any)["vsm"];
-            if (popupWindow) {
-                popupWindow.close();
+            if (this._PopupWindow) {
+                this._PopupWindow.close();
             }
-            hostElement = Popup.CreatePopup("BABYLON.JS VSM", "vsm", 1200, 800)!;
+            hostElement = CreatePopup("BABYLON.JS VSM", {
+                width: 1200,
+                height: 800,
+                onWindowCreateCallback: (w) => (this._PopupWindow = w),
+            })!;
         }
         const vsm = React.createElement(Workbench);
-        ReactDOM.render(vsm, hostElement);
+        const root = createRoot(hostElement);
+        root.render(vsm);
     }
 }

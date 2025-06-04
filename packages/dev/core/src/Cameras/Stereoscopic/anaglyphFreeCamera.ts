@@ -3,7 +3,7 @@ import { FreeCamera } from "../../Cameras/freeCamera";
 import type { Scene } from "../../scene";
 import { Vector3 } from "../../Maths/math.vector";
 import { Node } from "../../node";
-import { setStereoscopicAnaglyphRigMode } from "../RigModes/stereoscopicAnaglyphRigMode";
+import { _SetStereoscopicAnaglyphRigMode } from "../RigModes/stereoscopicAnaglyphRigMode";
 
 Node.AddNodeConstructor("AnaglyphFreeCamera", (name, scene, options) => {
     return () => new AnaglyphFreeCamera(name, Vector3.Zero(), options.interaxial_distance, scene);
@@ -31,9 +31,9 @@ export class AnaglyphFreeCamera extends FreeCamera {
      * Gets camera class name
      * @returns AnaglyphFreeCamera
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "AnaglyphFreeCamera";
     }
 
-    protected _setRigMode = () => setStereoscopicAnaglyphRigMode(this);
+    protected override _setRigMode = () => _SetStereoscopicAnaglyphRigMode(this);
 }

@@ -1,6 +1,5 @@
 #node-editor-graph-root {
     display: grid;
-    grid-template-rows: calc(100% - 120px) 120px;
     height: 100%;
     width: 100%;
     background: #464646;
@@ -30,26 +29,7 @@
         }
     }
 
-    #nmeNodeList {
-        grid-row: 1 / span 2;
-        grid-column: 1;
-    }
-
-    #leftGrab {
-        grid-row: 1 / span 2;
-        grid-column: 2;
-        cursor: ew-resize;
-    }
-
-    #rightGrab {
-        grid-row: 1 / span 2;
-        grid-column: 4;
-        cursor: ew-resize;
-    }
-
     .diagram-container {
-        grid-row: 1;
-        grid-column: 3;
         background: #5f5b60;
         width: 100%;
         height: 100%;
@@ -62,18 +42,14 @@
     }
 
     .nme-right-panel {
-        grid-row: 1 / span 2;
-        grid-column: 5;
-        display: grid;
-        grid-template-rows: 1fr 40px auto 40px;
-        grid-template-columns: 100%;
         height: 100%;
-        overflow-y: auto;
+        overflow: hidden;
     }
 
     #propertyTab {
         grid-row: 1;
         grid-column: 1;
+        overflow-y: auto;
     }
 
     .button {
@@ -101,9 +77,12 @@
         }
     }
 
+    .nme-preview-part {
+        display: grid;
+        grid-template-rows: 40px 1fr 40px;
+    }
+
     #preview-mesh-bar {
-        grid-row: 2;
-        grid-column: 1;
         display: grid;
         grid-template-columns: auto 1fr 40px 40px 40px;
         align-items: center;
@@ -118,7 +97,7 @@
             grid-column: 1;
             height: 40px;
             display: grid;
-            grid-template-columns: 0px 1fr;
+            grid-template-columns: 0px 1fr 0px;
 
             .label {
                 grid-column: 1;
@@ -177,6 +156,8 @@
             img {
                 height: 24px;
                 width: 24px;
+                grid-row: 1;
+                grid-column: 1;
             }
             #color-picker-image {
                 padding-left: 7px;
@@ -207,8 +188,7 @@
     }
 
     #preview-config-bar {
-        grid-row: 4;
-        grid-column: 1;
+        background-color: #555555;
         display: grid;
         grid-template-columns: 40px 40px 40px 1fr 40px 40px;
         color: white;
@@ -242,6 +222,10 @@
                 select {
                     width: 115px;
                 }
+            }
+
+            .copy {
+                display: none;
             }
         }
 
@@ -290,7 +274,7 @@
 
     #preview {
         border-top: 1px solid rgb(85, 85, 85);
-        grid-row: 3;
+        grid-row: 2;
         grid-column: 1;
         width: 100%;
         display: grid;
@@ -300,6 +284,27 @@
         padding: 0 !important;
         user-select: none;
         overflow: hidden;
+        height: 100%;
+
+        #preview-color-picker {
+            width: 100%;
+            height: 100%;
+            grid-row: 1;
+            grid-column: 1;
+            color: white;
+            font-size: 12px;
+            align-content: end;
+            justify-content: center;
+            z-index: 10;
+            display: grid;
+            transition: opacity 250ms;
+            pointer-events: none;
+
+            &.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+        }
 
         #preview-canvas {
             width: 100%;
@@ -331,29 +336,6 @@
         }
     }
 
-    .blocker {
-        visibility: hidden;
-        position: absolute;
-        width: calc(100% - 40px);
-        height: 100%;
-        top: 0;
-        left: 0;
-
-        background: rgba(20, 20, 20, 0.95);
-        font-family: "acumin-pro";
-        color: white;
-        font-size: 24px;
-
-        display: grid;
-        align-content: center;
-        justify-content: center;
-
-        user-select: none;
-
-        padding: 20px;
-        text-align: center;
-    }
-
     #log-console {
         grid-row: 2;
         grid-column: 3;
@@ -365,5 +347,33 @@
 
     .InputBlock {
         width: 250px;
+    }
+}
+
+.blocker {
+    position: absolute;
+    width: calc(100% - 40px);
+    height: 100%;
+    top: 0;
+    left: 0;
+
+    background: rgba(20, 20, 20, 0.95);
+    font-family: "acumin-pro";
+    color: white;
+    font-size: 24px;
+
+    display: none;
+    align-content: center;
+    justify-content: center;
+
+    user-select: none;
+
+    padding: 20px;
+    text-align: center;
+}
+
+@media screen and (max-width: 899px) {
+    .blocker {
+        display: grid;
     }
 }

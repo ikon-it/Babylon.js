@@ -12,7 +12,7 @@ import type { TextBlock } from "gui/2D/controls/textBlock";
 import { Container } from "gui/2D/controls/container";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
 import { ValueAndUnit } from "gui/2D/valueAndUnit";
-import { ColorLineComponent } from "shared-ui-components/lines/colorLineComponent";
+import { ColorLine } from "shared-ui-components/lines/colorLineComponent";
 import { makeTargetsProxy, conflictingValuesPlaceholder } from "shared-ui-components/lines/targetsProxy";
 import type { DimensionProperties } from "../../../../diagram/coordinateHelper";
 import { CoordinateHelper } from "../../../../diagram/coordinateHelper";
@@ -59,7 +59,7 @@ import type { IInspectableOptions } from "core/Misc/iInspectable";
 
 import { WorkbenchComponent } from "../../../../diagram/workbench";
 import type { GlobalState } from "../../../../globalState";
-import { Popup } from "shared-ui-components/lines/popup";
+import { GUIEditor } from "../../../../guiEditor";
 
 interface ICommonControlPropertyGridComponentProps {
     controls: Control[];
@@ -134,7 +134,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
         });
     }
 
-    componentWillMount() {
+    override componentDidMount() {
         this._checkFontsInLayout();
     }
 
@@ -263,7 +263,9 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
 
     private _getCommonPropertyKeys(objects: {}[]) {
         objects = objects.filter((x) => !!x);
-        if (objects.length === 0) return [];
+        if (objects.length === 0) {
+            return [];
+        }
         if (objects.length === 1) {
             return Object.keys(objects[0]);
         }
@@ -275,14 +277,15 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
 
     private _markChildrenAsDirty() {
         for (const control of this.props.controls) {
-            if (control instanceof Container)
-                (control as Container)._children.forEach((child) => {
+            if (control instanceof Container) {
+                for (const child of (control as Container)._children) {
                     child._markAsDirty();
-                });
+                }
+            }
         }
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onPropertyChangedObserver) {
             this.props.onPropertyChangedObservable?.remove(this._onPropertyChangedObserver);
         }
@@ -304,7 +307,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
         });
     }
 
-    render() {
+    override render() {
         const controls = this.props.controls;
         const firstControl = controls[0];
         let horizontalAlignment = firstControl.horizontalAlignment;
@@ -360,8 +363,12 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                 const initialValue = control[propertyName];
                 const initialUnit = (control as any)["_" + propertyName]._unit;
                 let newValue: number = (control as any)[`${propertyName}InPixels`] + amount;
-                if (minimum !== undefined && newValue < minimum) newValue = minimum;
-                if (maximum !== undefined && newValue > maximum) newValue = maximum;
+                if (minimum !== undefined && newValue < minimum) {
+                    newValue = minimum;
+                }
+                if (maximum !== undefined && newValue > maximum) {
+                    newValue = maximum;
+                }
                 (control as any)[`${propertyName}InPixels`] = newValue;
                 if (initialUnit === ValueAndUnit.UNITMODE_PERCENTAGE) {
                     CoordinateHelper.ConvertToPercentage(control, [propertyName]);
@@ -514,7 +521,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                                         if (control.typeName === "Image") {
                                             (control as Image).autoScale = false;
                                         } else if (control instanceof Container) {
-                                            (control as Container).adaptWidthToChildren = false;
+                                            control.adaptWidthToChildren = false;
                                         } else if (control.typeName === "ColorPicker") {
                                             if (newValue === "0" || newValue === "-") {
                                                 newValue = "1";
@@ -538,7 +545,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                                         if (control.typeName === "Image") {
                                             (control as Image).autoScale = false;
                                         } else if (control instanceof Container) {
-                                            (control as Container).adaptHeightToChildren = false;
+                                            control.adaptHeightToChildren = false;
                                         } else if (control.typeName === "ColorPicker") {
                                             if (newValue === "0" || newValue === "-") {
                                                 newValue = "1";
@@ -696,13 +703,13 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                 ) && (
                     <div className="ge-divider">
                         <IconComponent icon={colorIcon} label={"Outline Color"} />
-                        <ColorLineComponent lockObject={this.props.lockObject} label="Outline Color" target={proxy} propertyName="color" />
+                        <ColorLine lockObject={this.props.lockObject} label="Outline Color" target={proxy} propertyName="color" />
                     </div>
                 )}
                 {controls.every((control) => (control as any).background !== undefined) && (
                     <div className="ge-divider">
                         <IconComponent icon={fillColorIcon} label={"Background Color"} />
-                        <ColorLineComponent lockObject={this.props.lockObject} label="Background Color" target={proxy} propertyName="background" />
+                        <ColorLine lockObject={this.props.lockObject} label="Background Color" target={proxy} propertyName="background" />
                     </div>
                 )}
                 <div className="ge-divider">
@@ -711,7 +718,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                 </div>
                 <div className="ge-divider">
                     <IconComponent icon={shadowColorIcon} label={"Shadow Color"} />
-                    <ColorLineComponent lockObject={this.props.lockObject} label="" target={proxy} propertyName="shadowColor" disableAlpha={true} />
+                    <ColorLine lockObject={this.props.lockObject} label="" target={proxy} propertyName="shadowColor" />
                 </div>
                 <div className="ge-divider double">
                     <IconComponent icon={shadowOffsetXIcon} label={"Shadow Offset"} />
@@ -802,7 +809,7 @@ export class CommonControlPropertyGridComponent extends React.Component<ICommonC
                         icon={addIcon}
                         isActive={false}
                         onClick={() => {
-                            const w = (Popup as any)["gui-editor"] ?? window;
+                            const w = GUIEditor._PopupWindow ?? window;
                             const input = w.prompt("Enter new key name for metadata value", "newKey");
                             if (input === null || input.trim() === "") {
                                 return;

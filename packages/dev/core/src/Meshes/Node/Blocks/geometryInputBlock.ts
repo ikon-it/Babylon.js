@@ -25,6 +25,11 @@ export class GeometryInputBlock extends NodeGeometryBlock {
     /** Gets or sets the group to use to display this block in the Inspector */
     public groupInInspector = "";
 
+    /**
+     * Gets or sets a boolean indicating that this input is displayed in the Inspector
+     */
+    public displayInInspector = true;
+
     /** Gets an observable raised when the value is changed */
     public onValueChangedObservable = new Observable<GeometryInputBlock>();
 
@@ -79,6 +84,8 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         switch (value) {
             case NodeGeometryContextualSources.Positions:
             case NodeGeometryContextualSources.Normals:
+            case NodeGeometryContextualSources.LatticeID:
+            case NodeGeometryContextualSources.LatticeControl:
                 this._type = NodeGeometryBlockConnectionPointTypes.Vector3;
                 break;
             case NodeGeometryContextualSources.Colors:
@@ -161,7 +168,7 @@ export class GeometryInputBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryInputBlock";
     }
 
@@ -197,7 +204,7 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         super._buildBlock(state);
 
         if (this.isContextual) {
@@ -211,13 +218,13 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         }
     }
 
-    public dispose() {
+    public override dispose() {
         this.onValueChangedObservable.clear();
 
         super.dispose();
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const variableName = this._codeVariableName;
 
         if (this.isContextual) {
@@ -258,7 +265,7 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         return super._dumpPropertiesCode() + codes.join(";\n");
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.type = this.type;
@@ -266,6 +273,7 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         serializationObject.min = this.min;
         serializationObject.max = this.max;
         serializationObject.groupInInspector = this.groupInInspector;
+        serializationObject.displayInInspector = this.displayInInspector;
 
         if (this._storedValue !== null && !this.isContextual) {
             if (this._storedValue.asArray) {
@@ -280,7 +288,7 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this._type = serializationObject.type;
@@ -289,6 +297,9 @@ export class GeometryInputBlock extends NodeGeometryBlock {
         this.min = serializationObject.min || 0;
         this.max = serializationObject.max || 0;
         this.groupInInspector = serializationObject.groupInInspector || "";
+        if (serializationObject.displayInInspector !== undefined) {
+            this.displayInInspector = serializationObject.displayInInspector;
+        }
 
         if (!serializationObject.valueType) {
             return;

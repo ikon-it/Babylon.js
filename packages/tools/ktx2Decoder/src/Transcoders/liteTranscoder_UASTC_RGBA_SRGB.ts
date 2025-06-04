@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/naming-convention
 import * as KTX2 from "core/Materials/Textures/ktx2decoderTypes";
 
 import { LiteTranscoder } from "./liteTranscoder";
@@ -13,23 +14,29 @@ export class LiteTranscoder_UASTC_RGBA_SRGB extends LiteTranscoder {
      */
     public static WasmModuleURL = "https://cdn.babylonjs.com/ktx2Transcoders/1/uastc_rgba8_srgb_v2.wasm";
 
-    public static CanTranscode(src: KTX2.SourceTextureFormat, dst: KTX2.TranscodeTarget, isInGammaSpace: boolean): boolean {
+    /**
+     * Binary data of the wasm module
+     */
+    public static WasmBinary: ArrayBuffer | null = null;
+
+    public static override CanTranscode(src: KTX2.SourceTextureFormat, dst: KTX2.TranscodeTarget, isInGammaSpace: boolean): boolean {
         return src === KTX2.SourceTextureFormat.UASTC4x4 && dst === KTX2.TranscodeTarget.RGBA32 && isInGammaSpace;
     }
 
-    public static Name = "UniversalTranscoder_UASTC_RGBA_SRGB";
+    public static override Name = "UniversalTranscoder_UASTC_RGBA_SRGB";
 
-    public getName(): string {
+    public override getName(): string {
         return LiteTranscoder_UASTC_RGBA_SRGB.Name;
     }
 
-    public initialize(): void {
+    public override initialize(): void {
         super.initialize();
         this._transcodeInPlace = false;
-        this.setModulePath(LiteTranscoder_UASTC_RGBA_SRGB.WasmModuleURL);
+        this.setModulePath(LiteTranscoder_UASTC_RGBA_SRGB.WasmModuleURL, LiteTranscoder_UASTC_RGBA_SRGB.WasmBinary);
     }
 
-    public transcode(
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public override async transcode(
         src: KTX2.SourceTextureFormat,
         dst: KTX2.TranscodeTarget,
         level: number,
@@ -40,11 +47,10 @@ export class LiteTranscoder_UASTC_RGBA_SRGB extends LiteTranscoder {
         imageDesc: IKTX2_ImageDesc | null,
         encodedData: Uint8Array
     ): Promise<Uint8Array | null> {
-        return this._loadModule().then((moduleWrapper: any) => {
-            const transcoder: any = moduleWrapper.module;
-            const [, uncompressedTextureView] = this._prepareTranscoding(width, height, uncompressedByteLength, encodedData, 4);
+        const moduleWrapper = await this._loadModuleAsync();
+        const transcoder: any = moduleWrapper.module;
+        const [, uncompressedTextureView] = this._prepareTranscoding(width, height, uncompressedByteLength, encodedData, 4);
 
-            return transcoder.decode(width, height) === 0 ? uncompressedTextureView!.slice() : null;
-        });
+        return transcoder.decode(width, height) === 0 ? uncompressedTextureView!.slice() : null;
     }
 }

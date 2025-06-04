@@ -6,8 +6,20 @@ import type { Material } from "core/Materials/material";
 import type { IMaterial } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_materials_unlit";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_materials_unlit extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_materials_unlit"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_unlit/README.md)
@@ -47,12 +59,14 @@ export class KHR_materials_unlit implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtensionAsync(context, material, this.name, () => {
-            return this._loadUnlitPropertiesAsync(context, material, babylonMaterial);
+        return GLTFLoader.LoadExtensionAsync(context, material, this.name, async () => {
+            return await this._loadUnlitPropertiesAsync(context, material, babylonMaterial);
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadUnlitPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Promise<void> {
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
@@ -87,8 +101,10 @@ export class KHR_materials_unlit implements IGLTFLoaderExtension {
 
         this._loader.loadMaterialAlphaProperties(context, material, babylonMaterial);
 
+        // eslint-disable-next-line github/no-then
         return Promise.all(promises).then(() => {});
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_materials_unlit(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_materials_unlit(loader));

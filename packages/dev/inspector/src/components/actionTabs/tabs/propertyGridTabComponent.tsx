@@ -75,6 +75,8 @@ import type { SSAORenderingPipeline } from "core/PostProcesses/RenderPipeline/Pi
 import { SSAORenderingPipelinePropertyGridComponent } from "./propertyGrids/postProcesses/ssaoRenderingPipelinePropertyGridComponent";
 import type { SSAO2RenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline";
 import { SSAO2RenderingPipelinePropertyGridComponent } from "./propertyGrids/postProcesses/ssao2RenderingPipelinePropertyGridComponent";
+import type { IblShadowsRenderPipeline } from "core/Rendering/IBLShadows/iblShadowsRenderPipeline";
+import { IblShadowsRenderPipelinePropertyGridComponent } from "./propertyGrids/postProcesses/iblShadowsRenderPipelinePropertyGridComponent";
 import type { SSRRenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/ssrRenderingPipeline";
 import { SSRRenderingPipelinePropertyGridComponent } from "./propertyGrids/postProcesses/ssrRenderingPipelinePropertyGridComponent";
 import type { Skeleton } from "core/Bones/skeleton";
@@ -85,6 +87,7 @@ import { DirectionalLightPropertyGridComponent } from "./propertyGrids/lights/di
 import type { DirectionalLight } from "core/Lights/directionalLight";
 import type { SpotLight } from "core/Lights/spotLight";
 import { SpotLightPropertyGridComponent } from "./propertyGrids/lights/spotLightPropertyGridComponent";
+import { RectAreaLightPropertyGridComponent } from "./propertyGrids/lights/rectAreaLightPropertyGridComponent";
 import type { LensRenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/lensRenderingPipeline";
 import { LensRenderingPipelinePropertyGridComponent } from "./propertyGrids/postProcesses/lensRenderingPipelinePropertyGridComponent";
 import type { NodeMaterial } from "core/Materials/Node/nodeMaterial";
@@ -104,8 +107,15 @@ import type { Sound } from "core/Audio/sound";
 import { SoundPropertyGridComponent } from "./propertyGrids/sounds/soundPropertyGridComponent";
 import { LayerPropertyGridComponent } from "./propertyGrids/layers/layerPropertyGridComponent";
 import type { EffectLayer } from "core/Layers/effectLayer";
+import { FrameGraphPropertyGridComponent } from "./propertyGrids/frameGraphs/frameGraphPropertyGridComponent";
+import type { FrameGraph } from "core/FrameGraph/frameGraph";
 import { EmptyPropertyGridComponent } from "./propertyGrids/emptyPropertyGridComponent";
 import { MetadataGridComponent } from "inspector/components/actionTabs/tabs/propertyGrids/metadata/metadataPropertyGridComponent";
+import type { SkyMaterial } from "materials/sky/skyMaterial";
+import { SkyMaterialPropertyGridComponent } from "./propertyGrids/materials/skyMaterialPropertyGridComponent";
+import { Tags } from "core/Misc/tags";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
+import type { RectAreaLight } from "core/Lights/rectAreaLight";
 
 export class PropertyGridTabComponent extends PaneComponent {
     private _timerIntervalId: number;
@@ -121,11 +131,11 @@ export class PropertyGridTabComponent extends PaneComponent {
         }
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         this._timerIntervalId = window.setInterval(() => this.timerRefresh(), 500);
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         window.clearInterval(this._timerIntervalId);
     }
 
@@ -305,6 +315,20 @@ export class PropertyGridTabComponent extends PaneComponent {
                         light={pointLight}
                         lockObject={this._lockObject}
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                        onSelectionChangedObservable={this.props.onSelectionChangedObservable}
+                    />
+                );
+            }
+
+            if (className === "RectAreaLight") {
+                const pointLight = entity as RectAreaLight;
+                return (
+                    <RectAreaLightPropertyGridComponent
+                        globalState={this.props.globalState}
+                        light={pointLight}
+                        lockObject={this._lockObject}
+                        onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                        onSelectionChangedObservable={this.props.onSelectionChangedObservable}
                     />
                 );
             }
@@ -390,6 +414,19 @@ export class PropertyGridTabComponent extends PaneComponent {
                 const material = entity as PBRSpecularGlossinessMaterial;
                 return (
                     <PBRSpecularGlossinessMaterialPropertyGridComponent
+                        globalState={this.props.globalState}
+                        material={material}
+                        lockObject={this._lockObject}
+                        onSelectionChangedObservable={this.props.onSelectionChangedObservable}
+                        onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                    />
+                );
+            }
+
+            if (className === "SkyMaterial") {
+                const material = entity as SkyMaterial;
+                return (
+                    <SkyMaterialPropertyGridComponent
                         globalState={this.props.globalState}
                         material={material}
                         lockObject={this._lockObject}
@@ -511,6 +548,18 @@ export class PropertyGridTabComponent extends PaneComponent {
                 );
             }
 
+            if (className.indexOf("IBLShadowsRenderPipeline") !== -1) {
+                const renderPipeline = entity as IblShadowsRenderPipeline;
+                return (
+                    <IblShadowsRenderPipelinePropertyGridComponent
+                        renderPipeline={renderPipeline}
+                        globalState={this.props.globalState}
+                        lockObject={this._lockObject}
+                        onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                    />
+                );
+            }
+
             if (className.indexOf("RenderingPipeline") !== -1) {
                 const renderPipeline = entity as PostProcessRenderPipeline;
                 return (
@@ -540,6 +589,18 @@ export class PropertyGridTabComponent extends PaneComponent {
                 return (
                     <LayerPropertyGridComponent
                         layer={layer}
+                        globalState={this.props.globalState}
+                        lockObject={this._lockObject}
+                        onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                    />
+                );
+            }
+
+            if (className.indexOf("FrameGraph") !== -1) {
+                const frameGraph = entity as FrameGraph;
+                return (
+                    <FrameGraphPropertyGridComponent
+                        frameGraph={frameGraph}
                         globalState={this.props.globalState}
                         lockObject={this._lockObject}
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
@@ -697,12 +758,29 @@ export class PropertyGridTabComponent extends PaneComponent {
         return null;
     }
 
-    render() {
+    renderTags() {
+        const tags = Object.keys(Tags.GetTags(this.props.selectedEntity, false));
+
+        return tags.map((tag: string, i: number) => {
+            return (
+                <div className="tag" key={"tag" + i}>
+                    {tag}
+                </div>
+            );
+        });
+    }
+
+    override render() {
         const entity = this.props.selectedEntity || {};
         const entityHasMetadataProp = Object.prototype.hasOwnProperty.call(entity, "metadata");
         return (
             <div className="pane">
                 {this.renderContent()}
+                {Tags.HasTags(entity) && (
+                    <LineContainerComponent title="TAGS" selection={this.props.globalState}>
+                        <div className="tagContainer">{this.renderTags()}</div>
+                    </LineContainerComponent>
+                )}
                 {entityHasMetadataProp && <MetadataGridComponent globalState={this.props.globalState} entity={entity} />}
             </div>
         );

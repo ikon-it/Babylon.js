@@ -23,15 +23,15 @@ export class GlobalState {
     public SnippetServerUrl = "https://snippet.babylonjs.com";
 
     public currentCode: string;
-    public getCompiledCode: () => Promise<string> = () => {
-        return Promise.resolve(this.currentCode);
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public getCompiledCode: () => Promise<string> = async () => {
+        return await Promise.resolve(this.currentCode);
     };
     public language = Utilities.ReadStringFromStore("language", "JS");
     public fpsElement: HTMLDivElement;
     public mobileDefaultMode = EditionMode.RenderingOnly;
 
     public runtimeMode = RuntimeMode.Editor;
-    public inspectorIsOpened = false;
 
     public currentSnippetTitle = "";
     public currentSnippetDescription = "";
@@ -44,6 +44,7 @@ export class GlobalState {
     public onRunExecutedObservable = new Observable<void>();
     public onSavedObservable = new Observable<void>();
     public onNewRequiredObservable = new Observable<void>();
+    public onInsertSnippetRequiredObservable = new Observable<string>();
     public onClearRequiredObservable = new Observable<void>();
     public onSaveRequiredObservable = new Observable<void>();
     public onLoadRequiredObservable = new Observable<string>();
@@ -54,7 +55,7 @@ export class GlobalState {
     public onMetadataUpdatedObservable = new Observable<void>();
     public onMetadataWindowHiddenObservable = new Observable<boolean>();
     public onDownloadRequiredObservable = new Observable<void>();
-    public onInspectorRequiredObservable = new Observable<boolean>();
+    public onInspectorRequiredObservable = new Observable<void>();
     public onFormatCodeRequiredObservable = new Observable<void>();
     public onFullcreenRequiredObservable = new Observable<void>();
     public onEditorFullcreenRequiredObservable = new Observable<void>();

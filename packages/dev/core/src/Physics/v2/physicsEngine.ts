@@ -65,6 +65,7 @@ export class PhysicsEngine implements IPhysicsEngine {
      * Default is 1/60.
      * To slow it down, enter 1/600 for example.
      * To speed it up, 1/30
+     * Unit is seconds.
      * @param newTimeStep defines the new timestep to apply to this world.
      */
     public setTimeStep(newTimeStep: number = 1 / 60) {
@@ -110,6 +111,29 @@ export class PhysicsEngine implements IPhysicsEngine {
      */
     public getPhysicsPluginName(): string {
         return this._physicsPlugin.name;
+    }
+
+    /**
+     * Set the maximum allowed linear and angular velocities
+     * @param maxLinearVelocity maximum allowed linear velocity
+     * @param maxAngularVelocity maximum allowed angular velocity
+     */
+    setVelocityLimits(maxLinearVelocity: number, maxAngularVelocity: number): void {
+        this._physicsPlugin.setVelocityLimits(maxLinearVelocity, maxAngularVelocity);
+    }
+
+    /**
+     * @returns maximum allowed linear velocity
+     */
+    getMaxLinearVelocity(): number {
+        return this._physicsPlugin.getMaxLinearVelocity();
+    }
+
+    /**
+     * @returns maximum allowed angular velocity
+     */
+    getMaxAngularVelocity(): number {
+        return this._physicsPlugin.getMaxAngularVelocity();
     }
 
     /**

@@ -1,8 +1,20 @@
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
-import { GLTFLoader } from "../glTFLoader";
+import type { GLTFLoader } from "../glTFLoader";
 import type { IKHRXmpJsonLd_Gltf, IKHRXmpJsonLd_Node } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_xmp_json_ld";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_xmp_json_ld extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_xmp_json_ld"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_xmp_json_ld/README.md)
@@ -48,16 +60,17 @@ export class KHR_xmp_json_ld implements IGLTFLoaderExtension {
             return;
         }
 
-        const xmp_gltf = this._loader.gltf.extensions?.KHR_xmp_json_ld as IKHRXmpJsonLd_Gltf;
-        const xmp_node = this._loader.gltf.asset?.extensions?.KHR_xmp_json_ld as IKHRXmpJsonLd_Node;
-        if (xmp_gltf && xmp_node) {
-            const packet = +xmp_node.packet;
-            if (xmp_gltf.packets && packet < xmp_gltf.packets.length) {
+        const xmpGltf = this._loader.gltf.extensions?.KHR_xmp_json_ld as IKHRXmpJsonLd_Gltf;
+        const xmpNode = this._loader.gltf.asset?.extensions?.KHR_xmp_json_ld as IKHRXmpJsonLd_Node;
+        if (xmpGltf && xmpNode) {
+            const packet = +xmpNode.packet;
+            if (xmpGltf.packets && packet < xmpGltf.packets.length) {
                 this._loader.rootBabylonMesh.metadata = this._loader.rootBabylonMesh.metadata || {};
-                this._loader.rootBabylonMesh.metadata.xmp = xmp_gltf.packets[packet];
+                this._loader.rootBabylonMesh.metadata.xmp = xmpGltf.packets[packet];
             }
         }
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_xmp_json_ld(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_xmp_json_ld(loader));

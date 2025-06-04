@@ -23,6 +23,7 @@ export * from "./materialFlags";
 export * from "./Node/index";
 export * from "./effectRenderer";
 export * from "./shadowDepthWrapper";
+export * from "./drawWrapper.functions";
 export * from "./drawWrapper";
 export * from "./materialPluginBase";
 export * from "./materialPluginManager";
@@ -36,4 +37,20 @@ export * from "./GreasedLine/greasedLineMaterialInterfaces";
 export * from "./GreasedLine/greasedLineMaterialDefaults";
 export * from "./meshDebugPluginMaterial";
 export * from "./GaussianSplatting/gaussianSplattingMaterial";
+export * from "./materialHelper.functions";
+export * from "./materialHelper.geometryrendering";
 import "./material.decalMap";
+
+// async-loaded shaders
+
+// StandardMaterial
+export * from "../Shaders/default.fragment";
+export * from "../Shaders/default.vertex";
+export * from "../ShadersWGSL/default.fragment";
+export * from "../ShadersWGSL/default.vertex";
+
+// GreasedLineSimplMaterial
+export * from "../Shaders/greasedLine.fragment";
+export * from "../Shaders/greasedLine.vertex";
+export * from "../ShadersWGSL/greasedLine.fragment";
+export * from "../ShadersWGSL/greasedLine.vertex";

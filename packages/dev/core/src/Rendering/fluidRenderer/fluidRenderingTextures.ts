@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-misused-promises */
 import type { Camera } from "core/Cameras/camera";
 import { Constants } from "core/Engines/constants";
-import type { Engine } from "core/Engines/engine";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 import type { RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
 import { Texture } from "core/Materials/Textures/texture";
 import type { ThinTexture } from "core/Materials/Textures/thinTexture";
@@ -9,13 +10,14 @@ import { PostProcess } from "core/PostProcesses/postProcess";
 import type { Scene } from "core/scene";
 import type { Nullable } from "core/types";
 import { Observable } from "core/Misc/observable";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /** @internal */
 export class FluidRenderingTextures {
     protected _name: string;
     protected _scene: Scene;
     protected _camera: Nullable<Camera>;
-    protected _engine: Engine;
+    protected _engine: AbstractEngine;
     protected _width: number;
     protected _height: number;
     protected _blurTextureSizeX: number;
@@ -88,6 +90,16 @@ export class FluidRenderingTextures {
         return this._textureBlurred;
     }
 
+    /** Shader language used by the texture */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in the texture
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
+
     constructor(
         name: string,
         scene: Scene,
@@ -102,7 +114,8 @@ export class FluidRenderingTextures {
         useStandardBlur = false,
         camera: Nullable<Camera> = null,
         generateDepthBuffer = true,
-        samples = 1
+        samples = 1,
+        shaderLanguage?: ShaderLanguage
     ) {
         this._name = name;
         this._scene = scene;
@@ -127,6 +140,8 @@ export class FluidRenderingTextures {
         this._rtBlur = null;
         this._textureBlurred = null;
         this._blurPostProcesses = null;
+
+        this._shaderLanguage = shaderLanguage ?? (this._engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL);
     }
 
     public initialize(): void {
@@ -239,7 +254,16 @@ export class FluidRenderingTextures {
                 undefined,
                 undefined,
                 undefined,
-                textureFormat
+                textureFormat,
+                this._shaderLanguage,
+                // Keeping this issue for further discussion - extraInitialization should return Promise<void>
+                async () => {
+                    if (this.shaderLanguage === ShaderLanguage.WGSL) {
+                        await import("../../ShadersWGSL/fluidRenderingStandardBlur.fragment");
+                    } else {
+                        await import("../../Shaders/fluidRenderingStandardBlur.fragment");
+                    }
+                }
             );
             kernelBlurXPostprocess.samples = this._samples;
             kernelBlurXPostprocess.externalTextureSamplerBinding = true;
@@ -276,7 +300,15 @@ export class FluidRenderingTextures {
                 undefined,
                 undefined,
                 undefined,
-                textureFormat
+                textureFormat,
+                this._shaderLanguage,
+                async () => {
+                    if (this.shaderLanguage === ShaderLanguage.WGSL) {
+                        await import("../../ShadersWGSL/fluidRenderingStandardBlur.fragment");
+                    } else {
+                        await import("../../Shaders/fluidRenderingStandardBlur.fragment");
+                    }
+                }
             );
             kernelBlurYPostprocess.samples = this._samples;
             kernelBlurYPostprocess.onApplyObservable.add((effect) => {
@@ -319,7 +351,15 @@ export class FluidRenderingTextures {
                 undefined,
                 undefined,
                 undefined,
-                textureFormat
+                textureFormat,
+                this._shaderLanguage,
+                async () => {
+                    if (this.shaderLanguage === ShaderLanguage.WGSL) {
+                        await import("../../ShadersWGSL/fluidRenderingBilateralBlur.fragment");
+                    } else {
+                        await import("../../Shaders/fluidRenderingBilateralBlur.fragment");
+                    }
+                }
             );
             kernelBlurXPostprocess.samples = this._samples;
             kernelBlurXPostprocess.externalTextureSamplerBinding = true;
@@ -358,7 +398,15 @@ export class FluidRenderingTextures {
                 undefined,
                 undefined,
                 undefined,
-                textureFormat
+                textureFormat,
+                this._shaderLanguage,
+                async () => {
+                    if (this.shaderLanguage === ShaderLanguage.WGSL) {
+                        await import("../../ShadersWGSL/fluidRenderingBilateralBlur.fragment");
+                    } else {
+                        await import("../../Shaders/fluidRenderingBilateralBlur.fragment");
+                    }
+                }
             );
             kernelBlurYPostprocess.samples = this._samples;
             kernelBlurYPostprocess.onApplyObservable.add((effect) => {
@@ -415,6 +463,8 @@ export class FluidRenderingTextures {
         if (this.onDisposeObservable.hasObservers()) {
             this.onDisposeObservable.notifyObservers(this);
         }
+
+        this.onDisposeObservable.clear();
 
         this._rt?.dispose();
         this._rt = null;

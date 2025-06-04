@@ -13,8 +13,7 @@ attribute vec2 uv2;
 #include<instancesDeclaration>
 
 // Uniforms
-uniform mat4 projection;
-uniform mat4 view;
+#include<__decl__sceneVertex>
 
 // Varying
 varying vec3 vPosition;
@@ -29,6 +28,7 @@ uniform mat4 opacityMatrix;
 uniform vec2 vOpacityInfos;
 #endif
 
+#include<clipPlaneVertexDeclaration>
 
 #define CUSTOM_VERTEX_DEFINITIONS
 
@@ -61,6 +61,9 @@ void main(void) {
 		vOpacityUV = vec2(opacityMatrix * vec4(uv2, 1.0, 0.0));
 	}
 #endif    
+
+	// Clip plane
+	#include<clipPlaneVertex>
 
 	#include<logDepthVertex>
 

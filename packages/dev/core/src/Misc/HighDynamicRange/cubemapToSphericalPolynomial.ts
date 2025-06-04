@@ -1,5 +1,5 @@
 import { Vector3 } from "../../Maths/math.vector";
-import { Scalar } from "../../Maths/math.scalar";
+import { Clamp } from "../../Maths/math.scalar.functions";
 import { SphericalPolynomial, SphericalHarmonics } from "../../Maths/sphericalPolynomial";
 import type { BaseTexture } from "../../Materials/Textures/baseTexture";
 import type { Nullable } from "../../types";
@@ -76,12 +76,13 @@ export class CubeMapToSphericalPolynomialTools {
         const gammaSpace = texture.gammaSpace;
         // Always read as RGBA.
         const format = Constants.TEXTUREFORMAT_RGBA;
-        let type = Constants.TEXTURETYPE_UNSIGNED_INT;
+        let type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
         if (texture.textureType == Constants.TEXTURETYPE_FLOAT || texture.textureType == Constants.TEXTURETYPE_HALF_FLOAT) {
             type = Constants.TEXTURETYPE_FLOAT;
         }
 
         return new Promise((resolve) => {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
             Promise.all([leftPromise, rightPromise, upPromise, downPromise, frontPromise, backPromise]).then(([left, right, up, down, front, back]) => {
                 const cubeInfo: CubeMapInfo = {
                     size,
@@ -171,7 +172,7 @@ export class CubeMapToSphericalPolynomialTools {
                     }
 
                     // Handle Integer types.
-                    if (cubeInfo.type === Constants.TEXTURETYPE_UNSIGNED_INT) {
+                    if (cubeInfo.type === Constants.TEXTURETYPE_UNSIGNED_BYTE) {
                         r /= 255;
                         g /= 255;
                         b /= 255;
@@ -179,9 +180,9 @@ export class CubeMapToSphericalPolynomialTools {
 
                     // Handle Gamma space textures.
                     if (cubeInfo.gammaSpace) {
-                        r = Math.pow(Scalar.Clamp(r), ToLinearSpace);
-                        g = Math.pow(Scalar.Clamp(g), ToLinearSpace);
-                        b = Math.pow(Scalar.Clamp(b), ToLinearSpace);
+                        r = Math.pow(Clamp(r), ToLinearSpace);
+                        g = Math.pow(Clamp(g), ToLinearSpace);
+                        b = Math.pow(Clamp(b), ToLinearSpace);
                     }
 
                     // Prevent to explode in case of really high dynamic ranges.
@@ -196,9 +197,9 @@ export class CubeMapToSphericalPolynomialTools {
                             b *= factor;
                         }
                     } else {
-                        r = Scalar.Clamp(r, 0, max);
-                        g = Scalar.Clamp(g, 0, max);
-                        b = Scalar.Clamp(b, 0, max);
+                        r = Clamp(r, 0, max);
+                        g = Clamp(g, 0, max);
+                        b = Clamp(b, 0, max);
                     }
 
                     const color = new Color3(r, g, b);

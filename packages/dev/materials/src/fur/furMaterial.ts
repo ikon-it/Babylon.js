@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { serializeAsVector3, serializeAsTexture, serialize, expandToProperty, serializeAsColor3, SerializationHelper } from "core/Misc/decorators";
+import { serializeAsVector3, serializeAsTexture, serialize, expandToProperty, serializeAsColor3 } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Vector3 } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
@@ -11,7 +12,6 @@ import { Texture } from "core/Materials/Textures/texture";
 import { DynamicTexture } from "core/Materials/Textures/dynamicTexture";
 import type { IEffectCreationOptions } from "core/Materials/effect";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { MaterialFlags } from "core/Materials/materialFlags";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -24,7 +24,21 @@ import { EffectFallbacks } from "core/Materials/effectFallbacks";
 
 import "./fur.fragment";
 import "./fur.vertex";
-import { addClipPlaneUniforms, bindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import {
+    BindBonesParameters,
+    BindFogParameters,
+    BindLights,
+    BindLogDepth,
+    HandleFallbacksForShadows,
+    PrepareAttributesForBones,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForLights,
+    PrepareDefinesForMisc,
+    PrepareUniformsAndSamplersList,
+} from "core/Materials/materialHelper.functions";
 
 class FurMaterialDefines extends MaterialDefines {
     public DIFFUSE = false;
@@ -52,6 +66,8 @@ class FurMaterialDefines extends MaterialDefines {
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
     public LOGARITHMICDEPTH = false;
+    public AREALIGHTSUPPORTED = true;
+    public AREALIGHTNOROUGHTNESS = true;
 
     constructor() {
         super();
@@ -132,15 +148,15 @@ export class FurMaterial extends PushMaterial {
         this._furTime = furTime;
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1.0;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
@@ -163,7 +179,7 @@ export class FurMaterial extends PushMaterial {
     }
 
     // Methods
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -214,16 +230,16 @@ export class FurMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
 
         // Lights
-        defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
+        defines._needNormals = PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
 
         // Values that need to be evaluated on every frame
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
+        PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, true);
+        PrepareDefinesForAttributes(mesh, defines, true, true);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -237,7 +253,7 @@ export class FurMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
+            HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
 
             if (defines.NUM_BONE_INFLUENCERS > 0) {
                 fallbacks.addCPUSkinningFallback(0, mesh);
@@ -264,8 +280,8 @@ export class FurMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.ColorKind);
             }
 
-            MaterialHelper.PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
+            PrepareAttributesForInstances(attribs, defines);
 
             // Legacy browser patch
             const shaderName = "fur";
@@ -294,12 +310,12 @@ export class FurMaterial extends PushMaterial {
                 "furDensity",
                 "furOcclusion",
             ];
-            addClipPlaneUniforms(uniforms);
-            const samplers = ["diffuseSampler", "heightTexture", "furTexture"];
+            AddClipPlaneUniforms(uniforms);
+            const samplers = ["diffuseSampler", "heightTexture", "furTexture", "areaLightsLTC1Sampler", "areaLightsLTC2Sampler"];
 
             const uniformBuffers: string[] = [];
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -327,6 +343,16 @@ export class FurMaterial extends PushMaterial {
                 this._materialContext
             );
         }
+
+        // Check if Area Lights have LTC texture.
+        if (defines["AREALIGHTUSED"]) {
+            for (let index = 0; index < mesh.lightSources.length; index++) {
+                if (!mesh.lightSources[index]._isReady()) {
+                    return false;
+                }
+            }
+        }
+
         if (!subMesh.effect || !subMesh.effect.isReady()) {
             return false;
         }
@@ -338,7 +364,7 @@ export class FurMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <FurMaterialDefines>subMesh.materialDefines;
@@ -357,7 +383,7 @@ export class FurMaterial extends PushMaterial {
         this._activeEffect.setMatrix("viewProjection", scene.getTransformMatrix());
 
         // Bones
-        MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
+        BindBonesParameters(mesh, this._activeEffect);
 
         if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
@@ -373,7 +399,7 @@ export class FurMaterial extends PushMaterial {
             }
 
             // Clip plane
-            bindClipPlane(this._activeEffect, this, scene);
+            BindClipPlane(this._activeEffect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
@@ -382,7 +408,7 @@ export class FurMaterial extends PushMaterial {
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -391,7 +417,7 @@ export class FurMaterial extends PushMaterial {
         this._activeEffect.setColor4("vDiffuseColor", this.diffuseColor, this.alpha * mesh.visibility);
 
         if (scene.lightsEnabled && !this.disableLighting) {
-            MaterialHelper.BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
+            BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
         }
 
         // View
@@ -400,7 +426,7 @@ export class FurMaterial extends PushMaterial {
         }
 
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         this._activeEffect.setFloat("furLength", this.furLength);
         this._activeEffect.setFloat("furAngle", this.furAngle);
@@ -422,7 +448,7 @@ export class FurMaterial extends PushMaterial {
         this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         const results = [];
 
         if (this.diffuseTexture && this.diffuseTexture.animations && this.diffuseTexture.animations.length > 0) {
@@ -436,7 +462,7 @@ export class FurMaterial extends PushMaterial {
         return results;
     }
 
-    public getActiveTextures(): BaseTexture[] {
+    public override getActiveTextures(): BaseTexture[] {
         const activeTextures = super.getActiveTextures();
 
         if (this._diffuseTexture) {
@@ -450,7 +476,7 @@ export class FurMaterial extends PushMaterial {
         return activeTextures;
     }
 
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -466,7 +492,7 @@ export class FurMaterial extends PushMaterial {
         return false;
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         if (this.diffuseTexture) {
             this.diffuseTexture.dispose();
         }
@@ -485,11 +511,11 @@ export class FurMaterial extends PushMaterial {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): FurMaterial {
+    public override clone(name: string): FurMaterial {
         return SerializationHelper.Clone(() => new FurMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.FurMaterial";
 
@@ -501,12 +527,12 @@ export class FurMaterial extends PushMaterial {
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "FurMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): FurMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): FurMaterial {
         const material = SerializationHelper.Parse(() => new FurMaterial(source.name, scene), source, scene, rootUrl);
 
         if (source.sourceMeshName && material.highLevelFur) {
@@ -572,7 +598,7 @@ export class FurMaterial extends PushMaterial {
             offsetFur.furTime = mat.furTime;
             offsetFur.furDensity = mat.furDensity;
 
-            const offsetMesh = sourceMesh.clone(sourceMesh.name + i) as Mesh;
+            const offsetMesh = sourceMesh.clone(sourceMesh.name + i);
 
             offsetMesh.material = offsetFur;
             offsetMesh.skeleton = sourceMesh.skeleton;

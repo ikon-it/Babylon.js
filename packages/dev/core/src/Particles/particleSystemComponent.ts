@@ -1,20 +1,19 @@
 import { Mesh } from "../Meshes/mesh";
 import type { IParticleSystem } from "./IParticleSystem";
 import { GPUParticleSystem } from "./gpuParticleSystem";
-import { AbstractScene } from "../abstractScene";
 import type { Effect } from "../Materials/effect";
-import { Engine } from "../Engines/engine";
 import { ParticleSystem } from "./particleSystem";
 import type { Scene } from "../scene";
 import { SceneComponentConstants } from "../sceneComponent";
 import type { AssetContainer } from "../assetContainer";
-
-import "../Shaders/particles.vertex";
 import type { EffectFallbacks } from "../Materials/effectFallbacks";
+import { AbstractEngine } from "../Engines/abstractEngine";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { AddParser, AddIndividualParser, GetIndividualParser } from "core/Loading/Plugins/babylonFileParser.function";
 
 // Adds the parsers to the scene parsers.
-AbstractScene.AddParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (parsedData: any, scene: Scene, container: AssetContainer, rootUrl: string) => {
-    const individualParser = AbstractScene.GetIndividualParser(SceneComponentConstants.NAME_PARTICLESYSTEM);
+AddParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (parsedData: any, scene: Scene, container: AssetContainer, rootUrl: string) => {
+    const individualParser = GetIndividualParser(SceneComponentConstants.NAME_PARTICLESYSTEM);
 
     if (!individualParser) {
         return;
@@ -29,7 +28,7 @@ AbstractScene.AddParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (parsedData
     }
 });
 
-AbstractScene.AddIndividualParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (parsedParticleSystem: any, scene: Scene, rootUrl: string) => {
+AddIndividualParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (parsedParticleSystem: any, scene: Scene, rootUrl: string) => {
     if (parsedParticleSystem.activeParticleCount) {
         const ps = GPUParticleSystem.Parse(parsedParticleSystem, scene, rootUrl);
         return ps;
@@ -39,8 +38,9 @@ AbstractScene.AddIndividualParser(SceneComponentConstants.NAME_PARTICLESYSTEM, (
     }
 });
 
-declare module "../Engines/engine" {
-    export interface Engine {
+declare module "../Engines/abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
         /**
          * Create an effect to use with particle systems.
          * Please note that some parameters like animation sheets or not being billboard are not supported in this configuration, except if you pass
@@ -53,6 +53,8 @@ declare module "../Engines/engine" {
          * @param onCompiled defines a function to call when the effect creation is successful
          * @param onError defines a function to call when the effect creation has failed
          * @param particleSystem the particle system you want to create the effect for
+         * @param shaderLanguage defines the shader language to use
+         * @param vertexName defines the vertex base name of the effect (The name of file without .vertex.fx)
          * @returns the new Effect
          */
         createEffectForParticles(
@@ -63,12 +65,14 @@ declare module "../Engines/engine" {
             fallbacks?: EffectFallbacks,
             onCompiled?: (effect: Effect) => void,
             onError?: (effect: Effect, errors: string) => void,
-            particleSystem?: IParticleSystem
+            particleSystem?: IParticleSystem,
+            shaderLanguage?: ShaderLanguage,
+            vertexName?: string
         ): Effect;
     }
 }
 
-Engine.prototype.createEffectForParticles = function (
+AbstractEngine.prototype.createEffectForParticles = function (
     fragmentName: string,
     uniformsNames: string[] = [],
     samplers: string[] = [],
@@ -76,7 +80,9 @@ Engine.prototype.createEffectForParticles = function (
     fallbacks?: EffectFallbacks,
     onCompiled?: (effect: Effect) => void,
     onError?: (effect: Effect, errors: string) => void,
-    particleSystem?: IParticleSystem
+    particleSystem?: IParticleSystem,
+    shaderLanguage = ShaderLanguage.GLSL,
+    vertexName?: string
 ): Effect {
     let attributesNamesOrOptions: Array<string> = [];
     let effectCreationOption: Array<string> = [];
@@ -105,7 +111,7 @@ Engine.prototype.createEffectForParticles = function (
 
     return this.createEffect(
         {
-            vertex: particleSystem?.vertexShaderName ?? "particles",
+            vertex: vertexName ?? particleSystem?.vertexShaderName ?? "particles",
             fragmentElement: fragmentName,
         },
         attributesNamesOrOptions,
@@ -114,11 +120,21 @@ Engine.prototype.createEffectForParticles = function (
         defines,
         fallbacks,
         onCompiled,
-        onError
+        onError,
+        undefined,
+        shaderLanguage,
+        async () => {
+            if (shaderLanguage === ShaderLanguage.GLSL) {
+                await import("../Shaders/particles.vertex");
+            } else {
+                await import("../ShadersWGSL/particles.vertex");
+            }
+        }
     );
 };
 
 declare module "../Meshes/mesh" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface Mesh {
         /**
          * Returns an array populated with IParticleSystem objects whose the mesh is the emitter

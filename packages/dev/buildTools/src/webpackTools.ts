@@ -7,6 +7,7 @@ import * as path from "path";
 import { camelize } from "./utils.js";
 import type { RuleSetRule, Configuration } from "webpack";
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export const externalsFunction = (excludePackages: string[] = [], type: BuildType = "umd") => {
     return function ({ context, request }: { context: string; request: string }, callback: (err: Error | null, result?: any) => void) {
         if (request.includes("babylonjs-gltf2interface")) {
@@ -50,6 +51,7 @@ export const externalsFunction = (excludePackages: string[] = [], type: BuildTyp
     };
 };
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export const getRules = (
     options: {
         includeAssets?: boolean;
@@ -97,7 +99,7 @@ export const getRules = (
         rules.push(
             {
                 sideEffects: options.sideEffects,
-                test: /(?<!modules)\.s[ac]ss$/i,
+                test: /(?<!module)\.s[ac]ss$/i,
                 use: [
                     "style-loader",
                     {
@@ -110,6 +112,7 @@ export const getRules = (
                     {
                         loader: "sass-loader",
                         options: {
+                            api: "modern",
                             sourceMap: true,
                         },
                     },
@@ -117,13 +120,14 @@ export const getRules = (
             },
             {
                 sideEffects: options.sideEffects,
-                test: /\.modules\.s[ac]ss$/i,
+                test: /\.module\.s[ac]ss$/i,
                 use: [
                     "style-loader",
                     {
                         loader: "css-loader",
                         options: {
                             sourceMap: true,
+                            esModule: true,
                             modules: {
                                 localIdentName: options.mode === "production" ? "[hash:base64]" : "[path][name]__[local]",
                             },
@@ -132,6 +136,7 @@ export const getRules = (
                     {
                         loader: "sass-loader",
                         options: {
+                            api: "modern",
                             sourceMap: true,
                         },
                     },
@@ -143,7 +148,9 @@ export const getRules = (
                     "style-loader",
                     {
                         loader: "css-loader",
+
                         options: {
+                            esModule: true,
                             sourceMap: true,
                         },
                     },
@@ -155,11 +162,13 @@ export const getRules = (
     return rules;
 };
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export const commonDevWebpackConfiguration = (
     env: {
         mode: "development" | "production";
         outputFilename: string;
         dirName: string;
+        dirSuffix?: string;
         enableHttps?: boolean;
         enableHotReload?: boolean;
         enableLiveReload?: boolean;
@@ -202,14 +211,16 @@ export const commonDevWebpackConfiguration = (
             : undefined,
         output: env.outputFilename
             ? {
-                  path: path.resolve(env.dirName, "dist"),
+                  path: path.resolve(env.dirName, "dist", env.dirSuffix || ""),
                   filename: env.outputFilename,
+                  clean: true,
                   devtoolModuleFilenameTemplate: production ? "webpack://[namespace]/[resource-path]?[loaders]" : "file:///[absolute-resource-path]",
               }
             : undefined,
     };
 };
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export const commonUMDWebpackConfiguration = (options: {
     entryPoints?: { [name: string]: string };
     overrideFilename?: string | ((chunk: any) => string);

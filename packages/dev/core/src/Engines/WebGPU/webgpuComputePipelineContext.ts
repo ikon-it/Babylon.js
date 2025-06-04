@@ -15,15 +15,18 @@ export class WebGPUComputePipelineContext implements IComputePipelineContext {
 
     public computePipeline: GPUComputePipeline;
 
+    // eslint-disable-next-line no-restricted-syntax
     public get isAsync() {
         return false;
     }
 
     public get isReady(): boolean {
-        if (this.stage) {
-            return true;
+        if (this.isAsync) {
+            // When async mode is implemented, this should return true if the pipeline is ready
+            return false;
         }
 
+        // In synchronous mode, we return false, the readiness being determined by ComputeEffect
         return false;
     }
 

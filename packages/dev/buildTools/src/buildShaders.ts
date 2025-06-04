@@ -16,13 +16,15 @@ import { checkDirectorySync, checkArgs, getHashOfFile, getHashOfContent } from "
  * Template creating hidden ts file containing the shaders.
  * When moving to pure es6 we will need to remove the Shader assignment
  */
-const tsShaderTemplate = `// Do not edit.
+const TsShaderTemplate = `// Do not edit.
 import { ShaderStore } from "##SHADERSTORELOCATION_PLACEHOLDER##";
 ##INCLUDES_PLACEHOLDER##
 const name = "##NAME_PLACEHOLDER##";
 const shader = \`##SHADER_PLACEHOLDER##\`;
 // Sideeffect
-ShaderStore.##SHADERSTORE_PLACEHOLDER##[name] = shader;
+if (!ShaderStore.##SHADERSTORE_PLACEHOLDER##[name]) {
+    ShaderStore.##SHADERSTORE_PLACEHOLDER##[name] = shader;
+}
 ##EXPORT_PLACEHOLDER##
 `;
 
@@ -31,7 +33,7 @@ ShaderStore.##SHADERSTORE_PLACEHOLDER##[name] = shader;
  * @param filename
  * @returns the shader name
  */
-function getShaderName(filename: string) {
+function GetShaderName(filename: string) {
     const parts = filename.split(".");
     if (parts[1] !== "fx") {
         return parts[0] + (parts[1] === "fragment" ? "Pixel" : parts[1] === "compute" ? "Compute" : "Vertex") + "Shader";
@@ -45,7 +47,7 @@ function getShaderName(filename: string) {
  * @param sourceCode
  * @returns the includes
  */
-function getIncludes(sourceCode: string) {
+function GetIncludes(sourceCode: string) {
     const regex = /#include<(.+)>(\((.*)\))*(\[(.*)\])*/g;
     let match = regex.exec(sourceCode);
 
@@ -82,16 +84,16 @@ function getIncludes(sourceCode: string) {
  * @param basePackageName
  * @param isCore
  */
-export function buildShader(filePath: string, basePackageName: string = "core", isCore?: boolean | string) {
+export function BuildShader(filePath: string, basePackageName: string = "core", isCore?: boolean | string) {
     const isVerbose = checkArgs("--verbose", true);
     isVerbose && console.log("Generating shaders for " + filePath);
     const content = fs.readFileSync(filePath, "utf8");
     const filename = path.basename(filePath);
     const normalized = path.normalize(filePath);
     const directory = path.dirname(normalized);
-    const shaderName = getShaderName(filename);
+    const isWGSL = directory.indexOf("WGSL") > -1;
     const tsFilename = filename.replace(".fx", ".ts").replace(".wgsl", ".ts");
-    const isWGSL = directory.indexOf("ShadersWGSL") > -1;
+    const shaderName = GetShaderName(filename);
     const appendDirName = isWGSL ? "WGSL" : "";
     let fxData = content.toString();
 
@@ -119,7 +121,7 @@ export function buildShader(filePath: string, basePackageName: string = "core", 
 
     // Generate imports for includes.
     let includeText = "";
-    const includes = getIncludes(fxData);
+    const includes = GetIncludes(fxData);
     includes.forEach((entry) => {
         if (isCore) {
             includeText =
@@ -150,19 +152,20 @@ export function buildShader(filePath: string, basePackageName: string = "core", 
     }
 
     // Fill template in.
-    let tsContent = tsShaderTemplate.replace("##SHADERSTORELOCATION_PLACEHOLDER##", shaderStoreLocation);
-    tsContent = tsContent.replace("##INCLUDES_PLACEHOLDER##", includeText);
-    tsContent = tsContent.replace("##NAME_PLACEHOLDER##", shaderName);
-    tsContent = tsContent.replace("##SHADER_PLACEHOLDER##", fxData);
-    tsContent = tsContent.replace("##SHADERSTORE_PLACEHOLDER##", shaderStore);
-    tsContent = tsContent.replace(
-        "##EXPORT_PLACEHOLDER##",
-        `/** @internal */
-export const ${shaderName} = { name, shader };`
-    );
+    let tsContent = TsShaderTemplate.replace("##SHADERSTORELOCATION_PLACEHOLDER##", shaderStoreLocation);
+    tsContent = tsContent
+        .replace("##INCLUDES_PLACEHOLDER##", includeText)
+        .replace("##NAME_PLACEHOLDER##", shaderName)
+        .replace("##SHADER_PLACEHOLDER##", fxData)
+        .replace(new RegExp("##SHADERSTORE_PLACEHOLDER##", "g"), shaderStore)
+        .replace(
+            "##EXPORT_PLACEHOLDER##",
+            `/** @internal */
+export const ${shaderName + (isWGSL ? "WGSL" : "")} = { name, shader };`
+        );
 
     // Go to disk.
-    const tsShaderFilename = path.join(directory /*.replace("src", "dist")*/, tsFilename);
+    const tsShaderFilename = path.join(directory, tsFilename);
     checkDirectorySync(path.dirname(tsShaderFilename));
     // check hash
     if (fs.existsSync(tsShaderFilename)) {
@@ -175,35 +178,3 @@ export const ${shaderName} = { name, shader };`
     fs.writeFileSync(tsShaderFilename, tsContent);
     isVerbose && console.log("Generated " + tsShaderFilename);
 }
-
-// export const buildShaders = () => {
-//     const isCore = checkArgs("--isCore", true);
-//     const global = checkArgs("--global", true);
-//     // global watch - watch all files in dev
-//     const globDirectory = global ? `./packages/dev/**/*.fx` : `./src/**/*.fx`;
-//     let basePackageName: DevPackageName = "core";
-//     if (!isCore) {
-//         const cliPackage = checkArgs("--package", false, true);
-//         if (cliPackage) {
-//             basePackageName = cliPackage as DevPackageName;
-//         }
-//     }
-//     const files = glob.sync(globDirectory);
-//     files.forEach((file: string) => {
-//         buildShader(file, basePackageName, isCore);
-//     });
-
-//     if (checkArgs("--watch", true)) {
-//         chokidar.watch(globDirectory, { ignoreInitial: true, awaitWriteFinish: true }).on("all", (_event, path) => {
-//             if (_event === "add") {
-//                 // check the date on both compiled and source files
-//                 const compiledFile = path.replace(".fx", ".ts");
-//                 if (fs.statSync(compiledFile).mtime > fs.statSync(path).mtime) {
-//                     return;
-//                 }
-//             }
-//             console.log("file changed", path);
-//             buildShader(path, basePackageName, isCore);
-//         });
-//     }
-// };

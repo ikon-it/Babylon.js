@@ -12,11 +12,12 @@ import colorPicker from "./svgs/colorPicker.svg";
 import envPicker from "./svgs/envPicker.svg";
 import pauseIcon from "./svgs/pauseIcon.svg";
 import playIcon from "./svgs/playIcon.svg";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 
 interface IPreviewMeshControlComponent {
     globalState: GlobalState;
     togglePreviewAreaComponent: () => void;
+    onMounted?: () => void;
 }
 
 export class PreviewMeshControlComponent extends React.Component<IPreviewMeshControlComponent> {
@@ -46,10 +47,14 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
         this.props.globalState.onDropEventReceivedObservable.remove(this._onDropEventObserver);
         this.props.globalState.onRefreshPreviewMeshControlComponentRequiredObservable.remove(this._onRefreshPreviewMeshControlComponentRequiredObserver);
+    }
+
+    override componentDidMount(): void {
+        this.props.onMounted?.();
     }
 
     changeMeshType(newOne: PreviewType) {
@@ -58,7 +63,7 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
         }
 
         this.props.globalState.previewType = newOne;
-        this.props.globalState.onPreviewCommandActivated.notifyObservers(false);
+        this.props.globalState.stateManager.onPreviewCommandActivated.notifyObservers(false);
 
         DataStorage.WriteNumber("PreviewType", newOne);
 
@@ -73,7 +78,7 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
             this.props.globalState.previewFile = file;
             this.props.globalState.previewType = PreviewType.Custom;
             this.props.globalState.listOfCustomPreviewFiles = [...files];
-            this.props.globalState.onPreviewCommandActivated.notifyObservers(false);
+            this.props.globalState.stateManager.onPreviewCommandActivated.notifyObservers(false);
             this.forceUpdate();
         }
         if (this._filePickerRef.current) {
@@ -86,7 +91,7 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
             const file = files[0];
             this.props.globalState.envFile = file;
             this.props.globalState.envType = PreviewType.Custom;
-            this.props.globalState.onPreviewCommandActivated.notifyObservers(false);
+            this.props.globalState.stateManager.onPreviewCommandActivated.notifyObservers(false);
             this.forceUpdate();
         }
         if (this._envPickerRef.current) {
@@ -120,7 +125,7 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
         this._colorInputRef.current?.click();
     }
 
-    render() {
+    override render() {
         const meshTypeOptions = [
             { label: "Cube", value: PreviewType.Box },
             { label: "Cylinder", value: PreviewType.Cylinder },
@@ -140,6 +145,13 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
             { label: "Load...", value: PreviewType.Custom + 1 },
         ];
 
+        const gaussianSplattingTypeOptions = [
+            { label: "Default", value: PreviewType.Parrot },
+            { label: "Bricks Skull", value: PreviewType.BricksSkull },
+            { label: "Plants", value: PreviewType.Plants },
+            { label: "Load...", value: PreviewType.Custom + 1 },
+        ];
+
         if (this.props.globalState.listOfCustomPreviewFiles.length > 0) {
             meshTypeOptions.splice(0, 0, {
                 label: "Custom",
@@ -150,16 +162,28 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
                 label: "Custom",
                 value: PreviewType.Custom,
             });
+
+            gaussianSplattingTypeOptions.splice(0, 0, {
+                label: "Custom",
+                value: PreviewType.Custom,
+            });
         }
 
-        const options = this.props.globalState.mode === NodeMaterialModes.Particle ? particleTypeOptions : meshTypeOptions;
+        const options =
+            this.props.globalState.mode === NodeMaterialModes.Particle
+                ? particleTypeOptions
+                : this.props.globalState.mode === NodeMaterialModes.GaussianSplatting
+                  ? gaussianSplattingTypeOptions
+                  : meshTypeOptions;
         const accept = this.props.globalState.mode === NodeMaterialModes.Particle ? ".json" : ".*";
 
         return (
             <div id="preview-mesh-bar">
-                {(this.props.globalState.mode === NodeMaterialModes.Material || this.props.globalState.mode === NodeMaterialModes.Particle) && (
+                {(this.props.globalState.mode === NodeMaterialModes.Material ||
+                    this.props.globalState.mode === NodeMaterialModes.Particle ||
+                    this.props.globalState.mode === NodeMaterialModes.GaussianSplatting) && (
                     <>
-                        <OptionsLineComponent
+                        <OptionsLine
                             label=""
                             options={options}
                             target={this.props.globalState}

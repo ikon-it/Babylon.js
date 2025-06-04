@@ -10,8 +10,8 @@ import { FrameNodePort } from "./frameNodePort";
 import type { NodeLink } from "./nodeLink";
 import type { IFrameData } from "./interfaces/nodeLocationInfo";
 import { StringTools } from "../stringTools";
-import styles from "./graphFrame.modules.scss";
-import commonStyles from "./common.modules.scss";
+import * as styles from "./graphFrame.module.scss";
+import * as commonStyles from "./common.module.scss";
 import { ClassNames } from "../components/classNames";
 
 import type { ISelectionChangedOptions } from "./interfaces/selectionChangedOptions";
@@ -51,6 +51,7 @@ export class GraphFrame {
     private _headerTextElement: HTMLDivElement;
     private _headerCollapseElement: HTMLDivElement;
     private _headerCloseElement: HTMLDivElement;
+    private _headerFocusElement: HTMLDivElement;
     private _commentsElement: HTMLDivElement;
     private _portContainer: HTMLDivElement;
     private _outputPortContainer: HTMLDivElement;
@@ -82,6 +83,7 @@ export class GraphFrame {
     private readonly _closeSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30"><g id="Layer_2" data-name="Layer 2"><path d="M16,15l5.85,5.84-1,1L15,15.93,9.15,21.78l-1-1L14,15,8.19,9.12l1-1L15,14l5.84-5.84,1,1Z"/></g></svg>`;
     private readonly _expandSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30"><g id="Layer_2" data-name="Layer 2"><path d="M22.31,7.69V22.31H7.69V7.69ZM21.19,8.81H8.81V21.19H21.19Zm-6.75,6.75H11.06V14.44h3.38V11.06h1.12v3.38h3.38v1.12H15.56v3.38H14.44Z"/></g></svg>`;
     private readonly _collapseSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30"><g id="Layer_2" data-name="Layer 2"><path d="M22.31,7.69V22.31H7.69V7.69ZM21.19,8.81H8.81V21.19H21.19Zm-2.25,6.75H11.06V14.44h7.88Z"/></g></svg>`;
+    private readonly _focusSVG = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.24992 4.5C5.28344 4.5 4.49996 5.2835 4.49996 6.25V17.75C4.49996 18.7165 5.28344 19.5 6.24992 19.5H17.7496C18.7161 19.5 19.4996 18.7165 19.4996 17.75V13.75C19.4996 13.3358 19.8354 13 20.2496 13C20.6638 13 20.9995 13.3358 20.9995 13.75V17.75C20.9995 19.5449 19.5445 21 17.7496 21H6.24992C4.45504 21 3 19.5449 3 17.75V6.25C3 4.45507 4.45504 3 6.24992 3H10.2498C10.664 3 10.9998 3.33579 10.9998 3.75C10.9998 4.16421 10.664 4.5 10.2498 4.5H6.24992ZM12.9997 3.75C12.9997 3.33579 13.3355 3 13.7497 3H20.25C20.6642 3 21 3.33579 21 3.75V10.25C21 10.6642 20.6642 11 20.25 11C19.8358 11 19.5 10.6642 19.5 10.25V5.56074L14.28 10.7804C13.9871 11.0732 13.5123 11.0732 13.2194 10.7803C12.9265 10.4874 12.9265 10.0125 13.2194 9.71964L18.4395 4.5H13.7497C13.3355 4.5 12.9997 4.16421 12.9997 3.75Z" /></svg>`;
 
     public get id() {
         return this._id;
@@ -161,7 +163,9 @@ export class GraphFrame {
             const port = this._exposedOutPorts[i];
             if (port) {
                 if (port.node === null || port.node.enclosingFrameId != this.id) {
-                    if (this._removePortFromExposedWithNode(port, this._exposedOutPorts)) continue;
+                    if (this._removePortFromExposedWithNode(port, this._exposedOutPorts)) {
+                        continue;
+                    }
                 } else {
                     if (!this._createOutputPorts(port, port.node) && this._removePortFromExposedWithNode(port, this._exposedOutPorts)) {
                         continue;
@@ -255,7 +259,9 @@ export class GraphFrame {
                     this._onNodeLinkDisposedObservers.push(onLinkDisposedObserver);
                 }
             }
-            if (portAdded) return true;
+            if (portAdded) {
+                return true;
+            }
         } else if (port.exposedOnFrame) {
             this._createInputPort(port, node);
             return true;
@@ -274,7 +280,7 @@ export class GraphFrame {
                         portAdded = true;
                         localPort = FrameNodePort.CreateFrameNodePortElement(
                             port.portData,
-                            link.nodeA!,
+                            link.nodeA,
                             this._outputPortContainer,
                             null,
                             this._ownerCanvas.stateManager,
@@ -318,7 +324,9 @@ export class GraphFrame {
                     portAdded = true;
                 }
             }
-            if (portAdded) return true;
+            if (portAdded) {
+                return true;
+            }
         } else if (port.exposedOnFrame) {
             const localPort = FrameNodePort.CreateFrameNodePortElement(
                 port.portData,
@@ -549,18 +557,18 @@ export class GraphFrame {
 
         this._ownerCanvas = canvas;
         const root = canvas.frameContainer;
-        this.element = root.ownerDocument!.createElement("div");
+        this.element = root.ownerDocument.createElement("div");
         this.element.classList.add(commonStyles["frame-box"]);
         root.appendChild(this.element);
 
-        this._headerElement = root.ownerDocument!.createElement("div");
+        this._headerElement = root.ownerDocument.createElement("div");
         this._headerElement.classList.add(styles["frame-box-header"]);
         this._headerElement.addEventListener("dblclick", () => {
             this.isCollapsed = !this.isCollapsed;
         });
         this.element.appendChild(this._headerElement);
 
-        this._borderElement = root.ownerDocument!.createElement("div");
+        this._borderElement = root.ownerDocument.createElement("div");
         this._borderElement.classList.add(styles["frame-box-border"]);
 
         this.element.appendChild(this._borderElement);
@@ -569,53 +577,70 @@ export class GraphFrame {
 
         // add resizing side handles
 
-        const rightHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const rightHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         rightHandle.className = styles["right-handle"];
         this.element.appendChild(rightHandle);
         rightHandle.addEventListener("pointerdown", this._onRightHandlePointerDown);
 
-        const leftHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const leftHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         leftHandle.className = styles["left-handle"];
         this.element.appendChild(leftHandle);
         leftHandle.addEventListener("pointerdown", this._onLeftHandlePointerDown);
 
-        const bottomHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const bottomHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         bottomHandle.className = styles["bottom-handle"];
         this.element.appendChild(bottomHandle);
         bottomHandle.addEventListener("pointerdown", this._onBottomHandlePointerDown);
 
-        const topHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const topHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         topHandle.className = styles["top-handle"];
         this.element.appendChild(topHandle);
         topHandle.addEventListener("pointerdown", this._onTopHandlePointerDown);
 
-        const topRightCornerHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const topRightCornerHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         topRightCornerHandle.className = ClassNames({ "right-handle": true, "top-right-corner-handle": true }, styles);
         this.element.appendChild(topRightCornerHandle);
         topRightCornerHandle.addEventListener("pointerdown", this._onTopRightHandlePointerDown);
 
-        const bottomRightCornerHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const bottomRightCornerHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         bottomRightCornerHandle.className = ClassNames({ "right-handle": true, "bottom-right-corner-handle": true }, styles);
         this.element.appendChild(bottomRightCornerHandle);
         bottomRightCornerHandle.addEventListener("pointerdown", this._onBottomRightHandlePointerDown);
 
-        const topLeftCornerHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const topLeftCornerHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         topLeftCornerHandle.className = ClassNames({ "left-handle": true, "top-left-corner-handle": true }, styles);
         this.element.appendChild(topLeftCornerHandle);
         topLeftCornerHandle.addEventListener("pointerdown", this._onTopLeftHandlePointerDown);
 
-        const bottomLeftCornerHandle: HTMLDivElement = root.ownerDocument!.createElement("div");
+        const bottomLeftCornerHandle: HTMLDivElement = root.ownerDocument.createElement("div");
         bottomLeftCornerHandle.className = ClassNames({ "left-handle": true, "bottom-left-corner-handle": true }, styles);
         this.element.appendChild(bottomLeftCornerHandle);
         bottomLeftCornerHandle.addEventListener("pointerdown", this._onBottomLeftHandlePointerDown);
 
         // add header elements
 
-        this._headerTextElement = root.ownerDocument!.createElement("div");
+        this._headerTextElement = root.ownerDocument.createElement("div");
         this._headerTextElement.classList.add(styles["frame-box-header-title"]);
         this._headerElement.appendChild(this._headerTextElement);
 
-        this._headerCollapseElement = root.ownerDocument!.createElement("div");
+        // Focus
+        this._headerFocusElement = root.ownerDocument.createElement("div");
+        this._headerFocusElement.classList.add(styles["frame-box-header-focus"]);
+        this._headerFocusElement.classList.add(styles["frame-box-header-button"]);
+        this._headerFocusElement.title = "Switch focus mode";
+        this._headerFocusElement.ondragstart = () => false;
+        this._headerFocusElement.addEventListener("pointerdown", (evt) => {
+            evt.stopPropagation();
+        });
+        this._headerFocusElement.addEventListener("pointerup", (evt) => {
+            evt.stopPropagation();
+            this.switchFocusMode();
+        });
+        this._headerFocusElement.innerHTML = this._focusSVG;
+        this._headerElement.appendChild(this._headerFocusElement);
+
+        // Collapse
+        this._headerCollapseElement = root.ownerDocument.createElement("div");
         this._headerCollapseElement.classList.add(styles["frame-box-header-collapse"]);
         this._headerCollapseElement.classList.add(styles["frame-box-header-button"]);
         this._headerCollapseElement.title = "Collapse";
@@ -632,7 +657,8 @@ export class GraphFrame {
         this._headerCollapseElement.innerHTML = this._collapseSVG;
         this._headerElement.appendChild(this._headerCollapseElement);
 
-        this._headerCloseElement = root.ownerDocument!.createElement("div");
+        // Close
+        this._headerCloseElement = root.ownerDocument.createElement("div");
         this._headerCloseElement.classList.add(styles["frame-box-header-close"]);
         this._headerCloseElement.classList.add(styles["frame-box-header-button"]);
         this._headerCloseElement.title = "Close";
@@ -647,26 +673,26 @@ export class GraphFrame {
         this._headerCloseElement.innerHTML = this._closeSVG;
         this._headerElement.appendChild(this._headerCloseElement);
 
-        this._portContainer = root.ownerDocument!.createElement("div");
+        this._portContainer = root.ownerDocument.createElement("div");
         this._portContainer.classList.add(styles["port-container"]);
         this.element.appendChild(this._portContainer);
 
-        this._outputPortContainer = root.ownerDocument!.createElement("div");
+        this._outputPortContainer = root.ownerDocument.createElement("div");
         this._outputPortContainer.classList.add(commonStyles["outputsContainer"]);
         this._portContainer.appendChild(this._outputPortContainer);
 
-        this._inputPortContainer = root.ownerDocument!.createElement("div");
-        this._inputPortContainer.classList.add(commonStyles["inputsContainer"]);
+        this._inputPortContainer = root.ownerDocument.createElement("div");
+        this._inputPortContainer.classList.add(commonStyles["inputsContainer"], commonStyles["inputsContainerUp"]);
         this._portContainer.appendChild(this._inputPortContainer);
 
         this.name = "Frame";
         this.color = Color3.FromInts(72, 72, 72);
 
         if (candidate) {
-            this.x = parseFloat(candidate.style.left!.replace("px", ""));
-            this.y = parseFloat(candidate.style.top!.replace("px", ""));
-            this.width = parseFloat(candidate.style.width!.replace("px", ""));
-            this.height = parseFloat(candidate.style.height!.replace("px", ""));
+            this.x = parseFloat(candidate.style.left.replace("px", ""));
+            this.y = parseFloat(candidate.style.top.replace("px", ""));
+            this.width = parseFloat(candidate.style.width.replace("px", ""));
+            this.height = parseFloat(candidate.style.height.replace("px", ""));
 
             this.cleanAccumulation();
         }
@@ -725,7 +751,69 @@ export class GraphFrame {
         }
     }
 
+    private _isFocused = false;
+    /**
+     * Enter/leave focus mode
+     */
+    public switchFocusMode() {
+        if (this._isFocused) {
+            this._isFocused = false;
+            for (const node of this._ownerCanvas.nodes) {
+                if (this._nodes.indexOf(node) === -1) {
+                    node.rootElement.style.transition = "";
+                    node.rootElement.style.opacity = "";
+                    node.rootElement.style.pointerEvents = "";
+                }
+            }
+            for (const link of this._ownerCanvas.links) {
+                link.path.style.transition = "";
+                link.path.style.opacity = "";
+                link.selectionPath.style.pointerEvents = "";
+            }
+            for (const frame of this._ownerCanvas.frames) {
+                if (frame !== this) {
+                    frame.element.style.transition = "";
+                    frame.element.style.opacity = "";
+                    frame.element.style.pointerEvents = "";
+                }
+            }
+            return;
+        }
+        this._isFocused = true;
+
+        for (const node of this._ownerCanvas.nodes) {
+            if (this._nodes.indexOf(node) === -1) {
+                node.rootElement.style.transition = "opacity 0.5s";
+                node.rootElement.style.opacity = "0.05";
+                node.rootElement.style.pointerEvents = "none";
+            }
+        }
+        for (const link of this._ownerCanvas.links) {
+            if (this._nodes.indexOf(link.nodeA) === -1 || this._nodes.indexOf(link.nodeB!) === -1) {
+                link.path.style.transition = "opacity 0.5s";
+                link.path.style.opacity = "0.3";
+                link.selectionPath.style.pointerEvents = "none";
+            }
+            if (this._nodes.indexOf(link.nodeA) === -1 && this._nodes.indexOf(link.nodeB!) === -1) {
+                link.path.style.transition = "opacity 0.5s";
+                link.path.style.opacity = "0.05";
+                link.selectionPath.style.pointerEvents = "none";
+            }
+        }
+
+        for (const frame of this._ownerCanvas.frames) {
+            if (frame !== this) {
+                frame.element.style.transition = "opacity 0.5s";
+                frame.element.style.opacity = "0.05";
+                frame.element.style.pointerEvents = "none";
+            }
+        }
+    }
+
     public refresh() {
+        if (this._isFocused) {
+            return;
+        }
         this._nodes = [];
         this._ownerCanvas.stateManager.onFrameCreatedObservable.notifyObservers(this);
     }
@@ -1125,7 +1213,7 @@ export class GraphFrame {
 
     private _onLeftHandlePointerUp = (evt: PointerEvent) => {
         if (this._resizingDirection === ResizingDirection.Left) {
-            this.x = parseFloat(this.element.style.left!.replace("px", ""));
+            this.x = parseFloat(this.element.style.left.replace("px", ""));
             this.width = parseFloat(this.element.style.width.replace("px", ""));
             this._ownerCanvas.hostCanvas.removeEventListener("pointerup", this._onLeftHandlePointerUp);
             this._ownerCanvas.hostCanvas.removeEventListener("pointermove", this._onLeftHandlePointerMove);
@@ -1163,7 +1251,7 @@ export class GraphFrame {
 
     private _onTopHandlePointerUp = (evt: PointerEvent) => {
         if (this._isResizingTop()) {
-            this.y = parseFloat(this.element.style.top!.replace("px", ""));
+            this.y = parseFloat(this.element.style.top.replace("px", ""));
             this.height = parseFloat(this.element.style.height.replace("px", ""));
             this._ownerCanvas.hostCanvas.removeEventListener("pointerup", this._onTopHandlePointerUp);
             this._ownerCanvas.hostCanvas.removeEventListener("pointermove", this._onTopHandlePointerMove);
@@ -1220,7 +1308,7 @@ export class GraphFrame {
     private _onTopRightHandlePointerUp = (evt: PointerEvent) => {
         evt.stopPropagation();
         if (this._resizingDirection === ResizingDirection.TopRight) {
-            this.y = parseFloat(this.element.style.top!.replace("px", ""));
+            this.y = parseFloat(this.element.style.top.replace("px", ""));
             this.height = parseFloat(this.element.style.height.replace("px", ""));
             this.width = parseFloat(this.element.style.width.replace("px", ""));
             this._ownerCanvas.hostCanvas.removeEventListener("pointerup", this._onTopRightHandlePointerUp);
@@ -1285,7 +1373,6 @@ export class GraphFrame {
         }
     };
 
-    //@ts-ignore
     private _onBottomLeftHandlePointerDown = (evt: PointerEvent) => {
         if (this.isCollapsed) {
             return;
@@ -1337,7 +1424,7 @@ export class GraphFrame {
         evt.stopPropagation();
         if (this._resizingDirection === ResizingDirection.BottomLeft) {
             this.height = parseFloat(this.element.style.height.replace("px", ""));
-            this.x = parseFloat(this.element.style.left!.replace("px", ""));
+            this.x = parseFloat(this.element.style.left.replace("px", ""));
             this.width = parseFloat(this.element.style.width.replace("px", ""));
             this._ownerCanvas.hostCanvas.removeEventListener("pointerup", this._onBottomLeftHandlePointerUp);
             this._ownerCanvas.hostCanvas.removeEventListener("pointermove", this._onBottomLeftHandlePointerMove);
@@ -1345,7 +1432,6 @@ export class GraphFrame {
         }
     };
 
-    //@ts-ignore
     private _onTopLeftHandlePointerDown = (evt: PointerEvent) => {
         if (this.isCollapsed) {
             return;
@@ -1396,9 +1482,9 @@ export class GraphFrame {
     private _onTopLeftHandlePointerUp = (evt: PointerEvent) => {
         evt.stopPropagation();
         if (this._resizingDirection === ResizingDirection.TopLeft) {
-            this.y = parseFloat(this.element.style.top!.replace("px", ""));
+            this.y = parseFloat(this.element.style.top.replace("px", ""));
             this.height = parseFloat(this.element.style.height.replace("px", ""));
-            this.x = parseFloat(this.element.style.left!.replace("px", ""));
+            this.x = parseFloat(this.element.style.left.replace("px", ""));
             this.width = parseFloat(this.element.style.width.replace("px", ""));
             this._ownerCanvas.hostCanvas.removeEventListener("pointerup", this._onTopLeftHandlePointerUp);
             this._ownerCanvas.hostCanvas.removeEventListener("pointermove", this._onTopLeftHandlePointerMove);

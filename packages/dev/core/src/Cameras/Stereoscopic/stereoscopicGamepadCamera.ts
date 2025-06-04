@@ -3,7 +3,7 @@ import { GamepadCamera } from "../../Cameras/gamepadCamera";
 import type { Scene } from "../../scene";
 import { Vector3 } from "../../Maths/math.vector";
 import { Node } from "../../node";
-import { setStereoscopicRigMode } from "../RigModes/stereoscopicRigMode";
+import { _SetStereoscopicRigMode } from "../RigModes/stereoscopicRigMode";
 
 Node.AddNodeConstructor("StereoscopicGamepadCamera", (name, scene, options) => {
     return () => new StereoscopicGamepadCamera(name, Vector3.Zero(), options.interaxial_distance, options.isStereoscopicSideBySide, scene);
@@ -35,9 +35,9 @@ export class StereoscopicGamepadCamera extends GamepadCamera {
      * Gets camera class name
      * @returns StereoscopicGamepadCamera
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "StereoscopicGamepadCamera";
     }
 
-    protected _setRigMode = () => setStereoscopicRigMode(this);
+    protected override _setRigMode = () => _SetStereoscopicRigMode(this);
 }

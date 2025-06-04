@@ -96,9 +96,10 @@ export class CameraGizmo extends Gizmo implements ICameraGizmo {
                 }
                 this._cameraMesh = CameraGizmo._CreateCameraMesh(this.gizmoLayer.utilityLayerScene);
 
-                this._cameraMesh.getChildMeshes(false).forEach((m) => {
+                const childMeshes = this._cameraMesh.getChildMeshes(false);
+                for (const m of childMeshes) {
                     m.material = this._material;
-                });
+                }
                 this._cameraMesh.parent = this._rootMesh;
             }
 
@@ -109,8 +110,12 @@ export class CameraGizmo extends Gizmo implements ICameraGizmo {
             this._cameraLinesMesh = CameraGizmo._CreateCameraFrustum(this.gizmoLayer.utilityLayerScene, linesColor);
             this._cameraLinesMesh.parent = this._rootMesh;
 
-            if (this.gizmoLayer.utilityLayerScene.activeCamera && this.gizmoLayer.utilityLayerScene.activeCamera.maxZ < camera.maxZ * 1.5) {
-                this.gizmoLayer.utilityLayerScene.activeCamera.maxZ = camera.maxZ * 1.5;
+            if (
+                this.gizmoLayer.utilityLayerScene.activeCamera &&
+                this.gizmoLayer.utilityLayerScene.activeCamera != camera &&
+                this.gizmoLayer.utilityLayerScene.activeCamera.maxZ < camera.maxZ
+            ) {
+                this.gizmoLayer.utilityLayerScene.activeCamera.maxZ = camera.maxZ;
             }
 
             if (!this.attachedNode!.reservedDataStore) {
@@ -141,7 +146,7 @@ export class CameraGizmo extends Gizmo implements ICameraGizmo {
      * Updates the gizmo to match the attached mesh's position/rotation
      */
 
-    protected _update() {
+    protected override _update() {
         super._update();
         if (!this._camera) {
             return;
@@ -169,7 +174,7 @@ export class CameraGizmo extends Gizmo implements ICameraGizmo {
      * Disposes and replaces the current camera mesh in the gizmo with the specified mesh
      * @param mesh The mesh to replace the default mesh of the camera gizmo
      */
-    public setCustomMesh(mesh: Mesh) {
+    public override setCustomMesh(mesh: Mesh) {
         if (mesh.getScene() != this.gizmoLayer.utilityLayerScene) {
             // eslint-disable-next-line no-throw-literal
             throw "When setting a custom mesh on a gizmo, the custom meshes scene must be the same as the gizmos (eg. gizmo.gizmoLayer.utilityLayerScene)";
@@ -185,7 +190,7 @@ export class CameraGizmo extends Gizmo implements ICameraGizmo {
     /**
      * Disposes of the camera gizmo
      */
-    public dispose() {
+    public override dispose() {
         this.onClickedObservable.clear();
         this.gizmoLayer.utilityLayerScene.onPointerObservable.remove(this._pointerObserver);
         if (this._cameraMesh) {

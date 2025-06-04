@@ -3,7 +3,7 @@ import type { Scene } from "core/scene";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
-import { FileButtonLineComponent } from "shared-ui-components/lines/fileButtonLineComponent";
+import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import type { IPerfLayoutSize } from "../../../graph/graphSupportingTypes";
 import type { PerformanceViewerCollector } from "core/Misc/PerformanceViewer/performanceViewerCollector";
@@ -21,16 +21,17 @@ interface IPerformanceViewerComponentProps {
 }
 
 // arbitrary window size
-const initialWindowSize = { width: 1024, height: 512 };
-const initialGraphSize = { width: 724, height: 512 };
+const InitialWindowSize = { width: 1024, height: 512 };
+const InitialGraphSize = { width: 724, height: 512 };
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export enum IPerfMetadataCategory {
     Count = "Count",
     FrameSteps = "Frame Steps Duration",
 }
 
 // list of strategies to add to perf graph automatically.
-const defaultStrategiesList = [
+const DefaultStrategiesList = [
     { strategyCallback: PerfCollectionStrategy.FpsStrategy() },
     { strategyCallback: PerfCollectionStrategy.TotalMeshesStrategy(), category: IPerfMetadataCategory.Count, hidden: true },
     { strategyCallback: PerfCollectionStrategy.ActiveMeshesStrategy(), category: IPerfMetadataCategory.Count, hidden: true },
@@ -91,7 +92,7 @@ export const PerformanceViewerComponent: React.FC<IPerformanceViewerComponentPro
                         title: "Realtime Performance Viewer",
                         onClose: onClosePerformanceViewer,
                         onResize: onResize,
-                        size: initialWindowSize,
+                        size: InitialWindowSize,
                     },
                     children: (
                         <PerformanceViewerPopupComponent
@@ -99,7 +100,7 @@ export const PerformanceViewerComponent: React.FC<IPerformanceViewerComponentPro
                             layoutObservable={layoutObservable}
                             returnToLiveObservable={returnToLiveObservable}
                             performanceCollector={performanceCollector}
-                            initialGraphSize={initialGraphSize}
+                            initialGraphSize={InitialGraphSize}
                         />
                     ),
                 },
@@ -150,7 +151,7 @@ export const PerformanceViewerComponent: React.FC<IPerformanceViewerComponentPro
     };
 
     const addStrategies = (perfCollector: PerformanceViewerCollector) => {
-        perfCollector.addCollectionStrategies(...defaultStrategiesList);
+        perfCollector.addCollectionStrategies(...DefaultStrategiesList);
         if (PressureObserverWrapper.IsAvailable) {
             // Do not enable for now as the Pressure API does not
             // report factors at the moment.
@@ -181,7 +182,7 @@ export const PerformanceViewerComponent: React.FC<IPerformanceViewerComponentPro
     return (
         <LineContainerComponent title="Performance Viewer">
             {!isOpen && <ButtonLineComponent label="Open Realtime Perf Viewer" onClick={onPerformanceButtonClick} />}
-            {!isOpen && <FileButtonLineComponent accept="csv" label="Load Perf Viewer using CSV" onClick={onLoadClick} />}
+            {!isOpen && <FileButtonLine accept="csv" label="Load Perf Viewer using CSV" onClick={onLoadClick} />}
             <ButtonLineComponent label="Export Perf to CSV" onClick={onExportClick} />
             {!isOpen && <ButtonLineComponent label={performanceCollector?.isStarted ? "Stop Recording" : "Begin Recording"} onClick={onToggleRecording} />}
         </LineContainerComponent>

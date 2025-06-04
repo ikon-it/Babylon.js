@@ -34,11 +34,11 @@ export class HexLineComponent extends React.Component<IHexLineComponentProps, { 
         this._store = currentValue;
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.unlock();
     }
 
-    shouldComponentUpdate(nextProps: IHexLineComponentProps, nextState: { value: string }) {
+    override shouldComponentUpdate(nextProps: IHexLineComponentProps, nextState: { value: string }) {
         if (this._localChange) {
             this._localChange = false;
             return true;
@@ -78,8 +78,8 @@ export class HexLineComponent extends React.Component<IHexLineComponentProps, { 
     }
 
     updateValue(valueString: string, raisePropertyChanged: boolean) {
-        if (valueString.substr(0, 2) != "0x") {
-            if (valueString.substr(0, 1) != "0") {
+        if (valueString.substring(0, 2) != "0x") {
+            if (valueString.substring(0, 1) != "0") {
                 valueString = "0x" + valueString;
             } else {
                 valueString = "0x" + valueString.substr(1);
@@ -137,7 +137,7 @@ export class HexLineComponent extends React.Component<IHexLineComponentProps, { 
         }
     }
 
-    render() {
+    override render() {
         let valueAsHex: string;
         if (this._propertyChange) {
             const valueAsNumber = parseInt(this.state.value);

@@ -18,7 +18,7 @@ import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { CubeTexture } from "../../../Textures/cubeTexture";
 import { Texture } from "../../../Textures/texture";
 import { NodeMaterialSystemValues } from "../../Enums/nodeMaterialSystemValues";
-import { Scalar } from "../../../../Maths/math.scalar";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Block used to implement the refraction part of the sub surface module of the PBR material
@@ -63,19 +63,19 @@ export class RefractionBlock extends NodeMaterialBlock {
      * This parameters will make the material used its opacity to control how much it is refracting against not.
      * Materials half opaque for instance using refraction could benefit from this control.
      */
-    @editableInPropertyPage("Link refraction to transparency", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { update: true } })
+    @editableInPropertyPage("Link refraction to transparency", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { update: true } })
     public linkRefractionWithTransparency: boolean = false;
 
     /**
      * Controls if refraction needs to be inverted on Y. This could be useful for procedural texture.
      */
-    @editableInPropertyPage("Invert refraction Y", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { update: true } })
+    @editableInPropertyPage("Invert refraction Y", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { update: true } })
     public invertRefractionY: boolean = false;
 
     /**
      * Controls if refraction needs to be inverted on Y. This could be useful for procedural texture.
      */
-    @editableInPropertyPage("Use thickness as depth", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { update: true } })
+    @editableInPropertyPage("Use thickness as depth", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { update: true } })
     public useThicknessAsDepth: boolean = false;
 
     /**
@@ -108,7 +108,7 @@ export class RefractionBlock extends NodeMaterialBlock {
      * Initialize the block and prepare the context for build
      * @param state defines the state that will be used for the build
      */
-    public initialize(state: NodeMaterialBuildState) {
+    public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("vRefractionPosition");
         state._excludeVariableName("vRefractionSize");
     }
@@ -117,7 +117,7 @@ export class RefractionBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "RefractionBlock";
     }
 
@@ -171,7 +171,7 @@ export class RefractionBlock extends NodeMaterialBlock {
         return this._scene.environmentTexture;
     }
 
-    public autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
+    public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.intensity.isConnected) {
             const intensityInput = new InputBlock("Refraction intensity", NodeMaterialBlockTargets.Fragment, NodeMaterialBlockConnectionPointTypes.Float);
             intensityInput.value = 1;
@@ -189,7 +189,7 @@ export class RefractionBlock extends NodeMaterialBlock {
         }
     }
 
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         super.prepareDefines(mesh, nodeMaterial, defines);
 
         const refractionTexture = this._getTexture();
@@ -201,19 +201,19 @@ export class RefractionBlock extends NodeMaterialBlock {
             return;
         }
 
-        defines.setValue(this._define3DName, refractionTexture!.isCube, true);
-        defines.setValue(this._defineLODRefractionAlpha, refractionTexture!.lodLevelInAlpha, true);
-        defines.setValue(this._defineLinearSpecularRefraction, refractionTexture!.linearSpecularLOD, true);
-        defines.setValue(this._defineOppositeZ, this._scene.useRightHandedSystem && refractionTexture.isCube ? !refractionTexture!.invertZ : refractionTexture!.invertZ, true);
+        defines.setValue(this._define3DName, refractionTexture.isCube, true);
+        defines.setValue(this._defineLODRefractionAlpha, refractionTexture.lodLevelInAlpha, true);
+        defines.setValue(this._defineLinearSpecularRefraction, refractionTexture.linearSpecularLOD, true);
+        defines.setValue(this._defineOppositeZ, this._scene.useRightHandedSystem && refractionTexture.isCube ? !refractionTexture.invertZ : refractionTexture.invertZ, true);
 
         defines.setValue("SS_LINKREFRACTIONTOTRANSPARENCY", this.linkRefractionWithTransparency, true);
-        defines.setValue("SS_GAMMAREFRACTION", refractionTexture!.gammaSpace, true);
-        defines.setValue("SS_RGBDREFRACTION", refractionTexture!.isRGBD, true);
+        defines.setValue("SS_GAMMAREFRACTION", refractionTexture.gammaSpace, true);
+        defines.setValue("SS_RGBDREFRACTION", refractionTexture.isRGBD, true);
         defines.setValue("SS_USE_LOCAL_REFRACTIONMAP_CUBIC", (<any>refractionTexture).boundingBoxSize ? true : false, true);
         defines.setValue("SS_USE_THICKNESS_AS_DEPTH", this.useThicknessAsDepth, true);
     }
 
-    public isReady() {
+    public override isReady() {
         const texture = this._getTexture();
 
         if (texture && !texture.isReadyOrNotBlocking()) {
@@ -223,7 +223,7 @@ export class RefractionBlock extends NodeMaterialBlock {
         return true;
     }
 
-    public bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
+    public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         super.bind(effect, nodeMaterial, mesh);
 
         const refractionTexture = this._getTexture();
@@ -261,7 +261,7 @@ export class RefractionBlock extends NodeMaterialBlock {
 
         const width = refractionTexture.getSize().width;
 
-        effect.setFloat2(this._vRefractionFilteringInfoName, width, Scalar.Log2(width));
+        effect.setFloat2(this._vRefractionFilteringInfoName, width, Math.log2(width));
 
         if ((<any>refractionTexture).boundingBoxSize) {
             const cubeTexture = <CubeTexture>refractionTexture;
@@ -289,12 +289,15 @@ export class RefractionBlock extends NodeMaterialBlock {
         state.samplers.push(this._2DSamplerName);
 
         this._define3DName = state._getFreeDefineName("SS_REFRACTIONMAP_3D");
+        const refractionTexture = this._getTexture();
 
-        state._samplerDeclaration += `#ifdef ${this._define3DName}\n`;
-        state._samplerDeclaration += `uniform samplerCube ${this._cubeSamplerName};\n`;
-        state._samplerDeclaration += `#else\n`;
-        state._samplerDeclaration += `uniform sampler2D ${this._2DSamplerName};\n`;
-        state._samplerDeclaration += `#endif\n`;
+        if (refractionTexture) {
+            state._samplerDeclaration += `#ifdef ${this._define3DName}\n`;
+            state._emitCubeSampler(this._cubeSamplerName, undefined, true);
+            state._samplerDeclaration += `#else\n`;
+            state._emit2DSampler(this._2DSamplerName, undefined, true);
+            state._samplerDeclaration += `#endif\n`;
+        }
 
         // Fragment
         state.sharedData.blocksWithDefines.push(this);
@@ -306,55 +309,57 @@ export class RefractionBlock extends NodeMaterialBlock {
 
         this._refractionMatrixName = state._getFreeVariableName("refractionMatrix");
 
-        state._emitUniformFromString(this._refractionMatrixName, "mat4");
+        state._emitUniformFromString(this._refractionMatrixName, NodeMaterialBlockConnectionPointTypes.Matrix);
 
-        state._emitFunction(
-            "sampleRefraction",
-            `
-            #ifdef ${this._define3DName}
-                #define sampleRefraction(s, c) textureCube(s, c)
-            #else
-                #define sampleRefraction(s, c) texture2D(s, c)
-            #endif\n`,
-            `//${this.name}`
-        );
+        if (state.shaderLanguage !== ShaderLanguage.WGSL) {
+            state._emitFunction(
+                "sampleRefraction",
+                `
+                #ifdef ${this._define3DName}
+                    #define sampleRefraction(s, c) textureCube(s, c)
+                #else
+                    #define sampleRefraction(s, c) texture2D(s, c)
+                #endif\n`,
+                `//${this.name}`
+            );
 
-        state._emitFunction(
-            "sampleRefractionLod",
-            `
-            #ifdef ${this._define3DName}
-                #define sampleRefractionLod(s, c, l) textureCubeLodEXT(s, c, l)
-            #else
-                #define sampleRefractionLod(s, c, l) texture2DLodEXT(s, c, l)
-            #endif\n`,
-            `//${this.name}`
-        );
+            state._emitFunction(
+                "sampleRefractionLod",
+                `
+                #ifdef ${this._define3DName}
+                    #define sampleRefractionLod(s, c, l) textureCubeLodEXT(s, c, l)
+                #else
+                    #define sampleRefractionLod(s, c, l) texture2DLodEXT(s, c, l)
+                #endif\n`,
+                `//${this.name}`
+            );
+        }
 
         this._vRefractionMicrosurfaceInfosName = state._getFreeVariableName("vRefractionMicrosurfaceInfos");
 
-        state._emitUniformFromString(this._vRefractionMicrosurfaceInfosName, "vec4");
+        state._emitUniformFromString(this._vRefractionMicrosurfaceInfosName, NodeMaterialBlockConnectionPointTypes.Vector4);
 
         this._vRefractionInfosName = state._getFreeVariableName("vRefractionInfos");
 
-        state._emitUniformFromString(this._vRefractionInfosName, "vec4");
+        state._emitUniformFromString(this._vRefractionInfosName, NodeMaterialBlockConnectionPointTypes.Vector4);
 
         this._vRefractionFilteringInfoName = state._getFreeVariableName("vRefractionFilteringInfo");
 
-        state._emitUniformFromString(this._vRefractionFilteringInfoName, "vec2");
+        state._emitUniformFromString(this._vRefractionFilteringInfoName, NodeMaterialBlockConnectionPointTypes.Vector2);
 
-        state._emitUniformFromString("vRefractionPosition", "vec3");
-        state._emitUniformFromString("vRefractionSize", "vec3");
+        state._emitUniformFromString("vRefractionPosition", NodeMaterialBlockConnectionPointTypes.Vector3);
+        state._emitUniformFromString("vRefractionSize", NodeMaterialBlockConnectionPointTypes.Vector3);
 
         return code;
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         this._scene = state.sharedData.scene;
 
         return this;
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         let codeString = super._dumpPropertiesCode();
 
         if (this.texture) {
@@ -373,7 +378,7 @@ export class RefractionBlock extends NodeMaterialBlock {
         return codeString;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         if (this.texture && !this.texture.isRenderTarget) {
@@ -387,7 +392,7 @@ export class RefractionBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         if (serializationObject.texture) {

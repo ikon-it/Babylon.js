@@ -252,8 +252,8 @@ export class AxisDragGizmo extends Gizmo implements IAxisDragGizmo {
         light.includedOnlyMeshes = light.includedOnlyMeshes.concat(this._rootMesh.getChildMeshes(false));
 
         const cache: GizmoAxisCache = {
-            gizmoMeshes: arrow.getChildMeshes() as Mesh[],
-            colliderMeshes: collider.getChildMeshes() as Mesh[],
+            gizmoMeshes: arrow.getChildMeshes(),
+            colliderMeshes: collider.getChildMeshes(),
             material: this._coloredMaterial,
             hoverMaterial: this._hoverMaterial,
             disableMaterial: this._disableMaterial,
@@ -278,7 +278,7 @@ export class AxisDragGizmo extends Gizmo implements IAxisDragGizmo {
         });
     }
 
-    protected _attachedNodeChanged(value: Nullable<Node>) {
+    protected override _attachedNodeChanged(value: Nullable<Node>) {
         if (this.dragBehavior) {
             this.dragBehavior.enabled = value ? true : false;
         }
@@ -307,18 +307,19 @@ export class AxisDragGizmo extends Gizmo implements IAxisDragGizmo {
     /**
      * Disposes of the gizmo
      */
-    public dispose() {
+    public override dispose() {
         this.onSnapObservable.clear();
         this.gizmoLayer.utilityLayerScene.onPointerObservable.remove(this._pointerObserver);
         this.dragBehavior.detach();
         if (this._gizmoMesh) {
             this._gizmoMesh.dispose();
         }
-        [this._coloredMaterial, this._hoverMaterial, this._disableMaterial].forEach((matl) => {
+        const mats = [this._coloredMaterial, this._hoverMaterial, this._disableMaterial];
+        for (const matl of mats) {
             if (matl) {
                 matl.dispose();
             }
-        });
+        }
         super.dispose();
     }
 }

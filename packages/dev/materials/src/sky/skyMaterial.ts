@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { serializeAsVector3, serialize, SerializationHelper } from "core/Misc/decorators";
+import { serializeAsVector3, serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Vector3, Quaternion } from "core/Maths/math.vector";
 import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { VertexBuffer } from "core/Buffers/buffer";
 import type { AbstractMesh } from "core/Meshes/abstractMesh";
@@ -18,7 +18,8 @@ import { RegisterClass } from "core/Misc/typeStore";
 import "./sky.fragment";
 import "./sky.vertex";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import { addClipPlaneUniforms, bindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { BindFogParameters, BindLogDepth, PrepareDefinesForAttributes, PrepareDefinesForMisc } from "core/Materials/materialHelper.functions";
 
 /** @internal */
 class SkyMaterialDefines extends MaterialDefines {
@@ -151,7 +152,7 @@ export class SkyMaterial extends PushMaterial {
      * Specifies if the material will require alpha blending
      * @returns a boolean specifying if alpha blending is needed
      */
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1.0;
     }
 
@@ -159,7 +160,7 @@ export class SkyMaterial extends PushMaterial {
      * Specifies if this material should be rendered in alpha test mode
      * @returns false as the sky material doesn't need alpha testing.
      */
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
@@ -167,7 +168,7 @@ export class SkyMaterial extends PushMaterial {
      * Get the texture used for alpha test purpose.
      * @returns null as the sky material has no texture.
      */
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
@@ -178,7 +179,7 @@ export class SkyMaterial extends PushMaterial {
      * @param subMesh defines which submesh to check
      * @returns a boolean indicating that the submesh is ready or not
      */
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -198,10 +199,10 @@ export class SkyMaterial extends PushMaterial {
             return true;
         }
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, false, defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, false, defines);
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, false);
+        PrepareDefinesForAttributes(mesh, defines, true, false);
 
         if (defines.IMAGEPROCESSINGPOSTPROCESS !== scene.imageProcessingConfiguration.applyByPostProcess) {
             defines.markAsMiscDirty();
@@ -253,7 +254,7 @@ export class SkyMaterial extends PushMaterial {
                 "cameraOffset",
                 "up",
             ];
-            addClipPlaneUniforms(uniforms);
+            AddClipPlaneUniforms(uniforms);
             const join = defines.toString();
             subMesh.setEffect(scene.getEngine().createEffect(shaderName, attribs, uniforms, [], join, fallbacks, this.onCompiled, this.onError), defines, this._materialContext);
         }
@@ -274,7 +275,7 @@ export class SkyMaterial extends PushMaterial {
      * @param mesh defines the mesh containing the submesh
      * @param subMesh defines the submesh to bind the material to
      */
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <SkyMaterialDefines>subMesh.materialDefines;
@@ -293,7 +294,7 @@ export class SkyMaterial extends PushMaterial {
         this._activeEffect.setMatrix("viewProjection", scene.getTransformMatrix());
 
         if (this._mustRebind(scene, effect, subMesh)) {
-            bindClipPlane(effect, this, scene);
+            BindClipPlane(effect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
@@ -302,7 +303,7 @@ export class SkyMaterial extends PushMaterial {
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
         }
 
@@ -312,7 +313,7 @@ export class SkyMaterial extends PushMaterial {
         }
 
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         // Sky
         const camera = scene.activeCamera;
@@ -358,7 +359,7 @@ export class SkyMaterial extends PushMaterial {
      * Get the list of animatables in the material.
      * @returns the list of animatables object used in the material
      */
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         return [];
     }
 
@@ -366,7 +367,7 @@ export class SkyMaterial extends PushMaterial {
      * Disposes the material
      * @param forceDisposeEffect specifies if effects should be forcefully disposed
      */
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         super.dispose(forceDisposeEffect);
     }
 
@@ -375,7 +376,7 @@ export class SkyMaterial extends PushMaterial {
      * @param name defines the new name for the duplicated material
      * @returns the cloned material
      */
-    public clone(name: string): SkyMaterial {
+    public override clone(name: string): SkyMaterial {
         return SerializationHelper.Clone<SkyMaterial>(() => new SkyMaterial(name, this.getScene()), this);
     }
 
@@ -383,7 +384,7 @@ export class SkyMaterial extends PushMaterial {
      * Serializes this material in a JSON representation
      * @returns the serialized material object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.SkyMaterial";
         return serializationObject;
@@ -394,7 +395,7 @@ export class SkyMaterial extends PushMaterial {
      * Mainly use in serialization.
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "SkyMaterial";
     }
 
@@ -405,7 +406,7 @@ export class SkyMaterial extends PushMaterial {
      * @param rootUrl defines the root URL to use to load textures and relative dependencies
      * @returns a new sky material
      */
-    public static Parse(source: any, scene: Scene, rootUrl: string): SkyMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): SkyMaterial {
         return SerializationHelper.Parse(() => new SkyMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

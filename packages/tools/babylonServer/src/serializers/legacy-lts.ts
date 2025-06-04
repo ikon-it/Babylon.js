@@ -5,14 +5,12 @@ import * as OBJSerializers from "serializers/OBJ/index";
  * This is the entry point for the UMD module.
  * The entry point for a future ESM package should be index.ts
  */
-const globalObject = typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : undefined;
-if (typeof globalObject !== "undefined") {
+const GlobalObject = typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : undefined;
+if (typeof GlobalObject !== "undefined") {
     for (const serializer in OBJSerializers) {
-        (<any>globalObject).BABYLON[serializer] = (<any>OBJSerializers)[serializer];
+        (<any>GlobalObject).BABYLON[serializer] = (<any>OBJSerializers)[serializer];
     }
 }
-
-export * from "serializers/OBJ/index";
 
 /* eslint-disable import/no-internal-modules */
 import * as STLSerializers from "serializers/stl/index";
@@ -21,13 +19,18 @@ import * as STLSerializers from "serializers/stl/index";
  * This is the entry point for the UMD module.
  * The entry point for a future ESM package should be index.ts
  */
-if (typeof globalObject !== "undefined") {
+if (typeof GlobalObject !== "undefined") {
     for (const serializer in STLSerializers) {
-        (<any>globalObject).BABYLON[serializer] = (<any>STLSerializers)[serializer];
+        (<any>GlobalObject).BABYLON[serializer] = (<any>STLSerializers)[serializer];
     }
 }
 
-export * from "serializers/stl/index";
+import * as USDZSerializers from "serializers/USDZ/index";
+if (typeof GlobalObject !== "undefined") {
+    for (const serializer in USDZSerializers) {
+        (<any>GlobalObject).BABYLON[serializer] = (<any>USDZSerializers)[serializer];
+    }
+}
 
 /* eslint-disable import/no-internal-modules */
 import * as Exporters from "serializers/glTF/glTFFileExporter";
@@ -40,9 +43,10 @@ import * as GLTF2 from "serializers/glTF/2.0/index";
  * This is the entry point for the UMD module.
  * The entry point for a future ESM package should be index.ts
  */
-if (typeof globalObject !== "undefined") {
-    (<any>globalObject).BABYLON = (<any>globalObject).BABYLON || {};
-    const BABYLON = (<any>globalObject).BABYLON;
+if (typeof GlobalObject !== "undefined") {
+    (<any>GlobalObject).BABYLON = (<any>GlobalObject).BABYLON || {};
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const BABYLON = (<any>GlobalObject).BABYLON;
     BABYLON.GLTF2 = BABYLON.GLTF2 || {};
     BABYLON.GLTF2.Exporter = BABYLON.GLTF2.Exporter || {};
     BABYLON.GLTF2.Exporter.Extensions = BABYLON.GLTF2.Exporter.Extensions || {};
@@ -76,5 +80,4 @@ if (typeof globalObject !== "undefined") {
     }
 }
 
-export * from "serializers/glTF/glTFFileExporter";
-export * from "serializers/glTF/2.0/index";
+export * from "serializers/index";

@@ -22,7 +22,7 @@ export class ComputeNormalsBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "ComputeNormalsBlock";
     }
 
@@ -40,13 +40,17 @@ export class ComputeNormalsBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         this.output._storedFunction = (state) => {
             if (!this.geometry.isConnected) {
                 return null;
             }
 
             const vertexData = this.geometry.getConnectedValue(state);
+            if (!vertexData) {
+                return null;
+            }
+
             if (!vertexData.normals) {
                 vertexData.normals = [];
             }

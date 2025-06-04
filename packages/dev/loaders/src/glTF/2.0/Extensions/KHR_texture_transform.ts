@@ -6,8 +6,20 @@ import type { ITextureInfo } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IKHRTextureTransform } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_texture_transform";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_texture_transform extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_texture_transform"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_texture_transform/README.md)
@@ -42,9 +54,10 @@ export class KHR_texture_transform implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadTextureInfoAsync(context: string, textureInfo: ITextureInfo, assign: (babylonTexture: BaseTexture) => void): Nullable<Promise<BaseTexture>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRTextureTransform, BaseTexture>(context, textureInfo, this.name, (extensionContext, extension) => {
-            return this._loader.loadTextureInfoAsync(context, textureInfo, (babylonTexture) => {
+        return GLTFLoader.LoadExtensionAsync<IKHRTextureTransform, BaseTexture>(context, textureInfo, this.name, async (extensionContext, extension) => {
+            return await this._loader.loadTextureInfoAsync(context, textureInfo, (babylonTexture) => {
                 if (!(babylonTexture instanceof Texture)) {
                     throw new Error(`${extensionContext}: Texture type not supported`);
                 }
@@ -77,4 +90,5 @@ export class KHR_texture_transform implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_texture_transform(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_texture_transform(loader));

@@ -24,6 +24,7 @@ export class StickValues {
 /**
  * An interface which manages callbacks for gamepad button changes
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface GamepadButtonChanges {
     /**
      * Called when a gamepad has been changed
@@ -283,7 +284,7 @@ export class GenericPad extends Gamepad {
     /**
      * Updates the generic gamepad
      */
-    public update() {
+    public override update() {
         super.update();
         for (let index = 0; index < this._buttons.length; index++) {
             this._buttons[index] = this._setButtonValue(this.browserGamepad.buttons[index].value, this._buttons[index], index);
@@ -293,7 +294,7 @@ export class GenericPad extends Gamepad {
     /**
      * Disposes the generic gamepad
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
         this.onButtonDownObservable.clear();
         this.onButtonUpObservable.clear();

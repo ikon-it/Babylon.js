@@ -2,7 +2,12 @@ import type { Node } from "core/node";
 import type { Scene } from "core/scene";
 import type { Animation } from "core/Animations/animation";
 import type { GLTFData } from "./glTFData";
-import { _Exporter } from "./glTFExporter";
+import { GLTFExporter } from "./glTFExporter";
+
+/**
+ * Mesh compression methods.
+ */
+export type MeshCompressionMethod = "None" | "Draco";
 
 /**
  * Holds a collection of exporter options and parameters
@@ -23,9 +28,10 @@ export interface IExportOptions {
     shouldExportAnimation?(animation: Animation): boolean;
 
     /**
-     * Function used to extract the part of node's metadata that will be exported into glTF node extras
+     * Function to extract the part of the scene or node's `metadata` that will populate the corresponding
+     * glTF object's `extras` field. If not defined, `node.metadata.gltf.extras` will be used.
      * @param metadata source metadata to read from
-     * @returns the data to store to glTF node extras
+     * @returns the data to store into the glTF extras field
      */
     metadataSelector?(metadata: any): any;
 
@@ -54,6 +60,11 @@ export interface IExportOptions {
      * @deprecated Please use removeNoopRootNodes instead
      */
     includeCoordinateSystemConversionNodes?: boolean;
+
+    /**
+     * Indicates what compression method to apply to mesh data.
+     */
+    meshCompressionMethod?: MeshCompressionMethod;
 }
 
 /**
@@ -61,55 +72,40 @@ export interface IExportOptions {
  */
 export class GLTF2Export {
     /**
-     * Exports the geometry of the scene to .gltf file format asynchronously
-     * @param scene Babylon scene with scene hierarchy information
-     * @param filePrefix File prefix to use when generating the glTF file
+     * Exports the scene to .gltf file format
+     * @param scene Babylon scene
+     * @param fileName Name to use for the .gltf file
      * @param options Exporter options
-     * @returns Returns an object with a .gltf file and associates texture names
-     * as keys and their data and paths as values
+     * @returns Returns the exported data
      */
-    public static GLTFAsync(scene: Scene, filePrefix: string, options?: IExportOptions): Promise<GLTFData> {
-        return scene.whenReadyAsync().then(() => {
-            const glTFPrefix = filePrefix.replace(/\.[^/.]+$/, "");
-            const gltfGenerator = new _Exporter(scene, options);
-            return gltfGenerator._generateGLTFAsync(glTFPrefix);
-        });
-    }
+    public static async GLTFAsync(scene: Scene, fileName: string, options?: IExportOptions): Promise<GLTFData> {
+        if (!options || !options.exportWithoutWaitingForScene) {
+            await scene.whenReadyAsync();
+        }
 
-    private static _PreExportAsync(scene: Scene, options?: IExportOptions): Promise<void> {
-        return Promise.resolve().then(() => {
-            if (options && options.exportWithoutWaitingForScene) {
-                return Promise.resolve();
-            } else {
-                return scene.whenReadyAsync();
-            }
-        });
-    }
+        const exporter = new GLTFExporter(scene, options);
+        const data = await exporter.generateGLTFAsync(fileName.replace(/\.[^/.]+$/, ""));
+        exporter.dispose();
 
-    private static _PostExportAsync(scene: Scene, glTFData: GLTFData, options?: IExportOptions): Promise<GLTFData> {
-        return Promise.resolve().then(() => {
-            if (options && options.exportWithoutWaitingForScene) {
-                return glTFData;
-            } else {
-                return glTFData;
-            }
-        });
+        return data;
     }
 
     /**
-     * Exports the geometry of the scene to .glb file format asychronously
-     * @param scene Babylon scene with scene hierarchy information
-     * @param filePrefix File prefix to use when generating glb file
+     * Exports the scene to .glb file format
+     * @param scene Babylon scene
+     * @param fileName Name to use for the .glb file
      * @param options Exporter options
-     * @returns Returns an object with a .glb filename as key and data as value
+     * @returns Returns the exported data
      */
-    public static GLBAsync(scene: Scene, filePrefix: string, options?: IExportOptions): Promise<GLTFData> {
-        return this._PreExportAsync(scene, options).then(() => {
-            const glTFPrefix = filePrefix.replace(/\.[^/.]+$/, "");
-            const gltfGenerator = new _Exporter(scene, options);
-            return gltfGenerator._generateGLBAsync(glTFPrefix).then((glTFData) => {
-                return this._PostExportAsync(scene, glTFData, options);
-            });
-        });
+    public static async GLBAsync(scene: Scene, fileName: string, options?: IExportOptions): Promise<GLTFData> {
+        if (!options || !options.exportWithoutWaitingForScene) {
+            await scene.whenReadyAsync();
+        }
+
+        const exporter = new GLTFExporter(scene, options);
+        const data = await exporter.generateGLBAsync(fileName.replace(/\.[^/.]+$/, ""));
+        exporter.dispose();
+
+        return data;
     }
 }

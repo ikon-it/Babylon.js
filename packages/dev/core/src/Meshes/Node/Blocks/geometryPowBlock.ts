@@ -30,7 +30,7 @@ export class GeometryPowBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryPowBlock";
     }
 
@@ -55,7 +55,7 @@ export class GeometryPowBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         if (!this.value.isConnected || !this.power.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
@@ -71,16 +71,16 @@ export class GeometryPowBlock extends NodeGeometryBlock {
             switch (this.value.type) {
                 case NodeGeometryBlockConnectionPointTypes.Int:
                 case NodeGeometryBlockConnectionPointTypes.Float: {
-                    return func!(source, power);
+                    return func(source, power);
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector2: {
-                    return new Vector2(func!(source.x, power), func!(source.y, power));
+                    return new Vector2(func(source.x, power), func(source.y, power));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector3: {
-                    return new Vector3(func!(source.x, power), func!(source.y, power), func!(source.z, power));
+                    return new Vector3(func(source.x, power), func(source.y, power), func(source.z, power));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector4: {
-                    return new Vector4(func!(source.x, power), func!(source.y, power), func!(source.z, power), func!(source.w, power));
+                    return new Vector4(func(source.x, power), func(source.y, power), func(source.z, power), func(source.w, power));
                 }
             }
 

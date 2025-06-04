@@ -63,6 +63,7 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
      * Gets or sets the operation applied by the block
      */
     @editableInPropertyPage("Operation", PropertyTypeForEdition.List, "ADVANCED", {
+        embedded: true,
         notifiers: { rebuild: true },
         options: [
             { label: "Cos", value: GeometryTrigonometryBlockOperations.Cos },
@@ -85,6 +86,7 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
             { label: "Reciprocal", value: GeometryTrigonometryBlockOperations.Reciprocal },
             { label: "ToDegrees", value: GeometryTrigonometryBlockOperations.ToDegrees },
             { label: "ToRadians", value: GeometryTrigonometryBlockOperations.ToRadians },
+            { label: "Fract", value: GeometryTrigonometryBlockOperations.Fract },
         ],
     })
     public operation = GeometryTrigonometryBlockOperations.Cos;
@@ -109,7 +111,7 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryTrigonometryBlock";
     }
 
@@ -127,7 +129,7 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         super._buildBlock(state);
         let func: Nullable<(value: number) => number> = null;
 
@@ -234,28 +236,28 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
             case NodeGeometryBlockConnectionPointTypes.Float: {
                 this.output._storedFunction = (state) => {
                     const source = this.input.getConnectedValue(state);
-                    return func!(source);
+                    return func(source);
                 };
                 break;
             }
             case NodeGeometryBlockConnectionPointTypes.Vector2: {
                 this.output._storedFunction = (state) => {
                     const source = this.input.getConnectedValue(state);
-                    return new Vector2(func!(source.x), func!(source.y));
+                    return new Vector2(func(source.x), func(source.y));
                 };
                 break;
             }
             case NodeGeometryBlockConnectionPointTypes.Vector3: {
                 this.output._storedFunction = (state) => {
                     const source = this.input.getConnectedValue(state);
-                    return new Vector3(func!(source.x), func!(source.y), func!(source.z));
+                    return new Vector3(func(source.x), func(source.y), func(source.z));
                 };
                 break;
             }
             case NodeGeometryBlockConnectionPointTypes.Vector4: {
                 this.output._storedFunction = (state) => {
                     const source = this.input.getConnectedValue(state);
-                    return new Vector4(func!(source.x), func!(source.y), func!(source.z), func!(source.w));
+                    return new Vector4(func(source.x), func(source.y), func(source.z), func(source.w));
                 };
                 break;
             }
@@ -264,7 +266,7 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
         return this;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.operation = this.operation;
@@ -272,13 +274,13 @@ export class GeometryTrigonometryBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.operation = serializationObject.operation;
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString =
             super._dumpPropertiesCode() +
             `${this._codeVariableName}.operation = BABYLON.GeometryTrigonometryBlockOperations.${GeometryTrigonometryBlockOperations[this.operation]};\n`;

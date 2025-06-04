@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import * as React from "react";
 import type { GlobalState } from "../../globalState";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
-import { DraggableLineComponent } from "../../sharedComponents/draggableLineComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
+import { DraggableLineComponent } from "shared-ui-components/lines/draggableLineComponent";
 import { NodeMaterialModes } from "core/Materials/Node/Enums/nodeMaterialModes";
 import type { Observer } from "core/Misc/observable";
 import type { Nullable } from "core/types";
-import { DraggableLineWithButtonComponent } from "../../sharedComponents/draggableLineWithButtonComponent";
-import { LineWithFileButtonComponent } from "../../sharedComponents/lineWithFileButtonComponent";
+import { DraggableLineWithButtonComponent } from "shared-ui-components/lines/draggableLineWithButtonComponent";
+import { LineWithFileButtonComponent } from "shared-ui-components/lines/lineWithFileButtonComponent";
 import { Tools } from "core/Misc/tools";
 import addButton from "../../imgs/add.svg";
 import deleteButton from "../../imgs/delete.svg";
@@ -52,6 +52,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         Float: "A floating point number representing a value with a fractional component",
         TextureBlock: "A node for reading a linked or embedded texture file",
         PrePassTextureBlock: "A node for reading textures from the prepass",
+        MouseInfoBlock: "return a Vector4 that contains x, y, leftButton, rightButton",
         TimeBlock: "A float value that represents the time that has passed since the scene was loaded (it is incremented by 0.6 each second)",
         RealTimeBlock: "A float value that represents the number of seconds that have elapsed since the engine was initialized",
         Vector2: "a vector composed of X and Y channels",
@@ -109,6 +110,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         ArcSinBlock: "Outputs the inverse of the sine value based on the input value",
         ArcTan2Block: "Outputs the inverse of the tangent value based on the input value",
         ArcTanBlock: "Outputs the inverse of the tangent value based on the input value",
+        SetBlock: "Outputs the alias based on the input value",
         CosBlock: "Outputs the cosine value based on the input value",
         DegreesToRadiansBlock: "Converts the input degrees value to radians",
         Exp2Block: "Outputs the input value multiplied by itself 1 time. (Exponent of 2)",
@@ -144,6 +146,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         ClearCoatBlock: "PBR ClearCoat block",
         RefractionBlock: "PBR Refraction block",
         SubSurfaceBlock: "PBR SubSurface block",
+        IridescenceBlock: "PBR Iridescence block",
         ScreenPositionBlock: "A Vector2 representing the position of each vertex of the screen quad (derived from UV set from the quad used to render)",
         CurrentScreenBlock: "The screen buffer used as input for the post process",
         ParticleUVBlock: "The particle uv texture coordinate",
@@ -153,6 +156,11 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         ParticleRampGradientBlock: "The particle ramp gradient block",
         ParticleBlendMultiplyBlock: "The particle blend multiply block",
         ParticlePositionWorldBlock: "The world position of the particle",
+        ScreenUVBlock: "The screen quad's UV texture coordinates",
+        GaussianSplattingBlock: "The gaussian splatting block",
+        GaussianBlock: "The gaussian color computation block",
+        SplatReaderBlock: "The gaussian splat reader block",
+        SplatIndexBlock: "The splat index",
         FragCoordBlock: "The gl_FragCoord predefined variable that contains the window relative coordinate (x, y, z, 1/w)",
         ScreenSizeBlock: "The size (in pixels) of the screen window",
         SceneDepthBlock: "The scene depth buffer",
@@ -184,6 +192,13 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         MatrixTransposeBlock: "Compute the transpose of a matrix",
         MeshAttributeExistsBlock: "Falls back to secondary input if specified attribute doesn't exists on the rendered mesh",
         CurveBlock: "Apply a curve function",
+        ColorConverterBlock: "Converts between RGB and HSL color spaces",
+        LoopBlock: "Block used to repeat code",
+        StorageReadBlock: "Block used to read from a loop storage variable",
+        StorageWriteBlock: "Block used to write to a loop storage variable",
+        MatrixSplitterBlock: "Block used to split a matrix into Vector4",
+        DebugBlock: "Block used to render intermediate debug values",
+        SmartFilterTextureBlock: "Block used to add a Smart Filter Effect (SFE) shader interface",
     };
 
     private _customFrameList: { [key: string]: string };
@@ -209,7 +224,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
     }
 
@@ -220,6 +235,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
     loadCustomFrame(file: File) {
         Tools.ReadFile(
             file,
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises
             async (data) => {
                 // get Frame Data from file
                 const decoder = new TextDecoder("utf-8");
@@ -268,6 +284,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
     loadCustomBlock(file: File) {
         Tools.ReadFile(
             file,
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises
             async (data) => {
                 // get Block Data from file
                 const decoder = new TextDecoder("utf-8");
@@ -309,7 +326,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         }
     }
 
-    render() {
+    override render() {
         const customFrameNames: string[] = [];
         for (const frame in this._customFrameList) {
             customFrameNames.push(frame);
@@ -325,7 +342,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
             Custom_Frames: customFrameNames,
             Custom_Blocks: customBlockNames,
             Animation: ["BonesBlock", "MorphTargetsBlock"],
-            Color_Management: ["ReplaceColorBlock", "PosterizeBlock", "GradientBlock", "DesaturateBlock"],
+            Color_Management: ["ReplaceColorBlock", "PosterizeBlock", "GradientBlock", "DesaturateBlock", "ColorConverterBlock"],
             Conversion_Blocks: ["ColorMergerBlock", "ColorSplitterBlock", "VectorMergerBlock", "VectorSplitterBlock"],
             Inputs: [
                 "Float",
@@ -336,6 +353,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "Color4",
                 "TextureBlock",
                 "ReflectionTextureBlock",
+                "MouseInfoBlock",
                 "TimeBlock",
                 "RealTimeBlock",
                 "DeltaTimeBlock",
@@ -383,6 +401,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "SquareWaveBlock",
                 "TanBlock",
                 "TriangleWaveBlock",
+                "SetBlock",
             ],
             Math__Vector: [
                 "CrossBlock",
@@ -409,8 +428,9 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "MatrixBuilderBlock",
                 "MatrixDeterminantBlock",
                 "MatrixTransposeBlock",
+                "MatrixSplitterBlock",
             ],
-            Misc: ["ElbowBlock", "ShadowMapBlock", "TeleportInBlock", "TeleportOutBlock"],
+            Misc: ["ElbowBlock", "ShadowMapBlock", "TeleportInBlock", "TeleportOutBlock", "DebugBlock"],
             Mesh: [
                 "InstancesBlock",
                 "PositionBlock",
@@ -433,6 +453,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "FrontFacingBlock",
                 "MeshAttributeExistsBlock",
             ],
+            Loop: ["LoopBlock", "StorageReadBlock", "StorageWriteBlock"],
             Noises: ["RandomNumberBlock", "SimplexPerlin3DBlock", "WorleyNoise3DBlock", "CloudBlock", "VoronoiNoiseBlock"],
             Output_Nodes: ["VertexOutputBlock", "FragmentOutputBlock", "PrePassOutputBlock", "DiscardBlock", "ClipPlanesBlock", "FragDepthBlock"],
             Particle: [
@@ -444,7 +465,9 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "ParticleTextureMaskBlock",
                 "ParticleUVBlock",
             ],
-            PBR: ["PBRMetallicRoughnessBlock", "AnisotropyBlock", "ClearCoatBlock", "ReflectionBlock", "RefractionBlock", "SheenBlock", "SubSurfaceBlock"],
+            SFE: ["ScreenUVBlock", "SmartFilterTextureBlock"],
+            GaussianSplatting: ["GaussianSplattingBlock", "SplatIndexBlock", "SplatReaderBlock", "GaussianBlock"],
+            PBR: ["PBRMetallicRoughnessBlock", "AnisotropyBlock", "ClearCoatBlock", "IridescenceBlock", "ReflectionBlock", "RefractionBlock", "SheenBlock", "SubSurfaceBlock"],
             PostProcess: ["ScreenPositionBlock", "CurrentScreenBlock", "PrePassTextureBlock"],
             Procedural__Texture: ["ScreenPositionBlock"],
             Range: ["ClampBlock", "RemapBlock", "NormalizeBlock"],
@@ -464,27 +487,57 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
 
         switch (this.props.globalState.mode) {
             case NodeMaterialModes.Material:
+                delete allBlocks["SFE"];
                 delete allBlocks["PostProcess"];
                 delete allBlocks["Particle"];
                 delete allBlocks["Procedural__Texture"];
+                delete allBlocks["GaussianSplatting"];
                 break;
-            case NodeMaterialModes.PostProcess:
+            case NodeMaterialModes.SFE:
+                delete allBlocks["PostProcess"];
                 delete allBlocks["Animation"];
                 delete allBlocks["Mesh"];
                 delete allBlocks["Particle"];
                 delete allBlocks["Procedural__Texture"];
                 delete allBlocks["PBR"];
+                delete allBlocks["GaussianSplatting"];
+                allBlocks.Output_Nodes.splice(allBlocks.Output_Nodes.indexOf("PrePassOutputBlock"), 1);
+                break;
+            case NodeMaterialModes.PostProcess:
+                delete allBlocks["SFE"];
+                delete allBlocks["Animation"];
+                delete allBlocks["Mesh"];
+                delete allBlocks["Particle"];
+                delete allBlocks["Procedural__Texture"];
+                delete allBlocks["PBR"];
+                delete allBlocks["GaussianSplatting"];
                 allBlocks.Output_Nodes.splice(allBlocks.Output_Nodes.indexOf("PrePassOutputBlock"), 1);
                 break;
             case NodeMaterialModes.ProceduralTexture:
+                delete allBlocks["SFE"];
                 delete allBlocks["Animation"];
                 delete allBlocks["Mesh"];
                 delete allBlocks["Particle"];
                 delete allBlocks["PostProcess"];
                 delete allBlocks["PBR"];
+                delete allBlocks["GaussianSplatting"];
                 allBlocks.Output_Nodes.splice(allBlocks.Output_Nodes.indexOf("PrePassOutputBlock"), 1);
                 break;
             case NodeMaterialModes.Particle:
+                delete allBlocks["SFE"];
+                delete allBlocks["Animation"];
+                delete allBlocks["Mesh"];
+                delete allBlocks["PostProcess"];
+                delete allBlocks["Procedural__Texture"];
+                delete allBlocks["PBR"];
+                delete allBlocks["GaussianSplatting"];
+                allBlocks.Output_Nodes.splice(allBlocks.Output_Nodes.indexOf("VertexOutputBlock"), 1);
+                allBlocks.Scene.splice(allBlocks.Scene.indexOf("FogBlock"), 1);
+                allBlocks.Scene.splice(allBlocks.Scene.indexOf("FogColorBlock"), 1);
+                allBlocks.Output_Nodes.splice(allBlocks.Output_Nodes.indexOf("PrePassOutputBlock"), 1);
+                break;
+            case NodeMaterialModes.GaussianSplatting:
+                delete allBlocks["SFE"];
                 delete allBlocks["Animation"];
                 delete allBlocks["Mesh"];
                 delete allBlocks["PostProcess"];
@@ -500,7 +553,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         // Create node menu
         const blockMenu = [];
         for (const key in allBlocks) {
-            const blockList = (allBlocks as any)[key]
+            const blockList = allBlocks[key]
                 .filter((b: string) => !this.state.filter || b.toLowerCase().indexOf(this.state.filter.toLowerCase()) !== -1)
                 .sort((a: string, b: string) => a.localeCompare(b))
                 .map((block: any) => {
@@ -508,6 +561,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                         return (
                             <DraggableLineWithButtonComponent
                                 key={block}
+                                format={"babylonjs-material-node"}
                                 data={block}
                                 tooltip={this._customFrameList[block] || ""}
                                 iconImage={deleteButton}
@@ -519,6 +573,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                         return (
                             <DraggableLineWithButtonComponent
                                 key={block}
+                                format={"babylonjs-material-node"}
                                 data={block}
                                 tooltip={this._customBlockList[block] || ""}
                                 iconImage={deleteButton}
@@ -528,7 +583,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                             />
                         );
                     }
-                    return <DraggableLineComponent key={block} data={block} tooltip={NodeListComponent._Tooltips[block] || ""} />;
+                    return <DraggableLineComponent key={block} format={"babylonjs-material-node"} data={block} tooltip={NodeListComponent._Tooltips[block] || ""} />;
                 });
 
             if (key === "Custom_Frames") {
@@ -576,6 +631,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
 
             // Register blocks
             const ledger = NodeLedger.RegisteredNodeNames;
+            ledger.length = 0;
             for (const key in allBlocks) {
                 const blocks = allBlocks[key] as string[];
                 if (blocks.length) {

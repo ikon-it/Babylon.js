@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import type { FC, PropsWithChildren } from "react";
 import { JoinClassNames } from "../classNames";
 import { CommandButtonComponent } from "./CommandButtonComponent";
 import { CommandDropdownComponent } from "./CommandDropdownComponent";
@@ -11,7 +11,7 @@ import logoIcon from "../../imgs/babylonLogo.svg";
 import canvasFitIcon from "../../imgs/canvasFitIcon.svg";
 import betaFlag from "../../imgs/betaFlag.svg";
 
-import style from "./CommandBar.modules.scss";
+import * as style from "./CommandBar.module.scss";
 import { Color3 } from "core/Maths/math.color";
 import { ColorPickerLineComponent } from "../lines/ColorPickerLineComponent";
 
@@ -30,7 +30,7 @@ export interface ICommandBarComponentProps {
     artboardColorPickerColor?: string;
 }
 
-export const CommandBarComponent: FC<ICommandBarComponentProps> = (props) => {
+export const CommandBarComponent: FC<PropsWithChildren<ICommandBarComponentProps>> = (props) => {
     return (
         <div className={style.commandBar}>
             <div className={style.commandsLeft}>

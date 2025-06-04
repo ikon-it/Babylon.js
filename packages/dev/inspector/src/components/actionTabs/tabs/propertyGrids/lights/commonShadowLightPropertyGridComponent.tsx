@@ -7,7 +7,7 @@ import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineCo
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
 import type { GlobalState } from "../../../../globalState";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { ShadowGenerator } from "core/Lights/Shadows/shadowGenerator";
 import { CascadedShadowGenerator } from "core/Lights/Shadows/cascadedShadowGenerator";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
@@ -39,15 +39,15 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
         const internals = this._internals;
         const generator = internals.generatorType === 0 ? new ShadowGenerator(internals.mapSize, light) : new CascadedShadowGenerator(internals.mapSize, light as DirectionalLight);
 
-        scene.meshes.forEach((m) => {
+        for (const m of scene.meshes) {
             if (m.infiniteDistance) {
-                return;
+                continue;
             }
             generator.addShadowCaster(m);
             if (!m.isAnInstance) {
                 m.receiveShadows = true;
             }
-        });
+        }
 
         this.forceUpdate();
     }
@@ -60,12 +60,21 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
         this.forceUpdate();
     }
 
-    render() {
+    override render() {
         const light = this.props.light;
         const internals = this._internals;
-        const generator = (light.getShadowGenerator() as ShadowGenerator | CascadedShadowGenerator) || null;
-        const csmGenerator = generator instanceof CascadedShadowGenerator;
         const camera = light.getScene().activeCamera;
+
+        let generator = (light.getShadowGenerator(camera) as ShadowGenerator | CascadedShadowGenerator) || null;
+        if (generator === null) {
+            // try to get the first shadow generator
+            const shadowGenerators = light.getShadowGenerators();
+            if (shadowGenerators && shadowGenerators.size > 0) {
+                generator = shadowGenerators.values().next().value as ShadowGenerator | CascadedShadowGenerator;
+            }
+        }
+
+        const csmGenerator = generator instanceof CascadedShadowGenerator;
 
         const typeGeneratorOptions = [{ label: "Shadow Generator", value: 0 }];
 
@@ -149,8 +158,8 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
                 </LineContainerComponent>
                 {generator == null && (
                     <LineContainerComponent title="SHADOW GENERATOR" selection={this.props.globalState}>
-                        <OptionsLineComponent label="Type" options={typeGeneratorOptions} target={internals} propertyName="generatorType" />
-                        <OptionsLineComponent label="Map size" options={mapSizeOptions} target={internals} propertyName="mapSize" />
+                        <OptionsLine label="Type" options={typeGeneratorOptions} target={internals} propertyName="generatorType" />
+                        <OptionsLine label="Map size" options={mapSizeOptions} target={internals} propertyName="mapSize" />
                         <ButtonLineComponent label="Create generator" onClick={() => this.createShadowGenerator()} />
                     </LineContainerComponent>
                 )}
@@ -159,7 +168,7 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
                         <ButtonLineComponent label="Dispose generator" onClick={() => this.disposeShadowGenerator()} />
                         {csmGenerator && (
                             <>
-                                <OptionsLineComponent
+                                <OptionsLine
                                     label="Num cascades"
                                     options={numCascadesOptions}
                                     target={generator}
@@ -254,7 +263,7 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
                             propertyName="transparencyShadow"
                             onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                         />
-                        <OptionsLineComponent
+                        <OptionsLine
                             label="Filter"
                             options={blurModeOptions}
                             onSelect={() => {
@@ -265,7 +274,7 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
                             onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                         />
                         {(filter === ShadowGenerator.FILTER_PCF || filter === ShadowGenerator.FILTER_PCSS) && (
-                            <OptionsLineComponent
+                            <OptionsLine
                                 label="Filtering quality"
                                 options={filteringQualityOptions}
                                 onSelect={() => {

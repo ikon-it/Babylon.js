@@ -1,8 +1,8 @@
 import * as React from "react";
-import type { Vector4 } from "core/Maths/math.vector";
+import { Vector4 } from "core/Maths/math.vector";
 import type { Observable } from "core/Misc/observable";
 
-import { NumericInputComponent } from "./numericInputComponent";
+import { NumericInput } from "./numericInputComponent";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import type { PropertyChangedEvent } from "../propertyChangedEvent";
@@ -33,14 +33,15 @@ export class Vector4LineComponent extends React.Component<IVector4LineComponentP
     constructor(props: IVector4LineComponentProps) {
         super(props);
 
-        this.state = { isExpanded: false, value: this.getCurrentValue().clone() };
+        const value = this.getCurrentValue();
+        this.state = { isExpanded: false, value: value && value.clone ? value.clone() : Vector4.Zero() };
     }
 
     getCurrentValue() {
         return this.props.value || this.props.target[this.props.propertyName!];
     }
 
-    shouldComponentUpdate(nextProps: IVector4LineComponentProps, nextState: { isExpanded: boolean; value: Vector4 }) {
+    override shouldComponentUpdate(nextProps: IVector4LineComponentProps, nextState: { isExpanded: boolean; value: Vector4 }) {
         const nextPropsValue = nextProps.value || nextProps.target[nextProps.propertyName!];
 
         if (!nextPropsValue.equals(nextState.value) || this._localChange) {
@@ -114,7 +115,7 @@ export class Vector4LineComponent extends React.Component<IVector4LineComponentP
         this.updateVector4();
     }
 
-    render() {
+    override render() {
         const chevron = this.state.isExpanded ? <FontAwesomeIcon icon={faMinus} /> : <FontAwesomeIcon icon={faPlus} />;
 
         return (
@@ -133,28 +134,28 @@ export class Vector4LineComponent extends React.Component<IVector4LineComponentP
                 </div>
                 {
                     <div className="secondLine">
-                        <NumericInputComponent
+                        <NumericInput
                             lockObject={this.props.lockObject}
                             label="x"
                             step={this.props.step}
                             value={this.state.value.x}
                             onChange={(value) => this.updateStateX(value)}
                         />
-                        <NumericInputComponent
+                        <NumericInput
                             lockObject={this.props.lockObject}
                             label="y"
                             step={this.props.step}
                             value={this.state.value.y}
                             onChange={(value) => this.updateStateY(value)}
                         />
-                        <NumericInputComponent
+                        <NumericInput
                             lockObject={this.props.lockObject}
                             label="z"
                             step={this.props.step}
                             value={this.state.value.z}
                             onChange={(value) => this.updateStateZ(value)}
                         />
-                        <NumericInputComponent
+                        <NumericInput
                             lockObject={this.props.lockObject}
                             label="w"
                             step={this.props.step}

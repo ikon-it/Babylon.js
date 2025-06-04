@@ -7,8 +7,20 @@ import type { IMaterial, ITextureInfo } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IKHRMaterialsVolume } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_materials_volume";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_materials_volume extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_materials_volume"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md)
@@ -56,23 +68,25 @@ export class KHR_materials_volume implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsVolume>(context, material, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsVolume>(context, material, this.name, async (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
-            promises.push(this._loader.loadMaterialBasePropertiesAsync(context, material, babylonMaterial));
             promises.push(this._loader.loadMaterialPropertiesAsync(context, material, babylonMaterial));
             promises.push(this._loadVolumePropertiesAsync(extensionContext, material, babylonMaterial, extension));
-            return Promise.all(promises).then(() => {});
+            // eslint-disable-next-line github/no-then
+            return await Promise.all(promises).then(() => {});
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadVolumePropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material, extension: IKHRMaterialsVolume): Promise<void> {
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
         }
 
         // If transparency isn't enabled already, this extension shouldn't do anything.
-        // i.e. it requires either the KHR_materials_transmission or KHR_materials_translucency extensions.
+        // i.e. it requires either the KHR_materials_transmission or KHR_materials_diffuse_transmission extensions.
         if ((!babylonMaterial.subSurface.isRefractionEnabled && !babylonMaterial.subSurface.isTranslucencyEnabled) || !extension.thicknessFactor) {
             return Promise.resolve();
         }
@@ -90,7 +104,9 @@ export class KHR_materials_volume implements IGLTFLoaderExtension {
         babylonMaterial.subSurface.useThicknessAsDepth = true;
         if (extension.thicknessTexture) {
             (extension.thicknessTexture as ITextureInfo).nonColorData = true;
+            // eslint-disable-next-line github/no-then
             return this._loader.loadTextureInfoAsync(`${context}/thicknessTexture`, extension.thicknessTexture).then((texture: BaseTexture) => {
+                texture.name = `${babylonMaterial.name} (Thickness)`;
                 babylonMaterial.subSurface.thicknessTexture = texture;
                 babylonMaterial.subSurface.useGltfStyleTextures = true;
             });
@@ -100,4 +116,5 @@ export class KHR_materials_volume implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_materials_volume(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_materials_volume(loader));

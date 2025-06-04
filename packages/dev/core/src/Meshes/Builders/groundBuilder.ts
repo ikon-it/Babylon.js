@@ -8,7 +8,7 @@ import { Tools } from "../../Misc/tools";
 import type { Nullable } from "../../types";
 import { EngineStore } from "../../Engines/engineStore";
 import { Epsilon } from "../../Maths/math.constants";
-import { CompatibilityOptions } from "../../Compat/compatibilityOptions";
+import { useOpenGLOrientationForUV } from "../../Compat/compatibilityOptions";
 
 /**
  * Creates the VertexData for a Ground
@@ -20,15 +20,22 @@ import { CompatibilityOptions } from "../../Compat/compatibilityOptions";
  * @param options.subdivisionsY the number of subdivisions in the y direction, overrides options.subdivisions, optional, default undefined
  * @returns the VertexData of the Ground
  */
-export function CreateGroundVertexData(options: { width?: number; height?: number; subdivisions?: number; subdivisionsX?: number; subdivisionsY?: number }): VertexData {
+export function CreateGroundVertexData(options: {
+    size?: number;
+    width?: number;
+    height?: number;
+    subdivisions?: number;
+    subdivisionsX?: number;
+    subdivisionsY?: number;
+}): VertexData {
     const indices = [];
     const positions = [];
     const normals = [];
     const uvs = [];
     let row: number, col: number;
 
-    const width: number = options.width || 1;
-    const height: number = options.height || 1;
+    const width: number = options.width || options.size || 1;
+    const height: number = options.height || options.size || 1;
     const subdivisionsX: number = (options.subdivisionsX || options.subdivisions || 1) | 0;
     const subdivisionsY: number = (options.subdivisionsY || options.subdivisions || 1) | 0;
 
@@ -39,7 +46,7 @@ export function CreateGroundVertexData(options: { width?: number; height?: numbe
 
             positions.push(position.x, position.y, position.z);
             normals.push(normal.x, normal.y, normal.z);
-            uvs.push(col / subdivisionsX, CompatibilityOptions.UseOpenGLOrientationForUV ? row / subdivisionsY : 1.0 - row / subdivisionsY);
+            uvs.push(col / subdivisionsX, useOpenGLOrientationForUV ? row / subdivisionsY : 1.0 - row / subdivisionsY);
         }
     }
 
@@ -468,11 +475,11 @@ export function CreateGroundFromHeightMap(
             const bufferWidth = img.width;
             const bufferHeight = img.height;
 
-            if (scene!.isDisposed) {
+            if (scene.isDisposed) {
                 return;
             }
 
-            const buffer = <Uint8Array>scene?.getEngine().resizeImageBitmap(img, bufferWidth, bufferHeight);
+            const buffer = scene?.getEngine().resizeImageBitmap(img, bufferWidth, bufferHeight);
 
             onBufferLoaded(buffer, bufferWidth, bufferHeight);
         };

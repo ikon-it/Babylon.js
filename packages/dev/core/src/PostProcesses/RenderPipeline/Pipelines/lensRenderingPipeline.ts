@@ -15,7 +15,7 @@ import "../../../PostProcesses/RenderPipeline/postProcessRenderPipelineManagerSc
 import "../../../Shaders/chromaticAberration.fragment";
 import "../../../Shaders/lensHighlights.fragment";
 import "../../../Shaders/depthOfField.fragment";
-import { Scalar } from "../../../Maths/math.scalar";
+import { RandomRange } from "../../../Maths/math.scalar.functions";
 
 /**
  * BABYLON.JS Chromatic Aberration GLSL Shader
@@ -176,7 +176,7 @@ export class LensRenderingPipeline extends PostProcessRenderPipeline {
      * Get the class name
      * @returns "LensRenderingPipeline"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "LensRenderingPipeline";
     }
 
@@ -450,8 +450,10 @@ export class LensRenderingPipeline extends PostProcessRenderPipeline {
      * Removes the internal pipeline assets and detaches the pipeline from the scene cameras
      * @param disableDepthRender If the scene's depth rendering should be disabled (default: false)
      */
-    public dispose(disableDepthRender: boolean = false): void {
+    public override dispose(disableDepthRender: boolean = false): void {
         this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(this._name, this._scene.cameras);
+
+        this._scene.postProcessRenderPipelineManager.removePipeline(this._name);
 
         (<any>this._chromaticAberrationPostProcess) = null;
         (<any>this._highlightsPostProcess) = null;
@@ -578,7 +580,7 @@ export class LensRenderingPipeline extends PostProcessRenderPipeline {
 
         const data = new Uint8Array(size * size * 4);
         for (let index = 0; index < data.length; ) {
-            const value = Math.floor(Scalar.RandomRange(0.42, 0.58) * 255);
+            const value = Math.floor(RandomRange(0.42, 0.58) * 255);
             data[index++] = value;
             data[index++] = value;
             data[index++] = value;

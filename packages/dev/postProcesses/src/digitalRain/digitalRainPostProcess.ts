@@ -1,5 +1,6 @@
 import type { Nullable } from "core/types";
-import { serialize, SerializationHelper } from "core/Misc/decorators";
+import { serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import { Matrix } from "core/Maths/math.vector";
 import type { Camera } from "core/Cameras/camera";
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
@@ -145,7 +146,7 @@ export class DigitalRainFontTexture extends BaseTexture {
      * Clones the current DigitalRainFontTexture.
      * @returns the clone of the texture.
      */
-    public clone(): DigitalRainFontTexture {
+    public override clone(): DigitalRainFontTexture {
         return new DigitalRainFontTexture(this.name, this._font, this._text, this.getScene());
     }
 
@@ -241,11 +242,11 @@ export class DigitalRainPostProcess extends PostProcess {
         // Use options.
         if (options) {
             if (typeof options === "string") {
-                font = <string>options;
+                font = options;
             } else {
-                font = (<IDigitalRainPostProcessOptions>options).font || font;
-                this.mixToTile = (<IDigitalRainPostProcessOptions>options).mixToTile || this.mixToTile;
-                this.mixToNormal = (<IDigitalRainPostProcessOptions>options).mixToNormal || this.mixToNormal;
+                font = options.font || font;
+                this.mixToTile = options.mixToTile || this.mixToTile;
+                this.mixToNormal = options.mixToNormal || this.mixToNormal;
             }
         }
 

@@ -10,13 +10,20 @@ import colorPicker from "./svgs/colorPicker.svg";
 import pauseIcon from "./svgs/pauseIcon.svg";
 import playIcon from "./svgs/playIcon.svg";
 import frameIcon from "./svgs/frameIcon.svg";
+import centerIcon from "./svgs/center.svg";
+import offsetIcon from "./svgs/offset.svg";
 
 interface IPreviewMeshControlComponent {
     globalState: GlobalState;
     togglePreviewAreaComponent: () => void;
+    onMounted?: () => void;
 }
 
-export class PreviewMeshControlComponent extends React.Component<IPreviewMeshControlComponent> {
+interface IPreviewMeshControlComponentState {
+    center: boolean;
+}
+
+export class PreviewMeshControlComponent extends React.Component<IPreviewMeshControlComponent, IPreviewMeshControlComponentState> {
     private _colorInputRef: React.RefObject<HTMLInputElement>;
     private _onResetRequiredObserver: Nullable<Observer<boolean>>;
     private _onRefreshPreviewMeshControlComponentRequiredObserver: Nullable<Observer<void>>;
@@ -32,11 +39,17 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
         this._onRefreshPreviewMeshControlComponentRequiredObserver = this.props.globalState.onRefreshPreviewMeshControlComponentRequiredObservable.add(() => {
             this.forceUpdate();
         });
+
+        this.state = { center: true };
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.props.globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
         this.props.globalState.onRefreshPreviewMeshControlComponentRequiredObservable.remove(this._onRefreshPreviewMeshControlComponentRequiredObserver);
+    }
+
+    override componentDidMount(): void {
+        this.props.onMounted?.();
     }
 
     onPopUp() {
@@ -69,12 +82,20 @@ export class PreviewMeshControlComponent extends React.Component<IPreviewMeshCon
         this.props.globalState.onFrame.notifyObservers();
     }
 
-    render() {
+    axis() {
+        this.props.globalState.onAxis.notifyObservers();
+        this.setState({ center: !this.state.center });
+    }
+
+    override render() {
         return (
             <div id="preview-mesh-bar">
                 <>
                     <div title="Frame camera" onClick={() => this.frame()} className="button" id="frame-button">
                         <img src={frameIcon} alt="" />
+                    </div>
+                    <div title="Axis location" onClick={() => this.axis()} className="button" id="axis-button">
+                        <img src={this.state.center ? centerIcon : offsetIcon} alt="" />
                     </div>
                     <div title="Turn-table animation" onClick={() => this.changeAnimation()} className="button" id="play-button">
                         {this.props.globalState.rotatePreview ? <img src={pauseIcon} alt="" /> : <img src={playIcon} alt="" />}

@@ -12,7 +12,7 @@ import { Constants } from "../../../Engines/constants";
 import { serialize } from "../../../Misc/decorators";
 import type { Scene } from "../../../scene";
 import { RawTexture } from "../../../Materials/Textures/rawTexture";
-import { Scalar } from "../../../Maths/math.scalar";
+import { RandomRange } from "../../../Maths/math.scalar.functions";
 
 import "../../../PostProcesses/RenderPipeline/postProcessRenderPipelineManagerSceneComponent";
 
@@ -190,7 +190,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
     /**
      * @internal
      */
-    public _attachCameras(cameras: any, unique: boolean): void {
+    public override _attachCameras(cameras: any, unique: boolean): void {
         super._attachCameras(cameras, unique);
 
         for (const camera of this._cameras) {
@@ -204,7 +204,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
      * Get the class name
      * @returns "SSAORenderingPipeline"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "SSAORenderingPipeline";
     }
 
@@ -212,7 +212,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
      * Removes the internal pipeline assets and detaches the pipeline from the scene cameras
      * @param disableDepthRender - If the depth renderer should be disabled on the scene
      */
-    public dispose(disableDepthRender: boolean = false): void {
+    public override dispose(disableDepthRender: boolean = false): void {
         for (let i = 0; i < this._scene.cameras.length; i++) {
             const camera = this._scene.cameras[i];
 
@@ -231,6 +231,8 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
 
         this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(this._name, this._scene.cameras);
 
+        this._scene.postProcessRenderPipelineManager.removePipeline(this._name);
+
         super.dispose();
     }
 
@@ -247,7 +249,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
             Texture.BILINEAR_SAMPLINGMODE,
             this._scene.getEngine(),
             false,
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
         this._blurVPostProcess = new BlurPostProcess(
             "BlurV",
@@ -258,7 +260,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
             Texture.BILINEAR_SAMPLINGMODE,
             this._scene.getEngine(),
             false,
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
 
         this._blurHPostProcess.onActivateObservable.add(() => {
@@ -273,7 +275,7 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
     }
 
     /** @internal */
-    public _rebuild() {
+    public override _rebuild() {
         this._firstUpdate = true;
         super._rebuild();
     }
@@ -343,9 +345,9 @@ export class SSAORenderingPipeline extends PostProcessRenderPipeline {
 
         const data = new Uint8Array(size * size * 4);
         for (let index = 0; index < data.length; ) {
-            data[index++] = Math.floor(Math.max(0.0, Scalar.RandomRange(-1.0, 1.0)) * 255);
-            data[index++] = Math.floor(Math.max(0.0, Scalar.RandomRange(-1.0, 1.0)) * 255);
-            data[index++] = Math.floor(Math.max(0.0, Scalar.RandomRange(-1.0, 1.0)) * 255);
+            data[index++] = Math.floor(Math.max(0.0, RandomRange(-1.0, 1.0)) * 255);
+            data[index++] = Math.floor(Math.max(0.0, RandomRange(-1.0, 1.0)) * 255);
+            data[index++] = Math.floor(Math.max(0.0, RandomRange(-1.0, 1.0)) * 255);
             data[index++] = 255;
         }
 

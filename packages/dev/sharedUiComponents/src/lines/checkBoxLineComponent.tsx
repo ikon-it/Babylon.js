@@ -1,15 +1,17 @@
 import * as React from "react";
 import type { Observable } from "core/Misc/observable";
 import type { PropertyChangedEvent } from "./../propertyChangedEvent";
+import { copyCommandToClipboard, getClassNameWithNamespace } from "../copyCommandToClipboard";
 import type { IconDefinition } from "@fortawesome/fontawesome-common-types";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { conflictingValuesPlaceholder } from "./targetsProxy";
+import copyIcon from "../imgs/copy.svg";
 
 export interface ICheckBoxLineComponentProps {
     label?: string;
     target?: any;
     propertyName?: string;
-    isSelected?: () => boolean;
+    isSelected?: boolean | (() => boolean);
     onSelect?: (value: boolean) => void;
     onValueChanged?: () => void;
     onPropertyChangedObservable?: Observable<PropertyChangedEvent>;
@@ -44,8 +46,11 @@ export class CheckBoxLineComponent extends React.Component<ICheckBoxLineComponen
     constructor(props: ICheckBoxLineComponentProps) {
         super(props);
 
-        if (this.props.isSelected) {
-            this.state = { isSelected: this.props.isSelected(), isConflict: false };
+        if (this.props.isSelected !== undefined) {
+            this.state = {
+                isSelected: typeof this.props.isSelected === "boolean" ? this.props.isSelected : this.props.isSelected(),
+                isConflict: false,
+            };
         } else {
             this.state = {
                 isSelected: this.props.target[this.props.propertyName!] === true,
@@ -58,11 +63,11 @@ export class CheckBoxLineComponent extends React.Component<ICheckBoxLineComponen
         }
     }
 
-    shouldComponentUpdate(nextProps: ICheckBoxLineComponentProps, nextState: { isSelected: boolean; isDisabled: boolean; isConflict: boolean }) {
+    override shouldComponentUpdate(nextProps: ICheckBoxLineComponentProps, nextState: { isSelected: boolean; isDisabled: boolean; isConflict: boolean }) {
         let selected: boolean;
 
-        if (nextProps.isSelected) {
-            selected = nextProps.isSelected!();
+        if (nextProps.isSelected !== undefined) {
+            selected = typeof nextProps.isSelected === "boolean" ? nextProps.isSelected : nextProps.isSelected();
         } else {
             selected = nextProps.target[nextProps.propertyName!] === true;
             if (nextProps.target[nextProps.propertyName!] === conflictingValuesPlaceholder) {
@@ -98,7 +103,7 @@ export class CheckBoxLineComponent extends React.Component<ICheckBoxLineComponen
             }
 
             if (this.props.target && this.props.propertyName) {
-                this.props.target[this.props.propertyName!] = !this.state.isSelected;
+                this.props.target[this.props.propertyName] = !this.state.isSelected;
             }
         }
 
@@ -109,7 +114,22 @@ export class CheckBoxLineComponent extends React.Component<ICheckBoxLineComponen
         this.setState({ isSelected: !this.state.isSelected, isConflict: false });
     }
 
-    render() {
+    // Copy to clipboard the code this checkbox actually does
+    // Example : mesh.checkCollisions = true;
+    onCopyClick() {
+        if (this.props && this.props.target) {
+            const { className, babylonNamespace } = getClassNameWithNamespace(this.props.target);
+            const targetName = "globalThis.debugNode";
+            const targetProperty = this.props.propertyName;
+            const value = this.props.target[this.props.propertyName!];
+            const strCommand = targetName + "." + targetProperty + " = " + value + ";// (debugNode as " + babylonNamespace + className + ")";
+            copyCommandToClipboard(strCommand);
+        } else {
+            copyCommandToClipboard("undefined");
+        }
+    }
+
+    override render() {
         const icons = this.props.large ? Icons.size40 : Icons.size30;
         const icon = this.state.isConflict ? icons.mixed : this.state.isSelected ? icons.on : icons.off;
         return (
@@ -141,6 +161,9 @@ export class CheckBoxLineComponent extends React.Component<ICheckBoxLineComponen
                         </label>
                     </div>
                 )}
+                <div className="copy hoverIcon" onClick={() => this.onCopyClick()} title="Copy to clipboard">
+                    <img src={copyIcon} alt="Copy" />
+                </div>
             </div>
         );
     }

@@ -1,5 +1,5 @@
 import { Vector3 } from "../Maths/math.vector";
-import type { PhysicsShape } from "./v2";
+import type { PhysicsShape } from "./v2/physicsShape";
 import type { PhysicsBody } from "./v2/physicsBody";
 
 /**
@@ -84,6 +84,7 @@ export class CastingResult {
 /**
  * Interface for the size containing width and height
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 interface IXYZ {
     /**
      * X

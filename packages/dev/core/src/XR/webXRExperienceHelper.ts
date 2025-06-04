@@ -13,10 +13,13 @@ import { Logger } from "../Misc/logger";
 import { UniversalCamera } from "../Cameras/universalCamera";
 import { Quaternion, Vector3 } from "../Maths/math.vector";
 import type { Engine } from "../Engines/engine";
+import type { ThinEngine } from "../Engines/thinEngine";
+import { AbstractEngine } from "core/Engines/abstractEngine";
 
 /**
  * Options for setting up XR spectator camera.
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface WebXRSpectatorModeOption {
     /**
      * Expected refresh rate (frames per sec) for a spectator camera.
@@ -101,14 +104,16 @@ export class WebXRExperienceHelper implements IDisposable {
      * @param sceneOrEngine the scene or engine to attach the experience helper to
      * @returns a promise for the experience helper
      */
-    public static CreateAsync(sceneOrEngine: Scene | Engine): Promise<WebXRExperienceHelper> {
+    public static async CreateAsync(sceneOrEngine: Scene | Engine): Promise<WebXRExperienceHelper> {
         const helper = new WebXRExperienceHelper(sceneOrEngine);
-        return helper.sessionManager
+        return await helper.sessionManager
             .initializeAsync()
+            // eslint-disable-next-line github/no-then
             .then(() => {
                 helper._supported = true;
                 return helper;
             })
+            // eslint-disable-next-line github/no-then
             .catch((e) => {
                 helper._setState(WebXRState.NOT_IN_XR);
                 helper.dispose();
@@ -127,7 +132,7 @@ export class WebXRExperienceHelper implements IDisposable {
         this.camera = new WebXRCamera("webxr", this._scene, this.sessionManager);
         this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
 
-        //when already in an XR Session, enterXRAsync, is not going to runs so: 
+        //when already in an XR Session, enterXRAsync, is not going to runs so:
         if (this.sessionManager.inXRSession) {
             // this will switch the cameras
             this._adjustScene();
@@ -148,6 +153,7 @@ export class WebXRExperienceHelper implements IDisposable {
      */
     public dispose(all: boolean = false) {
         if (!this.persistent || all) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             this.exitXRAsync();
             this.onStateChangedObservable.clear();
         }
@@ -202,7 +208,6 @@ export class WebXRExperienceHelper implements IDisposable {
         try {
             await this.sessionManager.initializeSessionAsync(sessionMode, sessionCreationOptions);
             await this.sessionManager.setReferenceSpaceTypeAsync(referenceSpaceType);
-            const baseLayer = await renderTarget.initializeXRLayerAsync(this.sessionManager.session);
 
             const xrRenderState: XRRenderStateInit = {
                 // if maxZ is 0 it should be "Infinity", but it doesn't work with the WebXR API. Setting to a large number.
@@ -212,6 +217,7 @@ export class WebXRExperienceHelper implements IDisposable {
 
             // The layers feature will have already initialized the xr session's layers on session init.
             if (!this.featuresManager.getEnabledFeature(WebXRFeatureName.LAYERS)) {
+                const baseLayer = await renderTarget.initializeXRLayerAsync(this.sessionManager.session);
                 xrRenderState.baseLayer = baseLayer;
             }
 
@@ -240,6 +246,9 @@ export class WebXRExperienceHelper implements IDisposable {
                 this.onInitialXRPoseSetObservable.notifyObservers(this.camera);
             }
 
+            // Vision Pro suspends the audio context when entering XR, so we resume it here if needed.
+            AbstractEngine.audioEngine?._resumeAudioContextOnStateChange();
+
             this._sessionEndedObserver = this.sessionManager.onXRSessionEnded.addOnce(() => {
                 this._onSessionEnded();
             });
@@ -261,13 +270,13 @@ export class WebXRExperienceHelper implements IDisposable {
      * Exits XR mode and returns the scene to its original state
      * @returns promise that resolves after xr mode has exited
      */
-    public exitXRAsync() {
+    public async exitXRAsync() {
         // only exit if state is IN_XR
         if (this.state !== WebXRState.IN_XR) {
-            return Promise.resolve();
+            return;
         }
         this._setState(WebXRState.EXITING_XR);
-        return this.sessionManager.exitXRAsync();
+        return await this.sessionManager.exitXRAsync();
     }
 
     /**
@@ -379,7 +388,7 @@ export class WebXRExperienceHelper implements IDisposable {
                     this._scene.onAfterRenderCameraObservable.add((camera) => {
                         if (camera === this.camera) {
                             // reset the dimensions object for correct resizing
-                            this._scene.getEngine().framebufferDimensionsObject = null;
+                            (this._scene.getEngine() as ThinEngine).framebufferDimensionsObject = null;
                         }
                     });
                 } else if (this.state === WebXRState.EXITING_XR) {

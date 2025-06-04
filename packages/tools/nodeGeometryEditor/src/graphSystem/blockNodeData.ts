@@ -2,11 +2,12 @@ import type { INodeContainer } from "shared-ui-components/nodeGraphSystem/interf
 import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
 import type { IPortData } from "shared-ui-components/nodeGraphSystem/interfaces/portData";
 import { ConnectionPointPortData } from "./connectionPointPortData";
-import styles from "./blockNodeData.modules.scss";
+import * as styles from "./blockNodeData.module.scss";
 import type { NodeGeometryBlock } from "core/Meshes/Node/nodeGeometryBlock";
 import type { Nullable } from "core/types";
 import type { Observer } from "core/Misc/observable";
 import type { TeleportInBlock } from "core/Meshes/Node/Blocks/Teleport/teleportInBlock";
+import type { TeleportOutBlock } from "core/Meshes/Node/Blocks/Teleport/teleportOutBlock";
 
 export class BlockNodeData implements INodeData {
     private _inputs: IPortData[] = [];
@@ -89,7 +90,7 @@ export class BlockNodeData implements INodeData {
         iconDiv.classList.add(styles.hidden);
     }
 
-    public get invisibleEndpoints() {
+    public get invisibleEndpoints(): TeleportOutBlock[] | null {
         if (this.data.isTeleportIn) {
             const teleportIn = this.data as TeleportInBlock;
             return teleportIn.endpoints;
@@ -103,15 +104,15 @@ export class BlockNodeData implements INodeData {
         nodeContainer: INodeContainer
     ) {
         if (data.inputs) {
-            this.data.inputs.forEach((input) => {
+            for (const input of this.data.inputs) {
                 this._inputs.push(new ConnectionPointPortData(input, nodeContainer));
-            });
+            }
         }
 
         if (data.outputs) {
-            this.data.outputs.forEach((output) => {
+            for (const output of this.data.outputs) {
                 this._outputs.push(new ConnectionPointPortData(output, nodeContainer));
-            });
+            }
         }
 
         this._onBuildObserver = data.onBuildObservable.add(() => {

@@ -24,18 +24,18 @@ export class LinePropertyGridComponent extends React.Component<ILinePropertyGrid
         const split = value.split(",");
         line.dash = [];
 
-        split.forEach((v) => {
+        for (const v of split) {
             const int = parseInt(v);
 
             if (isNaN(int)) {
-                return;
+                continue;
             }
 
             line.dash.push(int);
-        });
+        }
     }
 
-    render() {
+    override render() {
         const line = this.props.line;
 
         return (

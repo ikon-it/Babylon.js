@@ -14,13 +14,14 @@ export class NullBlock extends NodeGeometryBlock {
     public constructor(name: string) {
         super(name);
         this.registerOutput("geometry", NodeGeometryBlockConnectionPointTypes.Geometry);
+        this.registerOutput("vector", NodeGeometryBlockConnectionPointTypes.Vector3);
     }
 
     /**
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "NullBlock";
     }
 
@@ -31,8 +32,16 @@ export class NullBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
+    /**
+     * Gets the vector output component
+     */
+    public get vector(): NodeGeometryConnectionPoint {
+        return this._outputs[1];
+    }
+
+    protected override _buildBlock() {
         this.geometry._storedValue = null;
+        this.vector._storedValue = null;
     }
 }
 

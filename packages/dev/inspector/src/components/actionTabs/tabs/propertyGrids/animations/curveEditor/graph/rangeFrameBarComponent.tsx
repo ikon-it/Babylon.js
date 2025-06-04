@@ -5,7 +5,7 @@ import type { Context, IActiveAnimationChangedOptions } from "../context";
 import type { Animation } from "core/Animations/animation";
 import type { Observer } from "core/Misc/observable";
 
-const tickDistance = 25; // x distance between consecutive ticks
+const TickDistance = 25; // x distance between consecutive ticks
 
 interface IRangeFrameBarComponentProps {
     globalState: GlobalState;
@@ -73,11 +73,11 @@ export class RangeFrameBarComponent extends React.Component<IRangeFrameBarCompon
         });
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         this._isMounted = true;
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onActiveAnimationChangedObserver) {
             this.props.context.onActiveAnimationChanged.remove(this._onActiveAnimationChangedObserver);
         }
@@ -165,7 +165,7 @@ export class RangeFrameBarComponent extends React.Component<IRangeFrameBarCompon
 
         const range = to - from;
         const convertRatio = range / this._viewWidth;
-        const dist = tickDistance;
+        const dist = TickDistance;
         const offset = Math.max(Math.floor(dist * convertRatio), 1);
 
         const steps = [];
@@ -217,7 +217,7 @@ export class RangeFrameBarComponent extends React.Component<IRangeFrameBarCompon
         });
     }
 
-    public render() {
+    public override render() {
         const viewBox = `${-this._offsetX} 0 ${this._viewWidth + this._offsetX * 4} 40`;
 
         return (

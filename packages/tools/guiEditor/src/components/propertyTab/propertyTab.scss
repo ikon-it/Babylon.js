@@ -31,9 +31,6 @@
         text-align: center;
         display: grid;
         grid-template-columns: 30px 1fr;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
         user-select: none;
 
         #logo {
@@ -58,6 +55,10 @@
         }
     }
 
+    .copy {
+        display: none;
+    }
+
     .range {
         -webkit-appearance: none;
         width: 100%;
@@ -66,7 +67,6 @@
         border-radius: 5px;
         outline: none;
         opacity: 0.7;
-        -webkit-transition: 0.2s;
         transition: opacity 0.2s;
         padding: 0;
     }
@@ -172,10 +172,6 @@
         margin: 0;
     }
 
-    .hasArrows input[type="number"] {
-        -moz-appearance: textfield;
-    }
-
     .sliderLine {
         height: var(--spacingHeight);
         display: grid;
@@ -237,10 +233,17 @@
 
                 input[type="number"] {
                     -webkit-appearance: textfield;
-                    -moz-appearance: textfield;
                     appearance: textfield;
                 }
             }
+
+            .copy {
+                display: none;
+            }
+        }
+
+        .copy {
+            display: none;
         }
     }
 
@@ -407,6 +410,10 @@
                     filter: brightness(10);
                 }
             }
+        }
+
+        .copy {
+            display: none;
         }
     }
 
@@ -680,11 +687,11 @@
         width: 40px;
         margin-left: 5px;
         margin-right: 5px;
+        background-color: white;
         .command-label {
             display: none;
         }
 
-        background-color: white;
         .command-button-icon {
             height: 100%;
             width: 100%;
@@ -704,11 +711,11 @@
         width: 40px;
         margin-left: 5px;
         margin-right: 5px;
+        background-color: white;
         .command-label {
             display: none;
         }
 
-        background-color: white;
         .command-button-icon {
             height: 100%;
             width: 100%;
@@ -728,12 +735,12 @@
         width: 40px;
         margin-left: 5px;
         margin-right: 5px;
+        background-color: #c2c2c2;
+        filter: invert(1);
         .command-label {
             display: none;
         }
 
-        background-color: #c2c2c2;
-        filter: invert(1);
         .command-button-icon {
             height: 100%;
             width: 100%;
@@ -798,10 +805,10 @@
                 -webkit-appearance: none;
                 margin: 0;
             }
+        }
 
-            input[type="number"] {
-                -moz-appearance: textfield;
-            }
+        .copy {
+            display: none;
         }
     }
 
@@ -834,6 +841,10 @@
                 align-items: center;
                 justify-items: center;
                 cursor: pointer;
+            }
+
+            .copy {
+                display: none;
             }
         }
 
@@ -983,6 +994,10 @@
         .hidden {
             display: none;
         }
+
+        .copy {
+            display: none;
+        }
     }
 
     .listLine {
@@ -1026,6 +1041,10 @@
                 height: 24px;
                 color: #333333;
             }
+        }
+
+        .copy {
+            display: none;
         }
     }
 
@@ -1075,6 +1094,19 @@
                 }
             }
 
+            .expand {
+                grid-column: 3;
+                display: none;
+                align-items: center;
+                justify-items: center;
+                cursor: pointer;
+
+                img {
+                    height: 100%;
+                    width: 20px;
+                }
+            }
+
             .copy {
                 grid-column: 4;
                 display: none;
@@ -1082,19 +1114,6 @@
                 justify-items: center;
                 cursor: pointer;
                 color: black;
-                img {
-                    height: 100%;
-                    width: 20px;
-                }
-            }
-
-            .expand {
-                grid-column: 4;
-                display: none;
-                align-items: center;
-                justify-items: center;
-                cursor: pointer;
-
                 img {
                     height: 100%;
                     width: 20px;
@@ -1187,9 +1206,6 @@
             margin: 5px;
             margin-top: 6px;
             max-width: 200px;
-            -webkit-user-select: text;
-            -moz-user-select: text;
-            -ms-user-select: text;
             user-select: text;
 
             &.check {

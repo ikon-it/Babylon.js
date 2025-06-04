@@ -5,7 +5,7 @@ import { VertexData } from "../mesh.vertexData";
 import { Scene } from "../../scene";
 import type { Nullable } from "../../types";
 import { Axis } from "../../Maths/math.axis";
-import { CompatibilityOptions } from "../../Compat/compatibilityOptions";
+import { useOpenGLOrientationForUV } from "../../Compat/compatibilityOptions";
 
 /**
  * Creates the VertexData for a cylinder, cone or prism
@@ -91,7 +91,7 @@ export function CreateCylinderVertexData(options: {
     const ringFirstVertex: Vector3 = Vector3.Zero();
     const ringFirstNormal: Vector3 = Vector3.Zero();
     const quadNormal: Vector3 = Vector3.Zero();
-    const Y: Vector3 = Axis.Y;
+    const y: Vector3 = Axis.Y;
 
     // positions, normals, uvs
     let i: number;
@@ -147,7 +147,7 @@ export function CreateCylinderVertexData(options: {
                 } else {
                     v = faceUV[s].y + (faceUV[s].w - faceUV[s].y) * h;
                 }
-                uvs.push(faceUV[s].x + ((faceUV[s].z - faceUV[s].x) * j) / tessellation, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
+                uvs.push(faceUV[s].x + ((faceUV[s].z - faceUV[s].x) * j) / tessellation, useOpenGLOrientationForUV ? 1 - v : v);
                 if (faceColors) {
                     colors.push(faceColors[s].r, faceColors[s].g, faceColors[s].b, faceColors[s].a);
                 }
@@ -159,10 +159,10 @@ export function CreateCylinderVertexData(options: {
                 positions.push(0, ringVertex.y, 0);
                 positions.push(0, ringVertex.y, 0);
                 positions.push(ringFirstVertex.x, ringFirstVertex.y, ringFirstVertex.z);
-                Vector3.CrossToRef(Y, ringNormal, quadNormal);
+                Vector3.CrossToRef(y, ringNormal, quadNormal);
                 quadNormal.normalize();
                 normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
-                Vector3.CrossToRef(ringFirstNormal, Y, quadNormal);
+                Vector3.CrossToRef(ringFirstNormal, y, quadNormal);
                 quadNormal.normalize();
                 normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
                 if (hasRings) {
@@ -170,15 +170,15 @@ export function CreateCylinderVertexData(options: {
                 } else {
                     v = faceUV[s + 1].y + (faceUV[s + 1].w - faceUV[s + 1].y) * h;
                 }
-                uvs.push(faceUV[s + 1].x, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
-                uvs.push(faceUV[s + 1].z, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
+                uvs.push(faceUV[s + 1].x, useOpenGLOrientationForUV ? 1 - v : v);
+                uvs.push(faceUV[s + 1].z, useOpenGLOrientationForUV ? 1 - v : v);
                 if (hasRings) {
                     v = cs !== s ? faceUV[s + 2].y : faceUV[s + 2].w;
                 } else {
                     v = faceUV[s + 2].y + (faceUV[s + 2].w - faceUV[s + 2].y) * h;
                 }
-                uvs.push(faceUV[s + 2].x, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
-                uvs.push(faceUV[s + 2].z, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
+                uvs.push(faceUV[s + 2].x, useOpenGLOrientationForUV ? 1 - v : v);
+                uvs.push(faceUV[s + 2].z, useOpenGLOrientationForUV ? 1 - v : v);
                 if (faceColors) {
                     colors.push(faceColors[s + 1].r, faceColors[s + 1].g, faceColors[s + 1].b, faceColors[s + 1].a);
                     colors.push(faceColors[s + 1].r, faceColors[s + 1].g, faceColors[s + 1].b, faceColors[s + 1].a);
@@ -241,7 +241,7 @@ export function CreateCylinderVertexData(options: {
         positions.push(center.x, center.y, center.z);
         normals.push(0, isTop ? 1 : -1, 0);
         const v = u.y + (u.w - u.y) * 0.5;
-        uvs.push(u.x + (u.z - u.x) * 0.5, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
+        uvs.push(u.x + (u.z - u.x) * 0.5, useOpenGLOrientationForUV ? 1 - v : v);
         if (c) {
             colors.push(c.r, c.g, c.b, c.a);
         }
@@ -256,7 +256,7 @@ export function CreateCylinderVertexData(options: {
             positions.push(circleVector.x, circleVector.y, circleVector.z);
             normals.push(0, isTop ? 1 : -1, 0);
             const v = u.y + (u.w - u.y) * textureCoordinate.y;
-            uvs.push(u.x + (u.z - u.x) * textureCoordinate.x, CompatibilityOptions.UseOpenGLOrientationForUV ? 1 - v : v);
+            uvs.push(u.x + (u.z - u.x) * textureCoordinate.x, useOpenGLOrientationForUV ? 1 - v : v);
             if (c) {
                 colors.push(c.r, c.g, c.b, c.a);
             }

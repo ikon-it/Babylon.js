@@ -32,7 +32,7 @@ export class TransformNodePropertyGridComponent extends React.Component<ITransfo
         super(props);
     }
 
-    render() {
+    override render() {
         const transformNode = this.props.transformNode;
 
         return (
@@ -44,7 +44,7 @@ export class TransformNodePropertyGridComponent extends React.Component<ITransfo
                     onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                 />
                 <LineContainerComponent title="GENERAL" selection={this.props.globalState}>
-                    <TextLineComponent label="ID" value={transformNode.id} />
+                    <TextLineComponent label="ID" value={transformNode.id} onCopy />
                     <TextInputLineComponent
                         lockObject={this.props.lockObject}
                         label="Name"

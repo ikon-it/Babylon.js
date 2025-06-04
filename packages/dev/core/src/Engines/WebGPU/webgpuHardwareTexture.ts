@@ -1,14 +1,15 @@
 /* eslint-disable jsdoc/require-jsdoc */
 /* eslint-disable babylonjs/available */
-import type { HardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
-import { Scalar } from "../../Maths/math.scalar";
+import type { IHardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
+import { ILog2 } from "../../Maths/math.scalar.functions";
 import type { Nullable } from "../../types";
 // eslint-disable-next-line @typescript-eslint/naming-convention
 import * as WebGPUConstants from "./webgpuConstants";
 import { WebGPUTextureHelper } from "./webgpuTextureHelper";
+import type { WebGPUEngine } from "../webgpuEngine";
 
 /** @internal */
-export class WebGPUHardwareTexture implements HardwareTextureWrapper {
+export class WebGPUHardwareTexture implements IHardwareTextureWrapper {
     /**
      * Cache of RenderPassDescriptor and BindGroup used when generating mipmaps (see WebGPUTextureHelper.generateMipmaps)
      * @internal
@@ -29,6 +30,9 @@ export class WebGPUHardwareTexture implements HardwareTextureWrapper {
     /** @internal */
     public _copyInvertYBindGroupWithOfst: GPUBindGroup;
 
+    /** @internal */
+    public _originalFormatIsRGB = false;
+
     private _webgpuTexture: Nullable<GPUTexture>;
     // There can be multiple MSAA textures for a single WebGPU texture because different layers of a 2DArrayTexture / 3DTexture
     // or different faces of a cube texture can be bound to different render targets at the same time (in a multi RenderTargetWrapper)
@@ -38,28 +42,29 @@ export class WebGPUHardwareTexture implements HardwareTextureWrapper {
         return this._webgpuTexture;
     }
 
-    public getMSAATexture(index = 0): Nullable<GPUTexture> {
+    public getMSAATexture(index: number): Nullable<GPUTexture> {
         return this._webgpuMSAATexture?.[index] ?? null;
     }
 
-    public setMSAATexture(texture: GPUTexture, index = -1) {
+    public setMSAATexture(texture: GPUTexture, index: number) {
         if (!this._webgpuMSAATexture) {
             this._webgpuMSAATexture = [];
         }
 
-        if (index === -1) {
-            index = this._webgpuMSAATexture.length;
-        }
-
-        this._webgpuMSAATexture![index] = texture;
+        this._webgpuMSAATexture[index] = texture;
     }
 
-    public releaseMSAATexture() {
+    public releaseMSAATexture(index?: number): void {
         if (this._webgpuMSAATexture) {
-            for (const texture of this._webgpuMSAATexture) {
-                texture?.destroy();
+            if (index !== undefined) {
+                this._engine._textureHelper.releaseTexture(this._webgpuMSAATexture[index]);
+                delete this._webgpuMSAATexture[index];
+            } else {
+                for (const texture of this._webgpuMSAATexture) {
+                    this._engine._textureHelper.releaseTexture(texture);
+                }
+                this._webgpuMSAATexture = null;
             }
-            this._webgpuMSAATexture = null;
         }
     }
 
@@ -69,7 +74,10 @@ export class WebGPUHardwareTexture implements HardwareTextureWrapper {
     public textureUsages = 0;
     public textureAdditionalUsages = 0;
 
-    constructor(existingTexture: Nullable<GPUTexture> = null) {
+    constructor(
+        private _engine: WebGPUEngine,
+        existingTexture: Nullable<GPUTexture> = null
+    ) {
         this._webgpuTexture = existingTexture;
         this._webgpuMSAATexture = null;
         this.view = null;
@@ -88,6 +96,7 @@ export class WebGPUHardwareTexture implements HardwareTextureWrapper {
             arrayLayerCount = 6 * (depth || 1);
         } else if (is3D) {
             viewDimension = WebGPUConstants.TextureViewDimension.E3d;
+            arrayLayerCount = 1;
         } else if (is2DArray) {
             viewDimension = WebGPUConstants.TextureViewDimension.E2dArray;
             arrayLayerCount = depth;
@@ -102,7 +111,7 @@ export class WebGPUHardwareTexture implements HardwareTextureWrapper {
             }_${viewDimension}`,
             format,
             dimension: viewDimension,
-            mipLevelCount: generateMipMaps ? Scalar.ILog2(Math.max(width, height)) + 1 : 1,
+            mipLevelCount: generateMipMaps ? ILog2(Math.max(width, height)) + 1 : 1,
             baseArrayLayer: 0,
             baseMipLevel: 0,
             arrayLayerCount,

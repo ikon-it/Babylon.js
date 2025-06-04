@@ -2,7 +2,6 @@ import type { Scene } from "./scene";
 import type { SmartArrayNoDuplicate } from "./Misc/smartArray";
 import type { Nullable } from "./types";
 import type { PickingInfo } from "./Collisions/pickingInfo";
-import type { AbstractScene } from "./abstractScene";
 import type { IPointerEvent } from "./Events/deviceInputEvents";
 
 import type { Mesh } from "./Meshes/mesh";
@@ -11,6 +10,7 @@ import type { Camera } from "./Cameras/camera";
 import type { AbstractMesh } from "./Meshes/abstractMesh";
 import type { SubMesh } from "./Meshes/subMesh";
 import type { RenderTargetTexture } from "./Materials/Textures/renderTargetTexture";
+import type { IAssetContainer } from "./IAssetContainer";
 
 /**
  * Groups all the scene component constants in one place to ease maintenance.
@@ -38,6 +38,7 @@ export class SceneComponentConstants {
     public static readonly NAME_PHYSICSENGINE = "PhysicsEngine";
     public static readonly NAME_AUDIO = "Audio";
     public static readonly NAME_FLUIDRENDERER = "FluidRenderer";
+    public static readonly NAME_IBLCDFGENERATOR = "iblCDFGenerator";
 
     public static readonly STEP_ISREADYFORMESH_EFFECTLAYER = 0;
 
@@ -66,7 +67,6 @@ export class SceneComponentConstants {
     public static readonly STEP_AFTERRENDERINGGROUPDRAW_BOUNDINGBOXRENDERER = 1;
 
     public static readonly STEP_BEFORECAMERAUPDATE_SIMPLIFICATIONQUEUE = 0;
-    public static readonly STEP_BEFORECAMERAUPDATE_GAMEPAD = 1;
 
     public static readonly STEP_BEFORECLEAR_PROCEDURALTEXTURE = 0;
     public static readonly STEP_BEFORECLEAR_PREPASS = 1;
@@ -131,7 +131,7 @@ export interface ISceneComponent {
     rebuild(): void;
 
     /**
-     * Disposes the component and the associated ressources.
+     * Disposes the component and the associated resources.
      */
     dispose(): void;
 }
@@ -146,14 +146,14 @@ export interface ISceneSerializableComponent extends ISceneComponent {
      * Adds all the elements from the container to the scene
      * @param container the container holding the elements
      */
-    addFromContainer(container: AbstractScene): void;
+    addFromContainer(container: IAssetContainer): void;
 
     /**
      * Removes all the elements in the container from the scene
      * @param container contains the elements to remove
      * @param dispose if the removed element should be disposed (default: false)
      */
-    removeFromContainer(container: AbstractScene, dispose?: boolean): void;
+    removeFromContainer(container: IAssetContainer, dispose?: boolean): void;
 
     /**
      * Serializes the component data to the specified json object
@@ -252,7 +252,7 @@ export class Stage<T extends Function> extends Array<{ index: number; component:
      * @returns A new instance of a Stage
      */
     static Create<T extends Function>(): Stage<T> {
-        return Object.create(Stage.prototype);
+        return Object.create(Stage.prototype) as Stage<T>;
     }
 
     /**

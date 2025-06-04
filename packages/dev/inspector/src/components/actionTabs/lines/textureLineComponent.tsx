@@ -38,15 +38,17 @@ export class TextureLineComponent extends React.Component<ITextureLineComponentP
         this._canvasRef = React.createRef();
     }
 
-    shouldComponentUpdate(nextProps: ITextureLineComponentProps, nextState: { channels: TextureChannelsToDisplay; face: number }): boolean {
+    override shouldComponentUpdate(nextProps: ITextureLineComponentProps, nextState: { channels: TextureChannelsToDisplay; face: number }): boolean {
         return nextProps.texture !== this.props.texture || nextState.channels !== this.state.channels || nextState.face !== this.state.face;
     }
 
-    componentDidMount() {
+    override componentDidMount() {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
         this.updatePreview();
     }
 
-    componentDidUpdate() {
+    override componentDidUpdate() {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
         this.updatePreview();
     }
 
@@ -87,7 +89,7 @@ export class TextureLineComponent extends React.Component<ITextureLineComponentP
         }
     }
 
-    render() {
+    override render() {
         const texture = this.props.texture;
 
         return (
@@ -155,6 +157,7 @@ export class TextureLineComponent extends React.Component<ITextureLineComponentP
                     <ButtonLineComponent
                         label="Refresh"
                         onClick={() => {
+                            // eslint-disable-next-line @typescript-eslint/no-floating-promises
                             this.updatePreview();
                         }}
                     />

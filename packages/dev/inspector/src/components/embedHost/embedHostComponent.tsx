@@ -1,13 +1,15 @@
 import * as React from "react";
 import { HeaderComponent } from "../headerComponent";
-import Resizable from "re-resizable";
+import { Resizable } from "re-resizable";
 import { SceneExplorerComponent } from "../sceneExplorer/sceneExplorerComponent";
 import { ActionTabsComponent } from "../actionTabs/actionTabsComponent";
 import type { Scene } from "core/scene";
 import type { GlobalState } from "../../components/globalState";
 import type { IExplorerExtensibilityGroup, DebugLayerTab, IExplorerAdditionalNode } from "core/Debug/debugLayer";
 
-const Split = require("split.js").default;
+import Split from "split.js";
+
+const ResizableCasted = Resizable as any as React.ComponentClass<any>;
 
 import "./embedHost.scss";
 
@@ -38,14 +40,14 @@ export class EmbedHostComponent extends React.Component<IEmbedHostComponentProps
         this._bottomPartRef = React.createRef();
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         const container = this._splitRef.current;
 
         if (!container) {
             return;
         }
 
-        Split([this._topPartRef.current, this._bottomPartRef.current], {
+        Split([this._topPartRef.current!, this._bottomPartRef.current!], {
             direction: "vertical",
             minSize: [200, 200],
             gutterSize: 4,
@@ -93,7 +95,7 @@ export class EmbedHostComponent extends React.Component<IEmbedHostComponentProps
         );
     }
 
-    render() {
+    override render() {
         if (this.props.popupMode) {
             return (
                 <div id="embed">
@@ -124,11 +126,11 @@ export class EmbedHostComponent extends React.Component<IEmbedHostComponentProps
         }
 
         return (
-            <Resizable
+            <ResizableCasted
                 id="embed"
                 minWidth={300}
                 maxWidth={600}
-                size={{ height: "100%" }}
+                defaultSize={{ height: "100%" }}
                 minHeight="100%"
                 enable={{ top: false, right: false, bottom: false, left: true, topRight: false, bottomRight: false, bottomLeft: false, topLeft: false }}
             >
@@ -142,7 +144,7 @@ export class EmbedHostComponent extends React.Component<IEmbedHostComponentProps
                     onSelectionChangedObservable={this.props.globalState.onSelectionChangedObservable}
                 />
                 {this.renderContent()}
-            </Resizable>
+            </ResizableCasted>
         );
     }
 }

@@ -7,7 +7,7 @@ import type { Scene } from "core/scene";
 import { EngineStore } from "core/Engines/engineStore";
 
 import { TreeItemComponent } from "./treeItemComponent";
-import Resizable from "re-resizable";
+import { Resizable } from "re-resizable";
 import { HeaderComponent } from "../headerComponent";
 import { SceneTreeItemComponent } from "./entities/sceneTreeItemComponent";
 import { Tools } from "../../tools";
@@ -23,6 +23,7 @@ import { ParticleHelper } from "core/Particles/particleHelper";
 import { GPUParticleSystem } from "core/Particles/gpuParticleSystem";
 import { SSAO2RenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline";
 import { SSRRenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/ssrRenderingPipeline";
+import { IblShadowsRenderPipeline } from "core/Rendering/IBLShadows/iblShadowsRenderPipeline";
 import { StandardMaterial } from "core/Materials/standardMaterial";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import { SpriteManager } from "core/Sprites/spriteManager";
@@ -30,6 +31,7 @@ import type { TargetCamera } from "core/Cameras/targetCamera";
 import type { Camera } from "core/Cameras/camera";
 import type { PostProcessRenderPipeline } from "core/PostProcesses";
 import { NodeGeometry } from "core/Meshes/Node/nodeGeometry";
+import { NodeRenderGraph } from "core/FrameGraph/Node/nodeRenderGraph";
 
 // side effects
 import "core/Sprites/spriteSceneComponent";
@@ -42,12 +44,14 @@ interface ISceneExplorerFilterComponentProps {
     onFilter: (filter: string) => void;
 }
 
+const ResizableCasted = Resizable as any as React.ComponentClass<any>;
+
 export class SceneExplorerFilterComponent extends React.Component<ISceneExplorerFilterComponentProps> {
     constructor(props: ISceneExplorerFilterComponentProps) {
         super(props);
     }
 
-    render() {
+    override render() {
         return (
             <div className="filter">
                 <input type="text" placeholder="Filter" onChange={(evt) => this.props.onFilter(evt.target.value)} />
@@ -117,7 +121,7 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         }, 32);
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         this._onSelectionChangeObserver = this.props.globalState.onSelectionChangedObservable.add((entity) => {
             if (this.state.selectedEntity !== entity) {
                 this.setState({ selectedEntity: entity });
@@ -129,7 +133,7 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         });
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this._onSelectionChangeObserver) {
             this.props.globalState.onSelectionChangedObservable.remove(this._onSelectionChangeObserver);
         }
@@ -303,6 +307,20 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
                     },
                 });
             }
+
+            if (
+                scene.getEngine().getCaps().drawBuffersExtension &&
+                scene.getEngine().getCaps().texelFetch &&
+                !pipelines.some((p) => p.getClassName() === "IBLShadowsRenderingPipeline")
+            ) {
+                defaultMenuItems.push({
+                    label: "Add new IBL Shadows Rendering Pipeline",
+                    action: () => {
+                        const newPipeline = new IblShadowsRenderPipeline("IBL Shadows rendering pipeline", scene, {}, scene.cameras);
+                        this.props.globalState.onSelectionChangedObservable.notifyObservers(newPipeline);
+                    },
+                });
+            }
         }
 
         const customMenuItems = this.props.contextMenu?.pipeline || [];
@@ -451,6 +469,33 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         return useDefaults ? [...defaultMenuItems, ...customMenuItems] : customMenuItems;
     }
 
+    private _getFrameGraphsContextMenus(scene: Scene): IInspectorContextMenuItem[] {
+        const defaultMenuItems: IInspectorContextMenuItem[] = [];
+
+        const getUniqueName = (name: string): string => {
+            let idSubscript = 1;
+            while (scene.getFrameGraphByName(name)) {
+                name = name + " " + idSubscript++;
+            }
+            return name;
+        };
+
+        defaultMenuItems.push({
+            label: "Add new Frame Graph",
+            action: () => {
+                const newNodeRenderGraph = new NodeRenderGraph(getUniqueName("Frame Graph"), scene);
+                newNodeRenderGraph.setToDefault();
+                newNodeRenderGraph.build();
+                this.props.globalState.onSelectionChangedObservable.notifyObservers(newNodeRenderGraph);
+            },
+        });
+
+        const customMenuItems = this.props.contextMenu?.frameGraphs || [];
+        const useDefaults = !this.props.contextMenuOverride?.includes("frameGraphs");
+
+        return useDefaults ? [...defaultMenuItems, ...customMenuItems] : customMenuItems;
+    }
+
     renderContent(allNodes: any[]) {
         const scene = this.state.scene;
 
@@ -489,6 +534,7 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         const materialsContextMenus = this._getMaterialsContextMenus(scene);
         const spriteManagersContextMenus = this._getSpriteManagersContextMenus(scene);
         const particleSystemsContextMenus = this._getParticleSystemsContextMenus(scene);
+        const frameGraphsContextMenus = this._getFrameGraphsContextMenus(scene);
 
         const materials = [];
 
@@ -518,7 +564,8 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
             scene.particleSystems,
             scene.spriteManagers,
             guiElements,
-            scene.animationGroups
+            scene.animationGroups,
+            scene.frameGraphs
         );
         if (scene.mainSoundTrack) {
             allNodes.push(scene.mainSoundTrack.soundCollection);
@@ -663,6 +710,17 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
                         filter={this.state.filter}
                     />
                 )}
+                <TreeItemComponent
+                    globalState={this.props.globalState}
+                    contextMenuItems={frameGraphsContextMenus}
+                    forceSubitems={true}
+                    extensibilityGroups={this.props.extensibilityGroups}
+                    selectedEntity={this.state.selectedEntity}
+                    items={scene.frameGraphs}
+                    label="Frame Graphs"
+                    offset={1}
+                    filter={this.state.filter}
+                />
                 {this.props.additionalNodes &&
                     this.props.additionalNodes.map((additionalNode) => {
                         return (
@@ -698,7 +756,7 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         this.props.onPopup();
     }
 
-    render() {
+    override render() {
         const allNodes: any[] = [];
 
         if (this.props.popupMode) {
@@ -732,16 +790,16 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
         }
 
         return (
-            <Resizable
+            <ResizableCasted
                 tabIndex={-1}
                 id="sceneExplorer"
+                defaultSize={{ height: "100%" }}
                 ref={this._sceneExplorerRef}
-                size={{ height: "100%" }}
                 minWidth={300}
                 maxWidth={600}
                 minHeight="100%"
                 enable={{ top: false, right: true, bottom: false, left: false, topRight: false, bottomRight: false, bottomLeft: false, topLeft: false }}
-                onKeyDown={(keyEvent) => this.processKeys(keyEvent, allNodes)}
+                onKeyDown={(keyEvent: React.KeyboardEvent<HTMLDivElement>) => this.processKeys(keyEvent, allNodes)}
             >
                 {!this.props.noHeader && (
                     <HeaderComponent
@@ -754,7 +812,7 @@ export class SceneExplorerComponent extends React.Component<ISceneExplorerCompon
                     />
                 )}
                 {this.renderContent(allNodes)}
-            </Resizable>
+            </ResizableCasted>
         );
     }
 }

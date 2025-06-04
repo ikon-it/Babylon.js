@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/naming-convention */
 import { Matrix, Quaternion, TmpVectors, Vector3 } from "../../../Maths/math.vector";
 import {
     PhysicsShapeType,
@@ -7,6 +9,8 @@ import {
     PhysicsConstraintAxis,
     PhysicsConstraintAxisLimitMode,
     PhysicsEventType,
+    PhysicsPrestepType,
+    PhysicsActivationControl,
 } from "../IPhysicsEnginePlugin";
 import type {
     PhysicsShapeParameters,
@@ -23,15 +27,15 @@ import type { PhysicsConstraint, Physics6DoFConstraint } from "../physicsConstra
 import type { PhysicsMaterial } from "../physicsMaterial";
 import { PhysicsMaterialCombineMode } from "../physicsMaterial";
 import { PhysicsShape } from "../physicsShape";
-import type { BoundingBox } from "../../../Culling/boundingBox";
+import { BoundingBox } from "../../../Culling/boundingBox";
 import type { TransformNode } from "../../../Meshes/transformNode";
 import { Mesh } from "../../../Meshes/mesh";
 import { InstancedMesh } from "../../../Meshes/instancedMesh";
 import type { Scene } from "../../../scene";
 import { VertexBuffer } from "../../../Buffers/buffer";
-import { ArrayTools } from "../../../Misc/arrayTools";
+import { BuildArray } from "../../../Misc/arrayTools";
 import { Observable } from "../../../Misc/observable";
-import type { Nullable } from "../../../types";
+import type { Nullable, FloatArray } from "../../../types";
 import type { IPhysicsPointProximityQuery } from "../../physicsPointProximityQuery";
 import type { ProximityCastResult } from "../../proximityCastResult";
 import type { IPhysicsShapeProximityCastQuery } from "../../physicsShapeProximityCastQuery";
@@ -102,19 +106,19 @@ class MeshAccumulator {
             //  Ignore any children which have a physics body.
             //  Other plugin implementations do not have this check, which appears to be
             //  a bug, as otherwise, the mesh will have a duplicate collider
-            children
-                .filter((m: any) => !m.physicsBody)
-                .forEach((m: TransformNode) => {
-                    const childToWorld = m.computeWorldMatrix();
-                    const childToRootScaled = TmpVectors.Matrix[3];
-                    childToWorld.multiplyToRef(worldToRootScaled, childToRootScaled);
+            const transformNodes = children.filter((m: any) => !m.physicsBody);
 
-                    if (m instanceof Mesh) {
-                        this._addMesh(m, childToRootScaled);
-                    } else if (m instanceof InstancedMesh) {
-                        this._addMesh(m.sourceMesh, childToRootScaled);
-                    }
-                });
+            for (const m of transformNodes) {
+                const childToWorld = m.computeWorldMatrix();
+                const childToRootScaled = TmpVectors.Matrix[3];
+                childToWorld.multiplyToRef(worldToRootScaled, childToRootScaled);
+
+                if (m instanceof Mesh) {
+                    this._addMesh(m, childToRootScaled);
+                } else if (m instanceof InstancedMesh) {
+                    this._addMesh(m.sourceMesh, childToRootScaled);
+                }
+            }
         }
     }
 
@@ -287,10 +291,9 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
     /**
      * We only have a single raycast in-flight right now
      */
-    private _queryCollector: bigint;
+    private _queryCollector;
     private _fixedTimeStep: number = 1 / 60;
-    private _timeStep: number = 1 / 60;
-    private _tmpVec3 = ArrayTools.BuildArray(3, Vector3.Zero);
+    private _tmpVec3 = BuildArray(3, Vector3.Zero);
     private _bodies = new Map<bigint, { body: PhysicsBody; index: number }>();
     private _shapes = new Map<bigint, PhysicsShape>();
     private _bodyBuffer: number;
@@ -385,11 +388,15 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
             this.setPhysicsBodyTransformation(physicsBody, physicsBody.transformNode);
         }
 
-        this._hknp.HP_World_Step(this.world, this._useDeltaForWorldStep ? delta : this._timeStep);
+        const deltaTime = this._useDeltaForWorldStep ? delta : this._fixedTimeStep;
+        this._hknp.HP_World_SetIdealStepTime(this.world, deltaTime);
+        this._hknp.HP_World_Step(this.world, deltaTime);
 
         this._bodyBuffer = this._hknp.HP_World_GetBodyBuffer(this.world)[1];
         for (const physicsBody of physicsBodies) {
-            this.sync(physicsBody);
+            if (!physicsBody.disableSync) {
+                this.sync(physicsBody);
+            }
         }
 
         this._notifyCollisions();
@@ -405,6 +412,31 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      */
     public getPluginVersion(): number {
         return 2;
+    }
+
+    /**
+     * Set the maximum allowed linear and angular velocities
+     * @param maxLinearVelocity maximum allowed linear velocity
+     * @param maxAngularVelocity maximum allowed angular velocity
+     */
+    setVelocityLimits(maxLinearVelocity: number, maxAngularVelocity: number): void {
+        this._hknp.HP_World_SetSpeedLimit(this.world, maxLinearVelocity, maxAngularVelocity);
+    }
+
+    /**
+     * @returns maximum allowed linear velocity
+     */
+    getMaxLinearVelocity(): number {
+        const limits = this._hknp.HP_World_GetSpeedLimit(this.world);
+        return limits[1];
+    }
+
+    /**
+     * @returns maximum allowed angular velocity
+     */
+    getMaxAngularVelocity(): number {
+        const limits = this._hknp.HP_World_GetSpeedLimit(this.world);
+        return limits[2];
     }
 
     /**
@@ -469,9 +501,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
             return; // TODO: error handling
         }
         this._createOrUpdateBodyInstances(body, motionType, matrixData, 0, instancesCount, false);
-        body._pluginDataInstances.forEach((bodyId, index) => {
+        for (let index = 0; index < body._pluginDataInstances.length; index++) {
+            const bodyId = body._pluginDataInstances[index];
             this._bodies.set(bodyId.hpBodyId[0], { body: body, index: index });
-        });
+        }
     }
 
     private _createOrUpdateBodyInstances(body: PhysicsBody, motionType: PhysicsMotionType, matrixData: Float32Array, startIndex: number, endIndex: number, update: boolean): void {
@@ -523,6 +556,11 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
         if (instancesCount > pluginInstancesCount) {
             this._createOrUpdateBodyInstances(body, motionType, matrixData, pluginInstancesCount, instancesCount, false);
             const firstBodyShape = this._hknp.HP_Body_GetShape(body._pluginDataInstances[0].hpBodyId)[1];
+            // firstBodyShape[0] might be 0 in the case where thin instances data is set (with thinInstancesSetBuffer call) after body creation
+            // in that case, use the shape provided at body creation.
+            if (!firstBodyShape[0]) {
+                firstBodyShape[0] = body.shape?._pluginData[0];
+            }
             for (let i = pluginInstancesCount; i < instancesCount; i++) {
                 this._hknp.HP_Body_SetShape(body._pluginDataInstances[i].hpBodyId, firstBodyShape);
                 this._internalUpdateMassProperties(body._pluginDataInstances[i]);
@@ -601,6 +639,8 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
                 // transform position/orientation in parent space
                 if (parent && !parent.getWorldMatrix().isIdentity()) {
                     parent.computeWorldMatrix(true);
+                    // Save scaling for future use
+                    TmpVectors.Vector3[1].copyFrom(transformNode.scaling);
 
                     quat.normalize();
                     const finalTransform = TmpVectors.Matrix[0];
@@ -615,6 +655,8 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
                     finalTransform.multiplyToRef(parentInverseTransform, localTransform);
                     localTransform.decomposeToTransformNode(transformNode);
                     transformNode.rotationQuaternion?.normalize();
+                    // Keep original scaling. Re-injecting scaling can introduce discontinuity between frames. Basically, it grows or shrinks.
+                    transformNode.scaling.copyFrom(TmpVectors.Vector3[1]);
                 } else {
                     transformNode.position.set(bodyTranslation[0], bodyTranslation[1], bodyTranslation[2]);
                     if (transformNode.rotationQuaternion) {
@@ -647,7 +689,7 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
             this._internalUpdateMassProperties(body._pluginData);
             return;
         }
-        const m = body.transformNode as Mesh;
+        const m = body.transformNode;
         const instancesCount = m._thinInstanceDataStorage?.instancesCount ?? 0;
         for (let i = 0; i < instancesCount; i++) {
             this._hknp.HP_Body_SetShape(body._pluginDataInstances[i].hpBodyId, shapeHandle);
@@ -806,6 +848,25 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
                 return PhysicsMotionType.DYNAMIC;
         }
         throw new Error("Unknown motion type: " + type);
+    }
+
+    /**
+     * sets the activation control mode of a physics body, for instance if you need the body to never sleep.
+     * @param body - The physics body to set the activation control mode.
+     * @param controlMode - The activation control mode.
+     */
+    public setActivationControl(body: PhysicsBody, controlMode: PhysicsActivationControl): void {
+        switch (controlMode) {
+            case PhysicsActivationControl.ALWAYS_ACTIVE:
+                this._hknp.HP_Body_SetActivationControl(body._pluginData.hpBodyId, this._hknp.ActivationControl.ALWAYS_ACTIVE);
+                break;
+            case PhysicsActivationControl.ALWAYS_INACTIVE:
+                this._hknp.HP_Body_SetActivationControl(body._pluginData.hpBodyId, this._hknp.ActivationControl.ALWAYS_INACTIVE);
+                break;
+            case PhysicsActivationControl.SIMULATION_CONTROLLED:
+                this._hknp.HP_Body_SetActivationControl(body._pluginData.hpBodyId, this._hknp.ActivationControl.SIMULATION_CONTROLLED);
+                break;
+        }
     }
 
     private _internalComputeMassProperties(pluginData: BodyPluginData): any[] {
@@ -1004,6 +1065,21 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
     }
 
     /**
+     * Applies an angular impulse(torque) to a physics body
+     * @param body - The physics body to apply the impulse to.
+     * @param angularImpulse - The torque value
+     * @param instanceIndex - The index of the instance to apply the impulse to. If not specified, the impulse will be applied to all instances.
+     */
+    public applyAngularImpulse(body: PhysicsBody, angularImpulse: Vector3, instanceIndex?: number): void {
+        this._applyToBodyOrInstances(
+            body,
+            (pluginRef) => {
+                this._hknp.HP_Body_ApplyAngularImpulse(pluginRef.hpBodyId, this._bVecToV3(angularImpulse));
+            },
+            instanceIndex
+        );
+    }
+    /**
      * Applies a force to a physics body at a given location.
      * @param body - The physics body to apply the impulse to.
      * @param force - The force vector to apply.
@@ -1068,19 +1144,27 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * same transformation.
      */
     public setPhysicsBodyTransformation(body: PhysicsBody, node: TransformNode) {
-        const transformNode = body.transformNode;
-        if (body.numInstances > 0) {
-            // instances
-            const m = transformNode as Mesh;
-            const matrixData = m._thinInstanceDataStorage.matrixData;
-            if (!matrixData) {
-                return; // TODO: error handling
+        if (body.getPrestepType() == PhysicsPrestepType.TELEPORT) {
+            const transformNode = body.transformNode;
+            if (body.numInstances > 0) {
+                // instances
+                const m = transformNode as Mesh;
+                const matrixData = m._thinInstanceDataStorage.matrixData;
+                if (!matrixData) {
+                    return; // TODO: error handling
+                }
+                const instancesCount = body.numInstances;
+                this._createOrUpdateBodyInstances(body, body.getMotionType(), matrixData, 0, instancesCount, true);
+            } else {
+                // regular
+                this._hknp.HP_Body_SetQTransform(body._pluginData.hpBodyId, this._getTransformInfos(node));
             }
-            const instancesCount = body.numInstances;
-            this._createOrUpdateBodyInstances(body, body.getMotionType(), matrixData, 0, instancesCount, true);
+        } else if (body.getPrestepType() == PhysicsPrestepType.ACTION) {
+            this.setTargetTransform(body, node.absolutePosition, node.absoluteRotationQuaternion);
+        } else if (body.getPrestepType() == PhysicsPrestepType.DISABLED) {
+            Logger.Warn("Prestep type is set to DISABLED. Unable to set physics body transformation.");
         } else {
-            // regular
-            this._hknp.HP_Body_SetQTransform(body._pluginData.hpBodyId, this._getTransformInfos(node));
+            Logger.Warn("Invalid prestep type set to physics body.");
         }
     }
 
@@ -1091,7 +1175,7 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * @param rotation The target rotation
      * @param instanceIndex The index of the instance in an instanced body
      */
-    public setTargetTransform(body: PhysicsBody, position: Vector3, rotation: Quaternion, instanceIndex?: number | undefined): void {
+    public setTargetTransform(body: PhysicsBody, position: Vector3, rotation: Quaternion, instanceIndex?: number): void {
         this._applyToBodyOrInstances(
             body,
             (pluginRef) => {
@@ -1147,6 +1231,52 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
             this._hknp.HP_Body_Release(body._pluginData.hpBodyId);
             body._pluginData.hpBodyId = undefined;
         }
+    }
+
+    private _createOptionsFromGroundMesh(options: PhysicsShapeParameters) {
+        const mesh = options.groundMesh;
+        if (!mesh) {
+            return;
+        }
+        let pos = <FloatArray>mesh.getVerticesData(VertexBuffer.PositionKind);
+        const transform = mesh.computeWorldMatrix(true);
+        // convert rawVerts to object space
+        const transformedVertices: number[] = [];
+        let index: number;
+        for (index = 0; index < pos.length; index += 3) {
+            Vector3.FromArrayToRef(pos, index, TmpVectors.Vector3[0]);
+            Vector3.TransformCoordinatesToRef(TmpVectors.Vector3[0], transform, TmpVectors.Vector3[1]);
+            TmpVectors.Vector3[1].toArray(transformedVertices, index);
+        }
+        pos = transformedVertices;
+
+        const arraySize = ~~(Math.sqrt(pos.length / 3) - 1);
+        const boundingInfo = mesh.getBoundingInfo();
+        const dim = Math.min(boundingInfo.boundingBox.extendSizeWorld.x, boundingInfo.boundingBox.extendSizeWorld.z);
+        const minX = boundingInfo.boundingBox.minimumWorld.x;
+        const minY = boundingInfo.boundingBox.minimumWorld.y;
+        const minZ = boundingInfo.boundingBox.minimumWorld.z;
+
+        const matrix = new Float32Array((arraySize + 1) * (arraySize + 1));
+
+        const elementSize = (dim * 2) / arraySize;
+
+        for (let i = 0; i < matrix.length; i++) {
+            matrix[i] = minY;
+        }
+        for (let i = 0; i < pos.length; i = i + 3) {
+            const x = Math.round((pos[i + 0] - minX) / elementSize);
+            const z = arraySize - Math.round((pos[i + 2] - minZ) / elementSize);
+            const y = pos[i + 1] - minY;
+
+            matrix[z * (arraySize + 1) + x] = y;
+        }
+
+        options.numHeightFieldSamplesX = arraySize + 1;
+        options.numHeightFieldSamplesZ = arraySize + 1;
+        options.heightFieldSizeX = boundingInfo.boundingBox.extendSizeWorld.x * 2;
+        options.heightFieldSizeZ = boundingInfo.boundingBox.extendSizeWorld.z * 2;
+        options.heightFieldData = matrix;
     }
 
     /**
@@ -1227,6 +1357,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
                 break;
             case PhysicsShapeType.HEIGHTFIELD:
                 {
+                    if (options.groundMesh) {
+                        // update options with datas from groundMesh
+                        this._createOptionsFromGroundMesh(options);
+                    }
                     if (options.numHeightFieldSamplesX && options.numHeightFieldSamplesZ && options.heightFieldSizeX && options.heightFieldSizeZ && options.heightFieldData) {
                         const totalNumHeights = options.numHeightFieldSamplesX * options.numHeightFieldSamplesZ;
                         const numBytes = totalNumHeights * 4;
@@ -1440,7 +1574,31 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * for collision detection and other physics calculations.
      */
     public getBoundingBox(_shape: PhysicsShape): BoundingBox {
-        return {} as BoundingBox;
+        // get local AABB
+        const aabb = this._hknp.HP_Shape_GetBoundingBox(_shape._pluginData, [
+            [0, 0, 0],
+            [0, 0, 0, 1],
+        ])[1];
+        TmpVectors.Vector3[0].set(aabb[0][0], aabb[0][1], aabb[0][2]); // min
+        TmpVectors.Vector3[1].set(aabb[1][0], aabb[1][1], aabb[1][2]); // max
+        const boundingbox = new BoundingBox(TmpVectors.Vector3[0], TmpVectors.Vector3[1], Matrix.IdentityReadOnly);
+        return boundingbox;
+    }
+
+    /**
+     * Calculates the world bounding box of a given physics body.
+     *
+     * @param body - The physics body to calculate the bounding box for.
+     * @returns The calculated bounding box.
+     *
+     * This method is useful for physics engines as it allows to calculate the
+     * boundaries of a given body.
+     */
+    public getBodyBoundingBox(body: PhysicsBody): BoundingBox {
+        // get local AABB
+        const aabb = this.getBoundingBox(body.shape!);
+        const boundingbox = new BoundingBox(aabb.minimum, aabb.maximum, body.transformNode.getWorldMatrix());
+        return boundingbox;
     }
 
     /**
@@ -1450,7 +1608,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * @returns An object containing the positions and indices of the body's geometry.
      *
      */
-    public getBodyGeometry(body: PhysicsBody) {
+    public getBodyGeometry(body: PhysicsBody): {
+        positions: Float32Array | number[];
+        indices: Uint32Array | number[];
+    } {
         const dataInfo = body._pluginDataInstances?.length > 0 ? body._pluginDataInstances[0] : body._pluginData;
         const shape = this._hknp.HP_Body_GetShape(dataInfo.hpBodyId)[1];
         const geometryRes = this._hknp.HP_Shape_CreateDebugDisplayGeometry(shape);
@@ -1479,6 +1640,7 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * This method is useful for releasing a physics shape from the physics engine, freeing up resources and preventing memory leaks.
      */
     public disposeShape(shape: PhysicsShape): void {
+        this._shapes.delete(shape._pluginData[0]);
         this._hknp.HP_Shape_Release(shape._pluginData);
         shape._pluginData = undefined;
     }
@@ -1953,10 +2115,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
     public raycast(from: Vector3, to: Vector3, result: PhysicsRaycastResult, query?: IRaycastQuery): void {
         const queryMembership = query?.membership ?? ~0;
         const queryCollideWith = query?.collideWith ?? ~0;
+        const shouldHitTriggers = query?.shouldHitTriggers ?? false;
 
         result.reset(from, to);
 
-        const shouldHitTriggers = false;
         const bodyToIgnore = [BigInt(0)];
         const hkQuery = [this._bVecToV3(from), this._bVecToV3(to), [queryMembership, queryCollideWith], shouldHitTriggers, bodyToIgnore];
         this._hknp.HP_World_CastRayWithCollector(this.world, this._queryCollector, hkQuery);
@@ -2086,9 +2248,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
         // Register for collide events by default
         const collideEvents = this._hknp.EventType.COLLISION_STARTED.value | this._hknp.EventType.COLLISION_CONTINUED.value | this._hknp.EventType.COLLISION_FINISHED.value;
         if (body._pluginDataInstances && body._pluginDataInstances.length) {
-            body._pluginDataInstances.forEach((bodyId) => {
+            for (let index = 0; index < body._pluginDataInstances.length; index++) {
+                const bodyId = body._pluginDataInstances[index];
                 this._hknp.HP_Body_SetEventMask(bodyId.hpBodyId, enabled ? collideEvents : 0);
-            });
+            }
         } else if (body._pluginData) {
             this._hknp.HP_Body_SetEventMask(body._pluginData.hpBodyId, enabled ? collideEvents : 0);
         }
@@ -2108,9 +2271,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
             ? currentCollideEvents | this._hknp.EventType.COLLISION_FINISHED.value
             : currentCollideEvents & ~this._hknp.EventType.COLLISION_FINISHED.value;
         if (body._pluginDataInstances && body._pluginDataInstances.length) {
-            body._pluginDataInstances.forEach((bodyId) => {
+            for (let index = 0; index < body._pluginDataInstances.length; index++) {
+                const bodyId = body._pluginDataInstances[index];
                 this._hknp.HP_Body_SetEventMask(bodyId.hpBodyId, currentCollideEvents);
-            });
+            }
         } else if (body._pluginData) {
             this._hknp.HP_Body_SetEventMask(body._pluginData.hpBodyId, currentCollideEvents);
         }
@@ -2177,34 +2341,46 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
                 if (this._bodyCollisionObservable.size && collisionInfo.type !== PhysicsEventType.COLLISION_FINISHED) {
                     const observableA = this._bodyCollisionObservable.get(event.contactOnA.bodyId);
                     const observableB = this._bodyCollisionObservable.get(event.contactOnB.bodyId);
-
+                    event.contactOnA.position.subtractToRef(event.contactOnB.position, this._tmpVec3[0]);
+                    const distance = Vector3.Dot(this._tmpVec3[0], event.contactOnB.normal);
                     if (observableA) {
                         observableA.notifyObservers(collisionInfo);
-                    } else if (observableB) {
-                        //<todo This seems like it would give unexpected results when both bodies have observers?
-                        // Flip collision info:
-                        collisionInfo.collider = bodyInfoB.body;
-                        collisionInfo.colliderIndex = bodyInfoB.index;
-                        collisionInfo.collidedAgainst = bodyInfoA.body;
-                        collisionInfo.collidedAgainstIndex = bodyInfoA.index;
-                        collisionInfo.normal = event.contactOnB.normal;
-                        observableB.notifyObservers(collisionInfo);
+                    }
+                    if (observableB) {
+                        const collisionInfoB: any = {
+                            collider: bodyInfoB.body,
+                            colliderIndex: bodyInfoB.index,
+                            collidedAgainst: bodyInfoA.body,
+                            collidedAgainstIndex: bodyInfoA.index,
+                            point: event.contactOnB.position,
+                            distance: distance,
+                            impulse: event.impulseApplied,
+                            normal: event.contactOnB.normal,
+                            type: this._nativeCollisionValueToCollisionType(event.type),
+                        };
+                        observableB.notifyObservers(collisionInfoB);
                     }
                 } else if (this._bodyCollisionEndedObservable.size) {
                     const observableA = this._bodyCollisionEndedObservable.get(event.contactOnA.bodyId);
                     const observableB = this._bodyCollisionEndedObservable.get(event.contactOnB.bodyId);
-
+                    event.contactOnA.position.subtractToRef(event.contactOnB.position, this._tmpVec3[0]);
+                    const distance = Vector3.Dot(this._tmpVec3[0], event.contactOnB.normal);
                     if (observableA) {
                         observableA.notifyObservers(collisionInfo);
-                    } else if (observableB) {
-                        //<todo This seems like it would give unexpected results when both bodies have observers?
-                        // Flip collision info:
-                        collisionInfo.collider = bodyInfoB.body;
-                        collisionInfo.colliderIndex = bodyInfoB.index;
-                        collisionInfo.collidedAgainst = bodyInfoA.body;
-                        collisionInfo.collidedAgainstIndex = bodyInfoA.index;
-                        collisionInfo.normal = event.contactOnB.normal;
-                        observableB.notifyObservers(collisionInfo);
+                    }
+                    if (observableB) {
+                        const collisionInfoB: any = {
+                            collider: bodyInfoB.body,
+                            colliderIndex: bodyInfoB.index,
+                            collidedAgainst: bodyInfoA.body,
+                            collidedAgainstIndex: bodyInfoA.index,
+                            point: event.contactOnB.position,
+                            distance: distance,
+                            impulse: event.impulseApplied,
+                            normal: event.contactOnB.normal,
+                            type: this._nativeCollisionValueToCollisionType(event.type),
+                        };
+                        observableB.notifyObservers(collisionInfoB);
                     }
                 }
             }
@@ -2224,10 +2400,14 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      * Dispose the world and free resources
      */
     public dispose(): void {
-        this._hknp.HP_QueryCollector_Release(this._queryCollector);
-        this._queryCollector = BigInt(0);
-        this._hknp.HP_World_Release(this.world);
-        this.world = undefined;
+        if (this._queryCollector) {
+            this._hknp.HP_QueryCollector_Release(this._queryCollector);
+            this._queryCollector = undefined;
+        }
+        if (this.world) {
+            this._hknp.HP_World_Release(this.world);
+            this.world = undefined;
+        }
     }
 
     private _v3ToBvecRef(v: any, vec3: Vector3): void {

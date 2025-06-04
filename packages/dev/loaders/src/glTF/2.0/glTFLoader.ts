@@ -1,4 +1,7 @@
-import type { IndicesArray, Nullable } from "core/types";
+/* eslint-disable @typescript-eslint/promise-function-async */
+/* eslint-disable no-restricted-syntax */
+/* eslint-disable github/no-then */
+import type { IndicesArray, Nullable, TypedArray, TypedArrayConstructor } from "core/types";
 import { Deferred } from "core/Misc/deferred";
 import { Quaternion, Vector3, Matrix, TmpVectors } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
@@ -9,7 +12,7 @@ import type { Animation } from "core/Animations/animation";
 import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { IAnimationKey } from "core/Animations/animationKey";
 import { AnimationKeyInterpolation } from "core/Animations/animationKey";
-import { AnimationGroup } from "core/Animations/animationGroup";
+import type { AnimationGroup } from "core/Animations/animationGroup";
 import { Bone } from "core/Bones/bone";
 import { Skeleton } from "core/Bones/skeleton";
 import { Material } from "core/Materials/material";
@@ -21,7 +24,6 @@ import { TransformNode } from "core/Meshes/transformNode";
 import { Buffer, VertexBuffer } from "core/Buffers/buffer";
 import { Geometry } from "core/Meshes/geometry";
 import { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { InstancedMesh } from "core/Meshes/instancedMesh";
 import { Mesh } from "core/Meshes/mesh";
 import { MorphTarget } from "core/Morph/morphTarget";
 import { MorphTargetManager } from "core/Morph/morphTargetManager";
@@ -68,24 +70,21 @@ import type { IGLTFLoaderExtension } from "./glTFLoaderExtension";
 import type { IGLTFLoader, IGLTFLoaderData } from "../glTFFileLoader";
 import { GLTFFileLoader, GLTFLoaderState, GLTFLoaderCoordinateSystemMode, GLTFLoaderAnimationStartMode } from "../glTFFileLoader";
 import type { IDataBuffer } from "core/Misc/dataReader";
-import { DecodeBase64UrlToBinary, IsBase64DataUrl, LoadFileError } from "core/Misc/fileTools";
+import { DecodeBase64UrlToBinary, GetMimeType, IsBase64DataUrl, LoadFileError } from "core/Misc/fileTools";
 import { Logger } from "core/Misc/logger";
 import type { Light } from "core/Lights/light";
 import { BoundingInfo } from "core/Culling/boundingInfo";
 import type { AssetContainer } from "core/assetContainer";
 import type { AnimationPropertyInfo } from "./glTFLoaderAnimation";
-import { nodeAnimationData } from "./glTFLoaderAnimation";
 import type { IObjectInfo } from "core/ObjectModel/objectModelInterfaces";
+import { registeredGLTFExtensions, registerGLTFExtension, unregisterGLTFExtension } from "./glTFLoaderExtensionRegistry";
+import type { GLTFExtensionFactory } from "./glTFLoaderExtensionRegistry";
+import type { IInterpolationPropertyInfo } from "core/FlowGraph/typeDefinitions";
+import { GetMappingForKey } from "./Extensions/objectModelMapping";
+import { deepMerge } from "core/Misc/deepMerger";
+import { GetTypedArrayConstructor } from "core/Buffers/bufferUtils";
 
-interface TypedArrayLike extends ArrayBufferView {
-    readonly length: number;
-    [n: number]: number;
-}
-
-interface TypedArrayConstructor {
-    new (length: number): TypedArrayLike;
-    new (buffer: ArrayBufferLike, byteOffset: number, length?: number): TypedArrayLike;
-}
+export { GLTFFileLoader };
 
 interface ILoaderProperty extends IProperty {
     _activeLoaderExtensionFunctions: {
@@ -93,35 +92,9 @@ interface ILoaderProperty extends IProperty {
     };
 }
 
-interface IRegisteredExtension {
-    factory: (loader: GLTFLoader) => IGLTFLoaderExtension;
-}
-
 interface IWithMetadata {
     metadata: any;
     _internalMetadata: any;
-}
-
-// https://stackoverflow.com/a/48218209
-function mergeDeep(...objects: any[]): any {
-    const isObject = (obj: any) => obj && typeof obj === "object";
-
-    return objects.reduce((prev, obj) => {
-        Object.keys(obj).forEach((key) => {
-            const pVal = prev[key];
-            const oVal = obj[key];
-
-            if (Array.isArray(pVal) && Array.isArray(oVal)) {
-                prev[key] = pVal.concat(...oVal);
-            } else if (isObject(pVal) && isObject(oVal)) {
-                prev[key] = mergeDeep(pVal, oVal);
-            } else {
-                prev[key] = oVal;
-            }
-        });
-
-        return prev;
-    }, {});
 }
 
 /**
@@ -173,10 +146,42 @@ export class ArrayItem {
 /** @internal */
 export interface IAnimationTargetInfo {
     /** @internal */
-    target: any;
+    target: unknown;
 
     /** @internal */
     properties: Array<AnimationPropertyInfo>;
+}
+
+/** @internal */
+export function LoadBoundingInfoFromPositionAccessor(accessor: IAccessor): Nullable<BoundingInfo> {
+    if (accessor.min && accessor.max) {
+        const minArray = accessor.min as [number, number, number];
+        const maxArray = accessor.max as [number, number, number];
+        const minVector = TmpVectors.Vector3[0].copyFromFloats(minArray[0], minArray[1], minArray[2]);
+        const maxVector = TmpVectors.Vector3[1].copyFromFloats(maxArray[0], maxArray[1], maxArray[2]);
+        if (accessor.normalized && accessor.componentType !== AccessorComponentType.FLOAT) {
+            let divider = 1;
+            switch (accessor.componentType) {
+                case AccessorComponentType.BYTE:
+                    divider = 127.0;
+                    break;
+                case AccessorComponentType.UNSIGNED_BYTE:
+                    divider = 255.0;
+                    break;
+                case AccessorComponentType.SHORT:
+                    divider = 32767.0;
+                    break;
+                case AccessorComponentType.UNSIGNED_SHORT:
+                    divider = 65535.0;
+                    break;
+            }
+            const oneOverDivider = 1 / divider;
+            minVector.scaleInPlace(oneOverDivider);
+            maxVector.scaleInPlace(oneOverDivider);
+        }
+        return new BoundingInfo(minVector, maxVector);
+    }
+    return null;
 }
 
 /**
@@ -184,7 +189,7 @@ export interface IAnimationTargetInfo {
  */
 export class GLTFLoader implements IGLTFLoader {
     /** @internal */
-    public readonly _completePromises = new Array<Promise<any>>();
+    public readonly _completePromises = new Array<Promise<unknown>>();
 
     /** @internal */
     public _assetContainer: Nullable<AssetContainer> = null;
@@ -197,6 +202,9 @@ export class GLTFLoader implements IGLTFLoader {
 
     /** @internal */
     public _allMaterialsDirtyRequired = false;
+
+    /** @internal */
+    public _skipStartAnimationStep = false;
 
     private readonly _parent: GLTFFileLoader;
     private readonly _extensions = new Array<IGLTFLoaderExtension>();
@@ -211,8 +219,6 @@ export class GLTFLoader implements IGLTFLoader {
     private _defaultBabylonMaterialData: { [drawMode: number]: Material } = {};
     private readonly _postSceneLoadActions = new Array<() => void>();
 
-    private static _RegisteredExtensions: { [name: string]: IRegisteredExtension } = {};
-
     /**
      * The default glTF sampler.
      */
@@ -222,29 +228,20 @@ export class GLTFLoader implements IGLTFLoader {
      * Registers a loader extension.
      * @param name The name of the loader extension.
      * @param factory The factory function that creates the loader extension.
+     * @deprecated Please use registerGLTFExtension instead.
      */
-    public static RegisterExtension(name: string, factory: (loader: GLTFLoader) => IGLTFLoaderExtension): void {
-        if (GLTFLoader.UnregisterExtension(name)) {
-            Logger.Warn(`Extension with the name '${name}' already exists`);
-        }
-
-        GLTFLoader._RegisteredExtensions[name] = {
-            factory: factory,
-        };
+    public static RegisterExtension(name: string, factory: GLTFExtensionFactory): void {
+        registerGLTFExtension(name, false, factory);
     }
 
     /**
      * Unregisters a loader extension.
      * @param name The name of the loader extension.
      * @returns A boolean indicating whether the extension has been unregistered
+     * @deprecated Please use unregisterGLTFExtension instead.
      */
     public static UnregisterExtension(name: string): boolean {
-        if (!GLTFLoader._RegisteredExtensions[name]) {
-            return false;
-        }
-
-        delete GLTFLoader._RegisteredExtensions[name];
-        return true;
+        return unregisterGLTFExtension(name);
     }
 
     /**
@@ -330,8 +327,8 @@ export class GLTFLoader implements IGLTFLoader {
     /**
      * @internal
      */
-    public importMeshAsync(
-        meshesNames: any,
+    public async importMeshAsync(
+        meshesNames: string | readonly string[] | null | undefined,
         scene: Scene,
         container: Nullable<AssetContainer>,
         data: IGLTFLoaderData,
@@ -339,7 +336,8 @@ export class GLTFLoader implements IGLTFLoader {
         onProgress?: (event: ISceneLoaderProgressEvent) => void,
         fileName = ""
     ): Promise<ISceneLoaderAsyncResult> {
-        return Promise.resolve().then(() => {
+        // eslint-disable-next-line github/no-then
+        return await Promise.resolve().then(async () => {
             this._babylonScene = scene;
             this._assetContainer = container;
             this._loadData(data);
@@ -367,7 +365,7 @@ export class GLTFLoader implements IGLTFLoader {
                 });
             }
 
-            return this._loadAsync(rootUrl, fileName, nodes, () => {
+            return await this._loadAsync(rootUrl, fileName, nodes, () => {
                 return {
                     meshes: this._getMeshes(),
                     particleSystems: [],
@@ -376,6 +374,7 @@ export class GLTFLoader implements IGLTFLoader {
                     lights: this._babylonLights,
                     transformNodes: this._getTransformNodes(),
                     geometries: this._getGeometries(),
+                    spriteManagers: [],
                 };
             });
         });
@@ -384,24 +383,21 @@ export class GLTFLoader implements IGLTFLoader {
     /**
      * @internal
      */
-    public loadAsync(scene: Scene, data: IGLTFLoaderData, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName = ""): Promise<void> {
-        return Promise.resolve().then(() => {
-            this._babylonScene = scene;
-            this._loadData(data);
-            return this._loadAsync(rootUrl, fileName, null, () => undefined);
-        });
+    public async loadAsync(scene: Scene, data: IGLTFLoaderData, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName = ""): Promise<void> {
+        this._babylonScene = scene;
+        this._loadData(data);
+        return await this._loadAsync(rootUrl, fileName, null, () => undefined);
     }
 
-    private _loadAsync<T>(rootUrl: string, fileName: string, nodes: Nullable<Array<number>>, resultFunc: () => T): Promise<T> {
-        return Promise.resolve()
-            .then(() => {
+    private async _loadAsync<T>(rootUrl: string, fileName: string, nodes: Nullable<Array<number>>, resultFunc: () => T): Promise<T> {
+        return await Promise.resolve()
+            .then(async () => {
                 this._rootUrl = rootUrl;
                 this._uniqueRootUrl = !rootUrl.startsWith("file:") && fileName ? rootUrl : `${rootUrl}${Date.now()}/`;
                 this._fileName = fileName;
                 this._allMaterialsDirtyRequired = false;
 
-                this._loadExtensions();
-                this._checkExtensions();
+                await this._loadExtensionsAsync();
 
                 const loadingToReadyCounterName = `${GLTFLoaderState[GLTFLoaderState.LOADING]} => ${GLTFLoaderState[GLTFLoaderState.READY]}`;
                 const loadingToCompleteCounterName = `${GLTFLoaderState[GLTFLoaderState.LOADING]} => ${GLTFLoaderState[GLTFLoaderState.COMPLETE]}`;
@@ -412,7 +408,7 @@ export class GLTFLoader implements IGLTFLoader {
                 this._parent._setState(GLTFLoaderState.LOADING);
                 this._extensionsOnLoading();
 
-                const promises = new Array<Promise<any>>();
+                const promises = new Array<Promise<unknown>>();
 
                 // Block the marking of materials dirty until the scene is loaded.
                 const oldBlockMaterialDirtyMechanism = this._babylonScene.blockMaterialDirtyMechanism;
@@ -461,15 +457,25 @@ export class GLTFLoader implements IGLTFLoader {
                         this._rootBabylonMesh.setEnabled(true);
                     }
 
+                    // Making sure we enable enough lights to have all lights together
+                    for (const material of this._babylonScene.materials) {
+                        const mat = material as any;
+
+                        if (mat.maxSimultaneousLights !== undefined) {
+                            mat.maxSimultaneousLights = Math.max(mat.maxSimultaneousLights, this._babylonScene.lights.length);
+                        }
+                    }
+
                     this._extensionsOnReady();
                     this._parent._setState(GLTFLoaderState.READY);
-
-                    this._startAnimations();
+                    if (!this._skipStartAnimationStep) {
+                        this._startAnimations();
+                    }
 
                     return resultFunc();
                 });
 
-                return resultPromise.then((result) => {
+                return await resultPromise.then((result) => {
                     this._parent._endPerformanceCounter(loadingToReadyCounterName);
 
                     Tools.SetImmediate(() => {
@@ -562,26 +568,45 @@ export class GLTFLoader implements IGLTFLoader {
         }
     }
 
-    private _loadExtensions(): void {
-        for (const name in GLTFLoader._RegisteredExtensions) {
-            const extension = GLTFLoader._RegisteredExtensions[name].factory(this);
-            if (extension.name !== name) {
-                Logger.Warn(`The name of the glTF loader extension instance does not match the registered name: ${extension.name} !== ${name}`);
-            }
+    private async _loadExtensionsAsync() {
+        const extensionPromises: Promise<IGLTFLoaderExtension>[] = [];
 
-            this._extensions.push(extension);
-            this._parent.onExtensionLoadedObservable.notifyObservers(extension);
-        }
+        registeredGLTFExtensions.forEach((registeredExtension, name) => {
+            // Don't load explicitly disabled extensions.
+            if (this.parent.extensionOptions[name]?.enabled === false) {
+                // But warn if the disabled extension is used by the model.
+                if (registeredExtension.isGLTFExtension && this.isExtensionUsed(name)) {
+                    Logger.Warn(`Extension ${name} is used but has been explicitly disabled.`);
+                }
+            }
+            // Load loader extensions that are not a glTF extension, as well as extensions that are glTF extensions and are used by the model.
+            else if (!registeredExtension.isGLTFExtension || this.isExtensionUsed(name)) {
+                extensionPromises.push(
+                    (async () => {
+                        const extension = await registeredExtension.factory(this);
+                        if (extension.name !== name) {
+                            Logger.Warn(`The name of the glTF loader extension instance does not match the registered name: ${extension.name} !== ${name}`);
+                        }
+
+                        this._parent.onExtensionLoadedObservable.notifyObservers(extension);
+                        return extension;
+                    })()
+                );
+            }
+        });
+
+        this._extensions.push(...(await Promise.all(extensionPromises)));
 
         this._extensions.sort((a, b) => (a.order || Number.MAX_VALUE) - (b.order || Number.MAX_VALUE));
         this._parent.onExtensionLoadedObservable.clear();
-    }
 
-    private _checkExtensions(): void {
         if (this._gltf.extensionsRequired) {
             for (const name of this._gltf.extensionsRequired) {
                 const available = this._extensions.some((extension) => extension.name === name && extension.enabled);
                 if (!available) {
+                    if (this.parent.extensionOptions[name]?.enabled === false) {
+                        throw new Error(`Required extension ${name} is disabled`);
+                    }
                     throw new Error(`Required extension ${name} is not available`);
                 }
             }
@@ -638,13 +663,14 @@ export class GLTFLoader implements IGLTFLoader {
      * @param scene The glTF scene property
      * @returns A promise that resolves when the load is complete
      */
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/promise-function-async
     public loadSceneAsync(context: string, scene: IScene): Promise<void> {
         const extensionPromise = this._extensionsLoadSceneAsync(context, scene);
         if (extensionPromise) {
             return extensionPromise;
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         this.logOpen(`${context} ${scene.name || ""}`);
 
@@ -798,6 +824,7 @@ export class GLTFLoader implements IGLTFLoader {
      * @param assign A function called synchronously after parsing the glTF properties
      * @returns A promise that resolves with the loaded Babylon mesh when the load is complete
      */
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     public loadNodeAsync(context: string, node: INode, assign: (babylonTransformNode: TransformNode) => void = () => {}): Promise<TransformNode> {
         const extensionPromise = this._extensionsLoadNodeAsync(context, node, assign);
         if (extensionPromise) {
@@ -808,7 +835,7 @@ export class GLTFLoader implements IGLTFLoader {
             throw new Error(`${context}: Invalid recursive node hierarchy`);
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         this.logOpen(`${context} ${node.name || ""}`);
 
@@ -821,6 +848,9 @@ export class GLTFLoader implements IGLTFLoader {
                 promises.push(
                     this.loadCameraAsync(`/cameras/${camera.index}`, camera, (babylonCamera) => {
                         babylonCamera.parent = babylonTransformNode;
+                        if (!this._babylonScene.useRightHandedSystem) {
+                            babylonTransformNode.scaling.x = -1; // Cancelling root node scaling for handedness so the view matrix does not end up flipped.
+                        }
                     })
                 );
             }
@@ -839,7 +869,10 @@ export class GLTFLoader implements IGLTFLoader {
             assign(babylonTransformNode);
         };
 
-        if (node.mesh == undefined || node.skin != undefined) {
+        const hasMesh = node.mesh != undefined;
+        const hasSkin = this._parent.loadSkins && node.skin != undefined;
+
+        if (!hasMesh || hasSkin) {
             const nodeName = node.name || `node${node.index}`;
             this._babylonScene._blockEntityCollection = !!this._assetContainer;
             const transformNode = new TransformNode(nodeName, this._babylonScene);
@@ -853,11 +886,8 @@ export class GLTFLoader implements IGLTFLoader {
             loadNode(transformNode);
         }
 
-        if (node.mesh != undefined) {
-            if (node.skin == undefined) {
-                const mesh = ArrayItem.Get(`${context}/mesh`, this._gltf.meshes, node.mesh);
-                promises.push(this._loadMeshAsync(`/meshes/${mesh.index}`, node, mesh, loadNode));
-            } else {
+        if (hasMesh) {
+            if (hasSkin) {
                 // See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#skins (second implementation note)
                 // This code path will place the skinned mesh as a sibling of the skeleton root node without loading the
                 // transform, which effectively ignores the transform of the skinned mesh, as per spec.
@@ -868,7 +898,7 @@ export class GLTFLoader implements IGLTFLoader {
                         const babylonTransformNodeForSkin = node._babylonTransformNodeForSkin!;
 
                         // Merge the metadata from the skin node to the skinned mesh in case a loader extension added metadata.
-                        babylonTransformNode.metadata = mergeDeep(babylonTransformNodeForSkin.metadata, babylonTransformNode.metadata || {});
+                        babylonTransformNode.metadata = deepMerge(babylonTransformNodeForSkin.metadata, babylonTransformNode.metadata || {});
 
                         const skin = ArrayItem.Get(`${context}/skin`, this._gltf.skins, node.skin);
                         promises.push(
@@ -898,6 +928,9 @@ export class GLTFLoader implements IGLTFLoader {
                         );
                     })
                 );
+            } else {
+                const mesh = ArrayItem.Get(`${context}/mesh`, this._gltf.meshes, node.mesh);
+                promises.push(this._loadMeshAsync(`/meshes/${mesh.index}`, node, mesh, loadNode));
             }
         }
 
@@ -905,11 +938,12 @@ export class GLTFLoader implements IGLTFLoader {
 
         return Promise.all(promises).then(() => {
             this._forEachPrimitive(node, (babylonMesh) => {
-                if ((babylonMesh as Mesh).geometry && (babylonMesh as Mesh).geometry!.useBoundingInfoFromGeometry) {
+                const asMesh = babylonMesh as Mesh;
+                if (!asMesh.isAnInstance && asMesh.geometry && asMesh.geometry.useBoundingInfoFromGeometry) {
                     // simply apply the world matrices to the bounding info - the extends are already ok
                     babylonMesh._updateBoundingInfo();
                 } else {
-                    babylonMesh.refreshBoundingInfo(true);
+                    babylonMesh.refreshBoundingInfo(true, true);
                 }
             });
 
@@ -917,6 +951,7 @@ export class GLTFLoader implements IGLTFLoader {
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadMeshAsync(context: string, node: INode, mesh: IMesh, assign: (babylonTransformNode: TransformNode) => void): Promise<TransformNode> {
         const primitives = mesh.primitives;
         if (!primitives || !primitives.length) {
@@ -927,7 +962,7 @@ export class GLTFLoader implements IGLTFLoader {
             ArrayItem.Assign(primitives);
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         this.logOpen(`${context} ${mesh.name || ""}`);
 
@@ -976,6 +1011,7 @@ export class GLTFLoader implements IGLTFLoader {
      * @param assign A function called synchronously after parsing the glTF properties
      * @returns A promise that resolves with the loaded mesh when the load is complete or null if not handled
      */
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     public _loadMeshPrimitiveAsync(
         context: string,
         name: string,
@@ -994,27 +1030,27 @@ export class GLTFLoader implements IGLTFLoader {
         const shouldInstance = this._disableInstancedMesh === 0 && this._parent.createInstances && node.skin == undefined && !mesh.primitives[0].targets;
 
         let babylonAbstractMesh: AbstractMesh;
-        let promise: Promise<any>;
+        let promise: Promise<unknown>;
 
         if (shouldInstance && primitive._instanceData) {
             this._babylonScene._blockEntityCollection = !!this._assetContainer;
-            babylonAbstractMesh = primitive._instanceData.babylonSourceMesh.createInstance(name) as InstancedMesh;
+            babylonAbstractMesh = primitive._instanceData.babylonSourceMesh.createInstance(name);
             babylonAbstractMesh._parentContainer = this._assetContainer;
             this._babylonScene._blockEntityCollection = false;
             promise = primitive._instanceData.promise;
         } else {
-            const promises = new Array<Promise<any>>();
+            const promises = new Array<Promise<unknown>>();
 
             this._babylonScene._blockEntityCollection = !!this._assetContainer;
             const babylonMesh = new Mesh(name, this._babylonScene);
             babylonMesh._parentContainer = this._assetContainer;
             this._babylonScene._blockEntityCollection = false;
-            babylonMesh.overrideMaterialSideOrientation = this._babylonScene.useRightHandedSystem ? Material.CounterClockWiseSideOrientation : Material.ClockWiseSideOrientation;
+            babylonMesh.sideOrientation = this._babylonScene.useRightHandedSystem ? Material.CounterClockWiseSideOrientation : Material.ClockWiseSideOrientation;
 
             this._createMorphTargets(context, node, mesh, primitive, babylonMesh);
             promises.push(
-                this._loadVertexDataAsync(context, primitive, babylonMesh).then((babylonGeometry) => {
-                    return this._loadMorphTargetsAsync(context, primitive, babylonMesh, babylonGeometry).then(() => {
+                this._loadVertexDataAsync(context, primitive, babylonMesh).then(async (babylonGeometry) => {
+                    return await this._loadMorphTargetsAsync(context, primitive, babylonMesh, babylonGeometry).then(() => {
                         if (this._disposed) {
                             return;
                         }
@@ -1068,6 +1104,7 @@ export class GLTFLoader implements IGLTFLoader {
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadVertexDataAsync(context: string, primitive: IMeshPrimitive, babylonMesh: Mesh): Promise<Geometry> {
         const extensionPromise = this._extensionsLoadVertexDataAsync(context, primitive, babylonMesh);
         if (extensionPromise) {
@@ -1079,7 +1116,7 @@ export class GLTFLoader implements IGLTFLoader {
             throw new Error(`${context}: Attributes are missing`);
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         const babylonGeometry = new Geometry(babylonMesh.name, this._babylonScene);
 
@@ -1108,30 +1145,9 @@ export class GLTFLoader implements IGLTFLoader {
             promises.push(
                 this._loadVertexAccessorAsync(`/accessors/${accessor.index}`, accessor, kind).then((babylonVertexBuffer) => {
                     if (babylonVertexBuffer.getKind() === VertexBuffer.PositionKind && !this.parent.alwaysComputeBoundingBox && !babylonMesh.skeleton) {
-                        if (accessor.min && accessor.max) {
-                            const min = TmpVectors.Vector3[0].copyFromFloats(...(accessor.min as [number, number, number]));
-                            const max = TmpVectors.Vector3[1].copyFromFloats(...(accessor.max as [number, number, number]));
-                            if (accessor.normalized && accessor.componentType !== AccessorComponentType.FLOAT) {
-                                let divider = 1;
-                                switch (accessor.componentType) {
-                                    case AccessorComponentType.BYTE:
-                                        divider = 127.0;
-                                        break;
-                                    case AccessorComponentType.UNSIGNED_BYTE:
-                                        divider = 255.0;
-                                        break;
-                                    case AccessorComponentType.SHORT:
-                                        divider = 32767.0;
-                                        break;
-                                    case AccessorComponentType.UNSIGNED_SHORT:
-                                        divider = 65535.0;
-                                        break;
-                                }
-                                const oneOverDivider = 1 / divider;
-                                min.scaleInPlace(oneOverDivider);
-                                max.scaleInPlace(oneOverDivider);
-                            }
-                            babylonGeometry._boundingInfo = new BoundingInfo(min, max);
+                        const babylonBoundingInfo = LoadBoundingInfoFromPositionAccessor(accessor);
+                        if (babylonBoundingInfo) {
+                            babylonGeometry._boundingInfo = babylonBoundingInfo;
                             babylonGeometry.useBoundingInfoFromGeometry = true;
                         }
                     }
@@ -1173,7 +1189,7 @@ export class GLTFLoader implements IGLTFLoader {
     }
 
     private _createMorphTargets(context: string, node: INode, mesh: IMesh, primitive: IMeshPrimitive, babylonMesh: Mesh): void {
-        if (!primitive.targets) {
+        if (!primitive.targets || !this._parent.loadMorphTargets) {
             return;
         }
 
@@ -1200,12 +1216,13 @@ export class GLTFLoader implements IGLTFLoader {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadMorphTargetsAsync(context: string, primitive: IMeshPrimitive, babylonMesh: Mesh, babylonGeometry: Geometry): Promise<void> {
-        if (!primitive.targets) {
+        if (!primitive.targets || !this._parent.loadMorphTargets) {
             return Promise.resolve();
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         const morphTargetManager = babylonMesh.morphTargetManager!;
         for (let index = 0; index < morphTargetManager.numTargets; index++) {
@@ -1218,8 +1235,13 @@ export class GLTFLoader implements IGLTFLoader {
         });
     }
 
-    private _loadMorphTargetVertexDataAsync(context: string, babylonGeometry: Geometry, attributes: { [name: string]: number }, babylonMorphTarget: MorphTarget): Promise<void> {
-        const promises = new Array<Promise<any>>();
+    private async _loadMorphTargetVertexDataAsync(
+        context: string,
+        babylonGeometry: Geometry,
+        attributes: { [name: string]: number },
+        babylonMorphTarget: MorphTarget
+    ): Promise<void> {
+        const promises = new Array<Promise<unknown>>();
 
         const loadAttribute = (attribute: string, kind: string, setData: (babylonVertexBuffer: VertexBuffer, data: Float32Array) => void) => {
             if (attributes[attribute] == undefined) {
@@ -1272,7 +1294,49 @@ export class GLTFLoader implements IGLTFLoader {
             babylonMorphTarget.setTangents(tangents);
         });
 
-        return Promise.all(promises).then(() => {});
+        loadAttribute("TEXCOORD_0", VertexBuffer.UVKind, (babylonVertexBuffer, data) => {
+            const uvs = new Float32Array(data.length);
+            babylonVertexBuffer.forEach(data.length, (value, index) => {
+                uvs[index] = data[index] + value;
+            });
+
+            babylonMorphTarget.setUVs(uvs);
+        });
+
+        loadAttribute("TEXCOORD_1", VertexBuffer.UV2Kind, (babylonVertexBuffer, data) => {
+            const uvs = new Float32Array(data.length);
+            babylonVertexBuffer.forEach(data.length, (value, index) => {
+                uvs[index] = data[index] + value;
+            });
+
+            babylonMorphTarget.setUV2s(uvs);
+        });
+
+        loadAttribute("COLOR_0", VertexBuffer.ColorKind, (babylonVertexBuffer, data) => {
+            let colors = null;
+            const componentSize = babylonVertexBuffer.getSize();
+            if (componentSize === 3) {
+                colors = new Float32Array((data.length / 3) * 4);
+                babylonVertexBuffer.forEach(data.length, (value, index) => {
+                    const pixid = Math.floor(index / 3);
+                    const channel = index % 3;
+                    colors[4 * pixid + channel] = data[3 * pixid + channel] + value;
+                });
+                for (let i = 0; i < data.length / 3; ++i) {
+                    colors[4 * i + 3] = 1;
+                }
+            } else if (componentSize === 4) {
+                colors = new Float32Array(data.length);
+                babylonVertexBuffer.forEach(data.length, (value, index) => {
+                    colors[index] = data[index] + value;
+                });
+            } else {
+                throw new Error(`${context}: Invalid number of components (${componentSize}) for COLOR_0 attribute`);
+            }
+            babylonMorphTarget.setColors(colors);
+        });
+
+        return await Promise.all(promises).then(() => {});
     }
 
     private static _LoadTransform(node: INode, babylonNode: TransformNode): void {
@@ -1306,7 +1370,12 @@ export class GLTFLoader implements IGLTFLoader {
         babylonNode.scaling = scaling;
     }
 
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadSkinAsync(context: string, node: INode, skin: ISkin, assign: (babylonSkeleton: Skeleton) => void): Promise<void> {
+        if (!this._parent.loadSkins) {
+            return Promise.resolve();
+        }
+
         const extensionPromise = this._extensionsLoadSkinAsync(context, node, skin);
         if (extensionPromise) {
             return extensionPromise;
@@ -1409,6 +1478,8 @@ export class GLTFLoader implements IGLTFLoader {
     }
 
     private _loadBone(node: INode, skin: ISkin, babylonSkeleton: Skeleton, babylonBones: { [index: number]: Bone }): Bone {
+        node._isJoint = true;
+
         let babylonBone = babylonBones[node.index];
         if (babylonBone) {
             return babylonBone;
@@ -1488,7 +1559,7 @@ export class GLTFLoader implements IGLTFLoader {
             return extensionPromise;
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         this.logOpen(`${context} ${camera.name || ""}`);
 
@@ -1496,11 +1567,10 @@ export class GLTFLoader implements IGLTFLoader {
         const babylonCamera = new FreeCamera(camera.name || `camera${camera.index}`, Vector3.Zero(), this._babylonScene, false);
         babylonCamera._parentContainer = this._assetContainer;
         this._babylonScene._blockEntityCollection = false;
-        babylonCamera.ignoreParentScaling = true;
         camera._babylonCamera = babylonCamera;
 
-        // Rotation by 180 as glTF has a different convention than Babylon.
-        babylonCamera.rotation.set(0, Math.PI, 0);
+        // glTF cameras look towards the local -Z axis.
+        babylonCamera.setTarget(new Vector3(0, 0, -1));
 
         switch (camera.type) {
             case CameraType.PERSPECTIVE: {
@@ -1579,30 +1649,33 @@ export class GLTFLoader implements IGLTFLoader {
             return promise;
         }
 
-        this._babylonScene._blockEntityCollection = !!this._assetContainer;
-        const babylonAnimationGroup = new AnimationGroup(animation.name || `animation${animation.index}`, this._babylonScene);
-        babylonAnimationGroup._parentContainer = this._assetContainer;
-        this._babylonScene._blockEntityCollection = false;
-        animation._babylonAnimationGroup = babylonAnimationGroup;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        return import("core/Animations/animationGroup").then(({ AnimationGroup }) => {
+            this._babylonScene._blockEntityCollection = !!this._assetContainer;
+            const babylonAnimationGroup = new AnimationGroup(animation.name || `animation${animation.index}`, this._babylonScene);
+            babylonAnimationGroup._parentContainer = this._assetContainer;
+            this._babylonScene._blockEntityCollection = false;
+            animation._babylonAnimationGroup = babylonAnimationGroup;
 
-        const promises = new Array<Promise<any>>();
+            const promises = new Array<Promise<unknown>>();
 
-        ArrayItem.Assign(animation.channels);
-        ArrayItem.Assign(animation.samplers);
+            ArrayItem.Assign(animation.channels);
+            ArrayItem.Assign(animation.samplers);
 
-        for (const channel of animation.channels) {
-            promises.push(
-                this._loadAnimationChannelAsync(`${context}/channels/${channel.index}`, context, animation, channel, (babylonTarget, babylonAnimation) => {
-                    babylonTarget.animations = babylonTarget.animations || [];
-                    babylonTarget.animations.push(babylonAnimation);
-                    babylonAnimationGroup.addTargetedAnimation(babylonAnimation, babylonTarget);
-                })
-            );
-        }
+            for (const channel of animation.channels) {
+                promises.push(
+                    this._loadAnimationChannelAsync(`${context}/channels/${channel.index}`, context, animation, channel, (babylonTarget, babylonAnimation) => {
+                        babylonTarget.animations = babylonTarget.animations || [];
+                        babylonTarget.animations.push(babylonAnimation);
+                        babylonAnimationGroup.addTargetedAnimation(babylonAnimation, babylonTarget);
+                    })
+                );
+            }
 
-        return Promise.all(promises).then(() => {
-            babylonAnimationGroup.normalize(0);
-            return babylonAnimationGroup;
+            return Promise.all(promises).then(() => {
+                babylonAnimationGroup.normalize(0);
+                return babylonAnimationGroup;
+            });
         });
     }
 
@@ -1616,7 +1689,7 @@ export class GLTFLoader implements IGLTFLoader {
      * @param onLoad Called for each animation loaded
      * @returns A void promise that resolves when the load is complete
      */
-    public _loadAnimationChannelAsync(
+    public async _loadAnimationChannelAsync(
         context: string,
         animationContext: string,
         animation: IAnimation,
@@ -1625,52 +1698,62 @@ export class GLTFLoader implements IGLTFLoader {
     ): Promise<void> {
         const promise = this._extensionsLoadAnimationChannelAsync(context, animationContext, animation, channel, onLoad);
         if (promise) {
-            return promise;
+            return await promise;
         }
 
         if (channel.target.node == undefined) {
-            return Promise.resolve();
+            return await Promise.resolve();
         }
 
         const targetNode = ArrayItem.Get(`${context}/target/node`, this._gltf.nodes, channel.target.node);
+        const channelTargetPath = channel.target.path;
+        const pathIsWeights = channelTargetPath === AnimationChannelTargetPath.WEIGHTS;
 
         // Ignore animations that have no animation targets.
-        if (
-            (channel.target.path === AnimationChannelTargetPath.WEIGHTS && !targetNode._numMorphTargets) ||
-            (channel.target.path !== AnimationChannelTargetPath.WEIGHTS && !targetNode._babylonTransformNode)
-        ) {
-            return Promise.resolve();
+        if ((pathIsWeights && !targetNode._numMorphTargets) || (!pathIsWeights && !targetNode._babylonTransformNode)) {
+            return await Promise.resolve();
         }
 
-        let properties: Array<AnimationPropertyInfo>;
-        switch (channel.target.path) {
+        // Don't load node animations if disabled.
+        if (!this._parent.loadNodeAnimations && !pathIsWeights && !targetNode._isJoint) {
+            return await Promise.resolve();
+        }
+        // async-load the animation sampler to provide the interpolation of the channelTargetPath
+        await import("./glTFLoaderAnimation");
+
+        let properties: IInterpolationPropertyInfo[];
+        switch (channelTargetPath) {
             case AnimationChannelTargetPath.TRANSLATION: {
-                properties = nodeAnimationData.translation;
+                properties = GetMappingForKey("/nodes/{}/translation")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.ROTATION: {
-                properties = nodeAnimationData.rotation;
+                properties = GetMappingForKey("/nodes/{}/rotation")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.SCALE: {
-                properties = nodeAnimationData.scale;
+                properties = GetMappingForKey("/nodes/{}/scale")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.WEIGHTS: {
-                properties = nodeAnimationData.weights;
+                properties = GetMappingForKey("/nodes/{}/weights")?.interpolation!;
                 break;
             }
             default: {
                 throw new Error(`${context}/target/path: Invalid value (${channel.target.path})`);
             }
         }
+        // stay safe
+        if (!properties) {
+            throw new Error(`${context}/target/path: Could not find interpolation properties for target path (${channel.target.path})`);
+        }
 
-        const targetInfo: IObjectInfo<AnimationPropertyInfo[]> = {
+        const targetInfo: IObjectInfo<IInterpolationPropertyInfo[]> = {
             object: targetNode,
             info: properties,
         };
 
-        return this._loadAnimationChannelFromTargetInfoAsync(context, animationContext, animation, channel, targetInfo, onLoad);
+        return await this._loadAnimationChannelFromTargetInfoAsync(context, animationContext, animation, channel, targetInfo, onLoad);
     }
 
     /**
@@ -1689,7 +1772,7 @@ export class GLTFLoader implements IGLTFLoader {
         animationContext: string,
         animation: IAnimation,
         channel: IAnimationChannel,
-        targetInfo: IObjectInfo<AnimationPropertyInfo[]>,
+        targetInfo: IObjectInfo<IInterpolationPropertyInfo[]>,
         onLoad: (babylonAnimatable: IAnimatable, babylonAnimation: Animation) => void
     ): Promise<void> {
         const fps = this.parent.targetFps;
@@ -1761,10 +1844,11 @@ export class GLTFLoader implements IGLTFLoader {
 
                 if (outputOffset > 0) {
                     const name = `${animation.name || `animation${animation.index}`}_channel${channel.index}_${numAnimations}`;
-                    propertyInfo.buildAnimations(target, name, fps, keys, (babylonAnimatable, babylonAnimation) => {
-                        ++numAnimations;
-                        onLoad(babylonAnimatable, babylonAnimation);
-                    });
+                    const babylonAnimations = propertyInfo.buildAnimations(target, name, fps, keys);
+                    for (const babylonAnimation of babylonAnimations) {
+                        numAnimations++;
+                        onLoad(babylonAnimation.babylonAnimatable, babylonAnimation.babylonAnimation);
+                    }
                 }
             }
         });
@@ -1898,7 +1982,7 @@ export class GLTFLoader implements IGLTFLoader {
         if (accessor.sparse) {
             const sparse = accessor.sparse;
             accessor._data = accessor._data.then((data) => {
-                const typedArray = data as TypedArrayLike;
+                const typedArray = data as TypedArray;
                 const indicesBufferView = ArrayItem.Get(`${context}/sparse/indices/bufferView`, this._gltf.bufferViews, sparse.indices.bufferView);
                 const valuesBufferView = ArrayItem.Get(`${context}/sparse/values/bufferView`, this._gltf.bufferViews, sparse.values.bufferView);
                 return Promise.all([
@@ -1914,7 +1998,7 @@ export class GLTFLoader implements IGLTFLoader {
                     ) as IndicesArray;
 
                     const sparseLength = numComponents * sparse.count;
-                    let values: TypedArrayLike;
+                    let values: TypedArray;
 
                     if (accessor.componentType === AccessorComponentType.FLOAT && !accessor.normalized) {
                         values = GLTFLoader._GetTypedArray(`${context}/sparse/values`, accessor.componentType, valuesData, sparse.values.byteOffset, sparseLength);
@@ -2016,13 +2100,6 @@ export class GLTFLoader implements IGLTFLoader {
             accessor._babylonVertexBuffer[kind] = this._loadFloatAccessorAsync(context, accessor).then((data) => {
                 return new VertexBuffer(engine, data, kind, false);
             });
-        }
-        // Load joint indices as a float array since the shaders expect float data but glTF uses unsigned byte/short.
-        // This prevents certain platforms (e.g. D3D) from having to convert the data to float on the fly.
-        else if (kind === VertexBuffer.MatricesIndicesKind || kind === VertexBuffer.MatricesIndicesExtraKind) {
-            accessor._babylonVertexBuffer[kind] = this._loadFloatAccessorAsync(context, accessor).then((data) => {
-                return new VertexBuffer(engine, data, kind, false);
-            });
         } else {
             const bufferView = ArrayItem.Get(`${context}/bufferView`, this._gltf.bufferViews, accessor.bufferView);
             accessor._babylonVertexBuffer[kind] = this._loadVertexBufferViewAsync(bufferView).then((babylonBuffer) => {
@@ -2054,7 +2131,7 @@ export class GLTFLoader implements IGLTFLoader {
             throw new Error(`${context}: Material type not supported`);
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         if (properties) {
             if (properties.baseColorFactor) {
@@ -2161,6 +2238,7 @@ export class GLTFLoader implements IGLTFLoader {
         babylonMaterial.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
         babylonMaterial.metallic = 1;
         babylonMaterial.roughness = 1;
+
         return babylonMaterial;
     }
 
@@ -2196,7 +2274,7 @@ export class GLTFLoader implements IGLTFLoader {
             return extensionPromise;
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         promises.push(this.loadMaterialBasePropertiesAsync(context, material, babylonMaterial));
 
@@ -2221,7 +2299,7 @@ export class GLTFLoader implements IGLTFLoader {
             throw new Error(`${context}: Material type not supported`);
         }
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         babylonMaterial.emissiveColor = material.emissiveFactor ? Color3.FromArray(material.emissiveFactor) : new Color3(0, 0, 0);
         if (material.doubleSided) {
@@ -2377,12 +2455,12 @@ export class GLTFLoader implements IGLTFLoader {
         sampler: ISampler,
         image: IImage,
         assign: (babylonTexture: BaseTexture) => void = () => {},
-        textureLoaderOptions?: any,
+        textureLoaderOptions?: unknown,
         useSRGBBuffer?: boolean
     ): Promise<BaseTexture> {
         const samplerData = this._loadSampler(`/samplers/${sampler.index}`, sampler);
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         const deferred = new Deferred<void>();
         this._babylonScene._blockEntityCollection = !!this._assetContainer;
@@ -2400,7 +2478,7 @@ export class GLTFLoader implements IGLTFLoader {
                     deferred.reject(new Error(`${context}: ${exception && exception.message ? exception.message : message || "Failed to load texture"}`));
                 }
             },
-            mimeType: image.mimeType,
+            mimeType: image.mimeType ?? GetMimeType(image.uri ?? ""),
             loaderOptions: textureLoaderOptions,
             useSRGBBuffer: !!useSRGBBuffer && this._parent.useSRGBBuffers,
         };
@@ -2414,12 +2492,22 @@ export class GLTFLoader implements IGLTFLoader {
                 const name = image.uri || `${this._fileName}#image${image.index}`;
                 const dataUrl = `data:${this._uniqueRootUrl}${name}`;
                 babylonTexture.updateURL(dataUrl, data);
+
+                // Set the internal texture label.
+                const internalTexture = babylonTexture.getInternalTexture();
+                if (internalTexture) {
+                    internalTexture.label = image.name;
+                }
             })
         );
 
         babylonTexture.wrapU = samplerData.wrapU;
         babylonTexture.wrapV = samplerData.wrapV;
         assign(babylonTexture);
+
+        if (this._parent.useGltfTextureNames) {
+            babylonTexture.name = image.name || image.uri || `image${image.index}`;
+        }
 
         return Promise.all(promises).then(() => {
             return babylonTexture;
@@ -2481,7 +2569,7 @@ export class GLTFLoader implements IGLTFLoader {
 
         if (IsBase64DataUrl(uri)) {
             const data = new Uint8Array(DecodeBase64UrlToBinary(uri));
-            this.log(`${context}: Decoded ${uri.substr(0, 64)}... (${data.length} bytes)`);
+            this.log(`${context}: Decoded ${uri.substring(0, 64)}... (${data.length} bytes)`);
             return Promise.resolve(data);
         }
 
@@ -2586,31 +2674,14 @@ export class GLTFLoader implements IGLTFLoader {
     }
 
     private static _GetTypedArrayConstructor(context: string, componentType: AccessorComponentType): TypedArrayConstructor {
-        switch (componentType) {
-            case AccessorComponentType.BYTE:
-                return Int8Array;
-            case AccessorComponentType.UNSIGNED_BYTE:
-                return Uint8Array;
-            case AccessorComponentType.SHORT:
-                return Int16Array;
-            case AccessorComponentType.UNSIGNED_SHORT:
-                return Uint16Array;
-            case AccessorComponentType.UNSIGNED_INT:
-                return Uint32Array;
-            case AccessorComponentType.FLOAT:
-                return Float32Array;
-            default:
-                throw new Error(`${context}: Invalid component type ${componentType}`);
+        try {
+            return GetTypedArrayConstructor(componentType);
+        } catch (e) {
+            throw new Error(`${context}: ${e.message}`);
         }
     }
 
-    private static _GetTypedArray(
-        context: string,
-        componentType: AccessorComponentType,
-        bufferView: ArrayBufferView,
-        byteOffset: number | undefined,
-        length: number
-    ): TypedArrayLike {
+    private static _GetTypedArray(context: string, componentType: AccessorComponentType, bufferView: ArrayBufferView, byteOffset: number | undefined, length: number): TypedArray {
         const buffer = bufferView.buffer;
         byteOffset = bufferView.byteOffset + (byteOffset || 0);
 
@@ -2682,7 +2753,7 @@ export class GLTFLoader implements IGLTFLoader {
     private _compileMaterialsAsync(): Promise<void> {
         this._parent._startPerformanceCounter("Compile materials");
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         if (this._gltf.materials) {
             for (const material of this._gltf.materials) {
@@ -2714,7 +2785,7 @@ export class GLTFLoader implements IGLTFLoader {
     private _compileShadowGeneratorsAsync(): Promise<void> {
         this._parent._startPerformanceCounter("Compile shadow generators");
 
-        const promises = new Array<Promise<any>>();
+        const promises = new Array<Promise<unknown>>();
 
         const lights = this._babylonScene.lights;
         for (const light of lights) {
@@ -2770,22 +2841,27 @@ export class GLTFLoader implements IGLTFLoader {
         this._forEachExtensions((extension) => extension.onReady && extension.onReady());
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadSceneAsync(context: string, scene: IScene): Nullable<Promise<void>> {
         return this._applyExtensions(scene, "loadScene", (extension) => extension.loadSceneAsync && extension.loadSceneAsync(context, scene));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadNodeAsync(context: string, node: INode, assign: (babylonTransformNode: TransformNode) => void): Nullable<Promise<TransformNode>> {
         return this._applyExtensions(node, "loadNode", (extension) => extension.loadNodeAsync && extension.loadNodeAsync(context, node, assign));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadCameraAsync(context: string, camera: ICamera, assign: (babylonCamera: Camera) => void): Nullable<Promise<Camera>> {
         return this._applyExtensions(camera, "loadCamera", (extension) => extension.loadCameraAsync && extension.loadCameraAsync(context, camera, assign));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadVertexDataAsync(context: string, primitive: IMeshPrimitive, babylonMesh: Mesh): Nullable<Promise<Geometry>> {
         return this._applyExtensions(primitive, "loadVertexData", (extension) => extension._loadVertexDataAsync && extension._loadVertexDataAsync(context, primitive, babylonMesh));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadMeshPrimitiveAsync(
         context: string,
         name: string,
@@ -2801,6 +2877,7 @@ export class GLTFLoader implements IGLTFLoader {
         );
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadMaterialAsync(
         context: string,
         material: IMaterial,
@@ -2819,6 +2896,7 @@ export class GLTFLoader implements IGLTFLoader {
         return this._applyExtensions(material, "createMaterial", (extension) => extension.createMaterial && extension.createMaterial(context, material, babylonDrawMode));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
         return this._applyExtensions(
             material,
@@ -2827,18 +2905,22 @@ export class GLTFLoader implements IGLTFLoader {
         );
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadTextureInfoAsync(context: string, textureInfo: ITextureInfo, assign: (babylonTexture: BaseTexture) => void): Nullable<Promise<BaseTexture>> {
         return this._applyExtensions(textureInfo, "loadTextureInfo", (extension) => extension.loadTextureInfoAsync && extension.loadTextureInfoAsync(context, textureInfo, assign));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadTextureAsync(context: string, texture: ITexture, assign: (babylonTexture: BaseTexture) => void): Nullable<Promise<BaseTexture>> {
         return this._applyExtensions(texture, "loadTexture", (extension) => extension._loadTextureAsync && extension._loadTextureAsync(context, texture, assign));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadAnimationAsync(context: string, animation: IAnimation): Nullable<Promise<AnimationGroup>> {
         return this._applyExtensions(animation, "loadAnimation", (extension) => extension.loadAnimationAsync && extension.loadAnimationAsync(context, animation));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadAnimationChannelAsync(
         context: string,
         animationContext: string,
@@ -2853,18 +2935,22 @@ export class GLTFLoader implements IGLTFLoader {
         );
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadSkinAsync(context: string, node: INode, skin: ISkin): Nullable<Promise<void>> {
         return this._applyExtensions(skin, "loadSkin", (extension) => extension._loadSkinAsync && extension._loadSkinAsync(context, node, skin));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadUriAsync(context: string, property: IProperty, uri: string): Nullable<Promise<ArrayBufferView>> {
         return this._applyExtensions(property, "loadUri", (extension) => extension._loadUriAsync && extension._loadUriAsync(context, property, uri));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadBufferViewAsync(context: string, bufferView: IBufferView): Nullable<Promise<ArrayBufferView>> {
         return this._applyExtensions(bufferView, "loadBufferView", (extension) => extension.loadBufferViewAsync && extension.loadBufferViewAsync(context, bufferView));
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     private _extensionsLoadBufferAsync(context: string, buffer: IBuffer, byteOffset: number, byteLength: number): Nullable<Promise<ArrayBufferView>> {
         return this._applyExtensions(buffer, "loadBuffer", (extension) => extension.loadBufferAsync && extension.loadBufferAsync(context, buffer, byteOffset, byteLength));
     }
@@ -2877,7 +2963,8 @@ export class GLTFLoader implements IGLTFLoader {
      * @param actionAsync The action to run
      * @returns The promise returned by actionAsync or null if the extension does not exist
      */
-    public static LoadExtensionAsync<TExtension = any, TResult = void>(
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/naming-convention
+    public static LoadExtensionAsync<TExtension = unknown, TResult = void>(
         context: string,
         property: IProperty,
         extensionName: string,
@@ -2905,7 +2992,8 @@ export class GLTFLoader implements IGLTFLoader {
      * @param actionAsync The action to run
      * @returns The promise returned by actionAsync or null if the extra does not exist
      */
-    public static LoadExtraAsync<TExtra = any, TResult = void>(
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/naming-convention
+    public static LoadExtraAsync<TExtra = unknown, TResult = void>(
         context: string,
         property: IProperty,
         extensionName: string,

@@ -411,7 +411,7 @@ export class RenderingGroup {
         if (material.needAlphaBlendingForMesh(mesh)) {
             // Transparent
             this._transparentSubMeshes.push(subMesh);
-        } else if (material.needAlphaTesting()) {
+        } else if (material.needAlphaTestingForMesh(mesh)) {
             // Alpha test
             if (material.needDepthPrePass) {
                 this._depthOnlySubMeshes.push(subMesh);
@@ -428,7 +428,7 @@ export class RenderingGroup {
 
         mesh._renderingGroup = this;
 
-        if (mesh._edgesRenderer && mesh._edgesRenderer.isEnabled) {
+        if (mesh._edgesRenderer && mesh.isEnabled() && mesh.isVisible && mesh._edgesRenderer.isEnabled) {
             this._edgesRenderers.pushNoDuplicate(mesh._edgesRenderer);
         }
 

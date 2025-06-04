@@ -1,9 +1,43 @@
+import { ThinWebGPUEngine } from "core/Engines/thinWebGPUEngine";
 import type { InternalTexture } from "../../../Materials/Textures/internalTexture";
 import type { Nullable } from "../../../types";
-import { WebGPUEngine } from "../../webgpuEngine";
 import type { WebGPUHardwareTexture } from "../webgpuHardwareTexture";
 
-WebGPUEngine.prototype._readTexturePixels = function (
+declare module "../../abstractEngine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface AbstractEngine {
+        /** @internal */
+        _readTexturePixels(
+            texture: InternalTexture,
+            width: number,
+            height: number,
+            faceIndex?: number,
+            level?: number,
+            buffer?: Nullable<ArrayBufferView>,
+            flushRenderer?: boolean,
+            noDataConversion?: boolean,
+            x?: number,
+            y?: number
+        ): Promise<ArrayBufferView>;
+
+        /** @internal */
+        _readTexturePixelsSync(
+            texture: InternalTexture,
+            width: number,
+            height: number,
+            faceIndex?: number,
+            level?: number,
+            buffer?: Nullable<ArrayBufferView>,
+            flushRenderer?: boolean,
+            noDataConversion?: boolean,
+            x?: number,
+            y?: number
+        ): ArrayBufferView;
+    }
+}
+
+// eslint-disable-next-line @typescript-eslint/promise-function-async
+ThinWebGPUEngine.prototype._readTexturePixels = function (
     texture: InternalTexture,
     width: number,
     height: number,
@@ -24,7 +58,7 @@ WebGPUEngine.prototype._readTexturePixels = function (
     return this._textureHelper.readPixels(gpuTextureWrapper.underlyingResource!, x, y, width, height, gpuTextureWrapper.format, faceIndex, level, buffer, noDataConversion);
 };
 
-WebGPUEngine.prototype._readTexturePixelsSync = function (): ArrayBufferView {
+ThinWebGPUEngine.prototype._readTexturePixelsSync = function (): ArrayBufferView {
     // eslint-disable-next-line no-throw-literal
     throw "_readTexturePixelsSync is unsupported in WebGPU!";
 };

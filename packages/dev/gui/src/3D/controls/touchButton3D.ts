@@ -98,22 +98,24 @@ export class TouchButton3D extends Button3D {
                 this._collisionMesh.reservedDataStore.GUI3D = {};
             }
 
-            this._collisionMesh.getChildMeshes().forEach((mesh) => {
+            const meshes = this._collisionMesh.getChildMeshes();
+            for (const mesh of meshes) {
                 mesh.isNearPickable = false;
                 if (mesh.reservedDataStore?.GUI3D) {
                     mesh.reservedDataStore.GUI3D = {};
                 }
-            });
+            }
         }
 
         this._collisionMesh = collisionMesh;
         this._injectGUI3DReservedDataStore(this._collisionMesh).control = this;
         this._collisionMesh.isNearPickable = true;
 
-        this._collisionMesh.getChildMeshes().forEach((mesh) => {
+        const meshes = this._collisionMesh.getChildMeshes();
+        for (const mesh of meshes) {
             this._injectGUI3DReservedDataStore(mesh).control = this;
             mesh.isNearPickable = true;
-        });
+        }
         this.collidableFrontDirection = collisionMesh.forward;
     }
 
@@ -217,19 +219,19 @@ export class TouchButton3D extends Button3D {
         return providedType;
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "TouchButton3D";
     }
 
     // Mesh association
-    protected _createNode(scene: Scene): TransformNode {
+    protected override _createNode(scene: Scene): TransformNode {
         return super._createNode(scene);
     }
 
     /**
      * Releases all associated resources
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
 
         // Clean up toggle observables

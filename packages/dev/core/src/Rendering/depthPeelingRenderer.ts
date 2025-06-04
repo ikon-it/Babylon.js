@@ -2,7 +2,7 @@
  * Implementation based on https://medium.com/@shrekshao_71662/dual-depth-peeling-implementation-in-webgl-11baa061ba4b
  */
 import { Constants } from "../Engines/constants";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Effect } from "../Materials/effect";
 import { MultiRenderTarget } from "../Materials/Textures/multiRenderTarget";
 import type { InternalTextureCreationOptions } from "../Materials/Textures/textureCreationOptions";
@@ -22,9 +22,8 @@ import type { IMaterialContext } from "../Engines/IMaterialContext";
 import type { DrawWrapper } from "../Materials/drawWrapper";
 import { Material } from "../Materials/material";
 
-import "../Shaders/postprocess.vertex";
-import "../Shaders/oitFinal.fragment";
-import "../Shaders/oitBackBlend.fragment";
+import "../Engines/Extensions/engine.multiRender";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 class DepthPeelingEffectConfiguration implements PrePassEffectConfiguration {
     /**
@@ -50,7 +49,7 @@ class DepthPeelingEffectConfiguration implements PrePassEffectConfiguration {
  */
 export class DepthPeelingRenderer {
     private _scene: Scene;
-    private _engine: Engine;
+    private _engine: AbstractEngine;
     private _depthMrts: MultiRenderTarget[];
     private _thinTextures: ThinTexture[] = [];
     private _colorMrts: MultiRenderTarget[];
@@ -136,6 +135,16 @@ export class DepthPeelingRenderer {
         }
     }
 
+    /** Shader language used by the renderer */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in this renderer
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
+
     /**
      * Instanciates the depth peeling renderer
      * @param scene Scene to attach to
@@ -159,6 +168,10 @@ export class DepthPeelingRenderer {
 
         this._renderPassIds = [];
         this.useRenderPasses = false;
+
+        if (this._engine.isWebGPU) {
+            this._shaderLanguage = ShaderLanguage.WGSL;
+        }
 
         this._prePassEffectConfiguration = new DepthPeelingEffectConfiguration();
         this._createTextures();
@@ -310,7 +323,7 @@ export class DepthPeelingRenderer {
             }
             this._thinTextures[6] = new ThinTexture(this._blendBackTexture);
 
-            prePassRenderer.defaultRT.renderTarget!._shareDepth(this._depthMrts[0].renderTarget!);
+            prePassRenderer.defaultRT.renderTarget!.shareDepth(this._depthMrts[0].renderTarget!);
         }
 
         return true;
@@ -323,6 +336,14 @@ export class DepthPeelingRenderer {
             engine: this._engine,
             samplerNames: ["uBackColor"],
             uniformNames: [],
+            shaderLanguage: this._shaderLanguage,
+            extraInitializationsAsync: async () => {
+                if (this._shaderLanguage === ShaderLanguage.WGSL) {
+                    await import("../ShadersWGSL/oitBackBlend.fragment");
+                } else {
+                    await import("../Shaders/oitBackBlend.fragment");
+                }
+            },
         });
         this._blendBackEffectWrapperPingPong = new EffectWrapper({
             fragmentShader: "oitBackBlend",
@@ -330,6 +351,14 @@ export class DepthPeelingRenderer {
             engine: this._engine,
             samplerNames: ["uBackColor"],
             uniformNames: [],
+            shaderLanguage: this._shaderLanguage,
+            extraInitializationsAsync: async () => {
+                if (this._shaderLanguage === ShaderLanguage.WGSL) {
+                    await import("../ShadersWGSL/oitBackBlend.fragment");
+                } else {
+                    await import("../Shaders/oitBackBlend.fragment");
+                }
+            },
         });
 
         this._finalEffectWrapper = new EffectWrapper({
@@ -338,6 +367,14 @@ export class DepthPeelingRenderer {
             engine: this._engine,
             samplerNames: ["uFrontColor", "uBackColor"],
             uniformNames: [],
+            shaderLanguage: this._shaderLanguage,
+            extraInitializationsAsync: async () => {
+                if (this._shaderLanguage === ShaderLanguage.WGSL) {
+                    await import("../ShadersWGSL/oitFinal.fragment");
+                } else {
+                    await import("../Shaders/oitFinal.fragment");
+                }
+            },
         });
 
         this._effectRenderer = new EffectRenderer(this._engine);
@@ -418,7 +455,7 @@ export class DepthPeelingRenderer {
         this._engine.setAlphaMode(Constants.ALPHA_DISABLE);
         this._engine.applyStates();
 
-        this._engine.enableEffect(this._finalEffectWrapper._drawWrapper);
+        this._engine.enableEffect(this._finalEffectWrapper.drawWrapper);
         this._finalEffectWrapper.effect.setTexture("uFrontColor", this._thinTextures[writeId * 3 + 1]);
         this._finalEffectWrapper.effect.setTexture("uBackColor", this._thinTextures[6]);
         this._effectRenderer.render(this._finalEffectWrapper);
@@ -575,7 +612,7 @@ export class DepthPeelingRenderer {
             this._engine.applyStates();
 
             const blendBackEffectWrapper = writeId === 0 || !this._useRenderPasses ? this._blendBackEffectWrapper : this._blendBackEffectWrapperPingPong;
-            this._engine.enableEffect(blendBackEffectWrapper._drawWrapper);
+            this._engine.enableEffect(blendBackEffectWrapper.drawWrapper);
             blendBackEffectWrapper.effect.setTexture("uBackColor", this._thinTextures[writeId * 3 + 2]);
             this._effectRenderer.render(blendBackEffectWrapper);
             this._engine.unBindFramebuffer(this._blendBackMrt.renderTarget!);
@@ -594,7 +631,7 @@ export class DepthPeelingRenderer {
     }
 
     /**
-     * Disposes the depth peeling renderer and associated ressources
+     * Disposes the depth peeling renderer and associated resources
      */
     public dispose() {
         this._disposeTextures();

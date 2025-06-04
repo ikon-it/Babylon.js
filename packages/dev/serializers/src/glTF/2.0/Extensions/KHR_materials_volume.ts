@@ -1,6 +1,6 @@
 import type { IMaterial, IKHRMaterialsVolume } from "babylonjs-gltf2interface";
 import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
-import { _Exporter } from "../glTFExporter";
+import { GLTFExporter } from "../glTFExporter";
 import type { Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
@@ -22,11 +22,11 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
     /** Defines whether this extension is required */
     public required = false;
 
-    private _exporter: _Exporter;
+    private _exporter: GLTFExporter;
 
     private _wasUsed = false;
 
-    constructor(exporter: _Exporter) {
+    constructor(exporter: GLTFExporter) {
         this._exporter = exporter;
     }
 
@@ -65,7 +65,7 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
             return false;
         }
         const subs = mat.subSurface;
-        // this extension requires either the KHR_materials_transmission or KHR_materials_translucency extensions.
+        // this extension requires either the KHR_materials_transmission or KHR_materials_diffuse_transmission extensions.
         if (!subs.isRefractionEnabled && !subs.isTranslucencyEnabled) {
             return false;
         }
@@ -88,6 +88,7 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
      * @param babylonMaterial corresponding babylon material
      * @returns promise that resolves with the updated node
      */
+    // eslint-disable-next-line no-restricted-syntax
     public postExportMaterialAsync?(context: string, node: IMaterial, babylonMaterial: Material): Promise<IMaterial> {
         return new Promise((resolve) => {
             if (babylonMaterial instanceof PBRMaterial && this._isExtensionEnabled(babylonMaterial)) {
@@ -95,7 +96,7 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
 
                 const subs = babylonMaterial.subSurface;
                 const thicknessFactor = subs.maximumThickness == 0 ? undefined : subs.maximumThickness;
-                const thicknessTexture = this._exporter._glTFMaterialExporter._getTextureInfo(subs.thicknessTexture) ?? undefined;
+                const thicknessTexture = this._exporter._materialExporter.getTextureInfo(subs.thicknessTexture) ?? undefined;
                 const attenuationDistance = subs.tintColorAtDistance == Number.POSITIVE_INFINITY ? undefined : subs.tintColorAtDistance;
                 const attenuationColor = subs.tintColor.equalsFloats(1.0, 1.0, 1.0) ? undefined : subs.tintColor.asArray();
 
@@ -104,10 +105,12 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
                     thicknessTexture: thicknessTexture,
                     attenuationDistance: attenuationDistance,
                     attenuationColor: attenuationColor,
-                    hasTextures: () => {
-                        return this._hasTexturesExtension(babylonMaterial);
-                    },
                 };
+
+                if (this._hasTexturesExtension(babylonMaterial)) {
+                    this._exporter._materialNeedsUVsSet.add(babylonMaterial);
+                }
+
                 node.extensions = node.extensions || {};
                 node.extensions[NAME] = volumeInfo;
             }
@@ -116,4 +119,4 @@ export class KHR_materials_volume implements IGLTFExporterExtensionV2 {
     }
 }
 
-_Exporter.RegisterExtension(NAME, (exporter) => new KHR_materials_volume(exporter));
+GLTFExporter.RegisterExtension(NAME, (exporter) => new KHR_materials_volume(exporter));

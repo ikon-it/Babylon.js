@@ -8,10 +8,6 @@ import type { Effect } from "../../Materials/effect";
 import { RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
 
 import { Constants } from "../../Engines/constants";
-
-import "../../Shaders/shadowMap.fragment";
-import "../../Shaders/shadowMap.vertex";
-import "../../Shaders/depthBoxBlur.fragment";
 import type { Observer } from "../../Misc/observable";
 import { _WarnImport } from "../../Misc/devTools";
 import { ShadowGenerator } from "./shadowGenerator";
@@ -20,7 +16,6 @@ import type { DirectionalLight } from "../directionalLight";
 import { BoundingInfo } from "../../Culling/boundingInfo";
 import type { DepthRenderer } from "../../Rendering/depthRenderer";
 import { DepthReducer } from "../../Misc/depthReducer";
-
 import { Logger } from "../../Misc/logger";
 import { EngineStore } from "../../Engines/engineStore";
 import type { Camera } from "../../Cameras/camera";
@@ -35,9 +30,9 @@ const UpDir = Vector3.Up();
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const ZeroVec = Vector3.Zero();
 
-const tmpv1 = new Vector3(),
-    tmpv2 = new Vector3(),
-    tmpMatrix = new Matrix();
+const Tmpv1 = new Vector3();
+const Tmpv2 = new Vector3();
+const TmpMatrix = new Matrix();
 
 /**
  * A CSM implementation allowing casting shadows on large scenes.
@@ -45,7 +40,7 @@ const tmpv1 = new Vector3(),
  * Based on: https://github.com/TheRealMJP/Shadows and https://johanmedestrom.wordpress.com/2016/03/18/opengl-cascaded-shadow-maps/
  */
 export class CascadedShadowGenerator extends ShadowGenerator {
-    private static readonly _FrustumCornersNDCSpace = [
+    private static readonly _FrustumCornersNdcSpace = [
         new Vector3(-1.0, +1.0, -1.0),
         new Vector3(+1.0, +1.0, -1.0),
         new Vector3(+1.0, -1.0, -1.0),
@@ -59,7 +54,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
     /**
      * Name of the CSM class
      */
-    public static CLASSNAME = "CascadedShadowGenerator";
+    public static override CLASSNAME = "CascadedShadowGenerator";
 
     /**
      * Defines the default number of cascades used by the CSM.
@@ -74,7 +69,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      */
     public static MAX_CASCADES_COUNT = 4;
 
-    protected _validateFilter(filter: number): number {
+    protected override _validateFilter(filter: number): number {
         if (filter === ShadowGenerator.FILTER_NONE || filter === ShadowGenerator.FILTER_PCF || filter === ShadowGenerator.FILTER_PCSS) {
             return filter;
         }
@@ -166,21 +161,6 @@ export class CascadedShadowGenerator extends ShadowGenerator {
                 this._scbiMin.minimizeInPlace(boundingBox.minimumWorld);
                 this._scbiMax.maximizeInPlace(boundingBox.maximumWorld);
             }
-
-            const meshes = this._scene.meshes;
-            for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
-                const mesh = meshes[meshIndex];
-
-                if (!mesh || !mesh.isVisible || !mesh.isEnabled || !mesh.receiveShadows) {
-                    continue;
-                }
-
-                const boundingInfo = mesh.getBoundingInfo(),
-                    boundingBox = boundingInfo.boundingBox;
-
-                this._scbiMin.minimizeInPlace(boundingBox.minimumWorld);
-                this._scbiMax.maximizeInPlace(boundingBox.maximumWorld);
-            }
         }
 
         this._shadowCastersBoundingInfo.reConstruct(this._scbiMin, this._scbiMax);
@@ -251,7 +231,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * Gets the class name of that object
      * @returns "CascadedShadowGenerator"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return CascadedShadowGenerator.CLASSNAME;
     }
 
@@ -289,6 +269,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
     private _frustumCornersWorldSpace: Array<Array<Vector3>>;
     private _frustumCenter: Array<Vector3>;
     private _shadowCameraPos: Array<Vector3>;
+    private _onRenderDepthRendererObserver: Observer<Scene>;
 
     private _shadowMaxZ: number;
     /**
@@ -565,7 +546,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             this._computeFrustumInWorldSpace(cascadeIndex);
             this._computeCascadeFrustum(cascadeIndex);
 
-            this._cascadeMaxExtents[cascadeIndex].subtractToRef(this._cascadeMinExtents[cascadeIndex], tmpv1); // tmpv1 = cascadeExtents
+            this._cascadeMaxExtents[cascadeIndex].subtractToRef(this._cascadeMinExtents[cascadeIndex], Tmpv1); // tmpv1 = cascadeExtents
 
             // Get position of the shadow camera
             this._frustumCenter[cascadeIndex].addToRef(this._lightDirection.scale(this._cascadeMinExtents[cascadeIndex].z), this._shadowCameraPos[cascadeIndex]);
@@ -573,22 +554,47 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             // Come up with a new orthographic camera for the shadow caster
             Matrix.LookAtLHToRef(this._shadowCameraPos[cascadeIndex], this._frustumCenter[cascadeIndex], UpDir, this._viewMatrices[cascadeIndex]);
 
-            let minZ = 0,
-                maxZ = tmpv1.z;
+            // Z extents of the current cascade, in cascade view coordinate system
+            let viewMinZ = 0,
+                viewMaxZ = Tmpv1.z;
 
             // Try to tighten minZ and maxZ based on the bounding box of the shadow casters
             const boundingInfo = this._shadowCastersBoundingInfo;
 
             boundingInfo.update(this._viewMatrices[cascadeIndex]);
+            // Note that after the call to update, the boundingInfo properties that are identified as "world" coordinates are in fact view coordinates for the current cascade!
+            // This is because the boundingInfo properties that are identifed as "local" are in fact world coordinates (see _computeShadowCastersBoundingInfo()), and we multiply them by the current cascade view matrix when we call update.
 
-            maxZ = Math.min(maxZ, boundingInfo.boundingBox.maximumWorld.z);
+            const castersViewMinZ = boundingInfo.boundingBox.minimumWorld.z;
+            const castersViewMaxZ = boundingInfo.boundingBox.maximumWorld.z;
 
-            if (!this._depthClamp || this.filter === ShadowGenerator.FILTER_PCSS) {
-                // If we don't use depth clamping, we must set minZ so that all shadow casters are in the light frustum
-                minZ = Math.min(minZ, boundingInfo.boundingBox.minimumWorld.z);
+            if (castersViewMinZ > viewMaxZ) {
+                // Do nothing, keep the current z extents.
+                // All the casters are too far from the light to have an impact on the current cascade.
+                // Possible optimization: skip the rendering of the shadow map for this cascade, as all the casters will be clipped by the GPU anyway.
             } else {
-                // If using depth clamping, we can adjust minZ to reduce the [minZ, maxZ] range (and get some additional precision in the shadow map)
-                minZ = Math.max(minZ, boundingInfo.boundingBox.minimumWorld.z);
+                if (!this._depthClamp || this.filter === ShadowGenerator.FILTER_PCSS) {
+                    // If we don't use depth clamping, we must define minZ so that all shadow casters are in the cascade frustum
+                    viewMinZ = Math.min(viewMinZ, castersViewMinZ);
+
+                    if (this.filter !== ShadowGenerator.FILTER_PCSS) {
+                        // We do not need the actual distance between the currently shaded pixel and the occluder when generating shadows, so we can lower the far plane to increase the accuracy of the shadow map.
+                        viewMaxZ = Math.min(viewMaxZ, castersViewMaxZ);
+                    }
+                } else {
+                    // If we use depth clamping (but not PCSS!), we can adjust minZ/maxZ to reduce the range [minZ, maxZ] (and obtain additional precision in the shadow map)
+                    viewMaxZ = Math.min(viewMaxZ, castersViewMaxZ);
+
+                    // Thanks to depth clamping, casters won't be Z clipped even if they fall outside the [-1,1] range, so we can move the near plane to 0 if castersViewMinZ < 0.
+                    // We will generate negative Z values in the shadow map, but that's okay (they will be clamped to the 0..1 range anyway), except in PCSS case
+                    // where we need the actual distance between the currently shader pixel and the occluder: that's why we don't use depth clamping in PCSS case.
+                    viewMinZ = Math.max(viewMinZ, castersViewMinZ);
+
+                    // If all the casters are behind the near plane of the cascade, minZ = 0 due to the previous line, and maxZ < 0 at this point.
+                    // We need to make sure that maxZ > minZ, so in this case we set maxZ a little higher than minZ. As we are using depth clamping, the casters won't be Z clipped, so we just need to make sure that we have a valid Z range for the cascade.
+                    // Having a 0 range is not ok, due to undefined behavior in the calculation in this case.
+                    viewMaxZ = Math.max(viewMinZ + 1.0, viewMaxZ);
+                }
             }
 
             Matrix.OrthoOffCenterLHToRef(
@@ -596,28 +602,28 @@ export class CascadedShadowGenerator extends ShadowGenerator {
                 this._cascadeMaxExtents[cascadeIndex].x,
                 this._cascadeMinExtents[cascadeIndex].y,
                 this._cascadeMaxExtents[cascadeIndex].y,
-                useReverseDepthBuffer ? maxZ : minZ,
-                useReverseDepthBuffer ? minZ : maxZ,
+                useReverseDepthBuffer ? viewMaxZ : viewMinZ,
+                useReverseDepthBuffer ? viewMinZ : viewMaxZ,
                 this._projectionMatrices[cascadeIndex],
                 scene.getEngine().isNDCHalfZRange
             );
 
-            this._cascadeMinExtents[cascadeIndex].z = minZ;
-            this._cascadeMaxExtents[cascadeIndex].z = maxZ;
+            this._cascadeMinExtents[cascadeIndex].z = viewMinZ;
+            this._cascadeMaxExtents[cascadeIndex].z = viewMaxZ;
 
             this._viewMatrices[cascadeIndex].multiplyToRef(this._projectionMatrices[cascadeIndex], this._transformMatrices[cascadeIndex]);
 
             // Create the rounding matrix, by projecting the world-space origin and determining
             // the fractional offset in texel space
-            Vector3.TransformCoordinatesToRef(ZeroVec, this._transformMatrices[cascadeIndex], tmpv1); // tmpv1 = shadowOrigin
-            tmpv1.scaleInPlace(this._mapSize / 2);
+            Vector3.TransformCoordinatesToRef(ZeroVec, this._transformMatrices[cascadeIndex], Tmpv1); // tmpv1 = shadowOrigin
+            Tmpv1.scaleInPlace(this._mapSize / 2);
 
-            tmpv2.copyFromFloats(Math.round(tmpv1.x), Math.round(tmpv1.y), Math.round(tmpv1.z)); // tmpv2 = roundedOrigin
-            tmpv2.subtractInPlace(tmpv1).scaleInPlace(2 / this._mapSize); // tmpv2 = roundOffset
+            Tmpv2.copyFromFloats(Math.round(Tmpv1.x), Math.round(Tmpv1.y), Math.round(Tmpv1.z)); // tmpv2 = roundedOrigin
+            Tmpv2.subtractInPlace(Tmpv1).scaleInPlace(2 / this._mapSize); // tmpv2 = roundOffset
 
-            Matrix.TranslationToRef(tmpv2.x, tmpv2.y, 0.0, tmpMatrix);
+            Matrix.TranslationToRef(Tmpv2.x, Tmpv2.y, 0.0, TmpMatrix);
 
-            this._projectionMatrices[cascadeIndex].multiplyToRef(tmpMatrix, this._projectionMatrices[cascadeIndex]);
+            this._projectionMatrices[cascadeIndex].multiplyToRef(TmpMatrix, this._projectionMatrices[cascadeIndex]);
             this._viewMatrices[cascadeIndex].multiplyToRef(this._projectionMatrices[cascadeIndex], this._transformMatrices[cascadeIndex]);
 
             this._transformMatrices[cascadeIndex].copyToArray(this._transformMatricesAsArray, cascadeIndex * 16);
@@ -654,24 +660,24 @@ export class CascadedShadowGenerator extends ShadowGenerator {
         }
 
         const cornerIndexOffset = this._scene.getEngine().useReverseDepthBuffer ? 4 : 0;
-        for (let cornerIndex = 0; cornerIndex < CascadedShadowGenerator._FrustumCornersNDCSpace.length; ++cornerIndex) {
-            tmpv1.copyFrom(CascadedShadowGenerator._FrustumCornersNDCSpace[(cornerIndex + cornerIndexOffset) % CascadedShadowGenerator._FrustumCornersNDCSpace.length]);
-            if (isNDCHalfZRange && tmpv1.z === -1) {
-                tmpv1.z = 0;
+        for (let cornerIndex = 0; cornerIndex < CascadedShadowGenerator._FrustumCornersNdcSpace.length; ++cornerIndex) {
+            Tmpv1.copyFrom(CascadedShadowGenerator._FrustumCornersNdcSpace[(cornerIndex + cornerIndexOffset) % CascadedShadowGenerator._FrustumCornersNdcSpace.length]);
+            if (isNDCHalfZRange && Tmpv1.z === -1) {
+                Tmpv1.z = 0;
             }
-            Vector3.TransformCoordinatesToRef(tmpv1, invViewProj, this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
+            Vector3.TransformCoordinatesToRef(Tmpv1, invViewProj, this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
         }
 
         // Get the corners of the current cascade slice of the view frustum
-        for (let cornerIndex = 0; cornerIndex < CascadedShadowGenerator._FrustumCornersNDCSpace.length / 2; ++cornerIndex) {
-            tmpv1.copyFrom(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex + 4]).subtractInPlace(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
-            tmpv2.copyFrom(tmpv1).scaleInPlace(prevSplitDist); // near corner ray
-            tmpv1.scaleInPlace(splitDist); // far corner ray
+        for (let cornerIndex = 0; cornerIndex < CascadedShadowGenerator._FrustumCornersNdcSpace.length / 2; ++cornerIndex) {
+            Tmpv1.copyFrom(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex + 4]).subtractInPlace(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
+            Tmpv2.copyFrom(Tmpv1).scaleInPlace(prevSplitDist); // near corner ray
+            Tmpv1.scaleInPlace(splitDist); // far corner ray
 
-            tmpv1.addInPlace(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
+            Tmpv1.addInPlace(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex]);
 
-            this._frustumCornersWorldSpace[cascadeIndex][cornerIndex + 4].copyFrom(tmpv1);
-            this._frustumCornersWorldSpace[cascadeIndex][cornerIndex].addInPlace(tmpv2);
+            this._frustumCornersWorldSpace[cascadeIndex][cornerIndex + 4].copyFrom(Tmpv1);
+            this._frustumCornersWorldSpace[cascadeIndex][cornerIndex].addInPlace(Tmpv2);
         }
     }
 
@@ -697,7 +703,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             // Calculate the radius of a bounding sphere surrounding the frustum corners
             let sphereRadius = 0;
             for (let cornerIndex = 0; cornerIndex < this._frustumCornersWorldSpace[cascadeIndex].length; ++cornerIndex) {
-                const dist = this._frustumCornersWorldSpace[cascadeIndex][cornerIndex].subtractToRef(this._frustumCenter[cascadeIndex], tmpv1).length();
+                const dist = this._frustumCornersWorldSpace[cascadeIndex][cornerIndex].subtractToRef(this._frustumCenter[cascadeIndex], Tmpv1).length();
                 sphereRadius = Math.max(sphereRadius, dist);
             }
 
@@ -709,16 +715,16 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             // Create a temporary view matrix for the light
             const lightCameraPos = this._frustumCenter[cascadeIndex];
 
-            this._frustumCenter[cascadeIndex].addToRef(this._lightDirection, tmpv1); // tmpv1 = look at
+            this._frustumCenter[cascadeIndex].addToRef(this._lightDirection, Tmpv1); // tmpv1 = look at
 
-            Matrix.LookAtLHToRef(lightCameraPos, tmpv1, UpDir, tmpMatrix); // matrix = lightView
+            Matrix.LookAtLHToRef(lightCameraPos, Tmpv1, UpDir, TmpMatrix); // matrix = lightView
 
             // Calculate an AABB around the frustum corners
             for (let cornerIndex = 0; cornerIndex < this._frustumCornersWorldSpace[cascadeIndex].length; ++cornerIndex) {
-                Vector3.TransformCoordinatesToRef(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex], tmpMatrix, tmpv1);
+                Vector3.TransformCoordinatesToRef(this._frustumCornersWorldSpace[cascadeIndex][cornerIndex], TmpMatrix, Tmpv1);
 
-                this._cascadeMinExtents[cascadeIndex].minimizeInPlace(tmpv1);
-                this._cascadeMaxExtents[cascadeIndex].maximizeInPlace(tmpv1);
+                this._cascadeMinExtents[cascadeIndex].minimizeInPlace(Tmpv1);
+                this._cascadeMaxExtents[cascadeIndex].maximizeInPlace(Tmpv1);
             }
         }
     }
@@ -746,7 +752,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
     /**
      * @internal
      */
-    public static _SceneComponentInitialization: (scene: Scene) => void = (_) => {
+    public static override _SceneComponentInitialization: (scene: Scene) => void = (_) => {
         throw _WarnImport("ShadowGeneratorSceneComponent");
     };
 
@@ -770,9 +776,21 @@ export class CascadedShadowGenerator extends ShadowGenerator {
         super(mapSize, light, usefulFloatFirst, camera, useRedTextureType);
 
         this.usePercentageCloserFiltering = true;
+
+        this._onRenderDepthRendererObserver = this._scene.onBeforeRenderObservable.add(() => {
+            const depthRenderer = this._depthReducer?.depthRenderer;
+            if (this._scene.frameGraph && depthRenderer && this._autoCalcDepthBounds) {
+                const depthMap = depthRenderer.getDepthMap();
+                if (!depthMap.renderList) {
+                    depthMap.renderList = this._scene.meshes;
+                }
+                this._scene._renderRenderTarget(depthMap, this._camera);
+                this._scene.activeCamera = null;
+            }
+        });
     }
 
-    protected _initializeGenerator(): void {
+    protected override _initializeGenerator(): void {
         this.penumbraDarkness = this.penumbraDarkness ?? 1.0;
         this._numCascades = this._numCascades ?? CascadedShadowGenerator.DEFAULT_CASCADES_COUNT;
         this.stabilizeCascades = this.stabilizeCascades ?? false;
@@ -797,7 +815,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
         super._initializeGenerator();
     }
 
-    protected _createTargetRenderTexture(): void {
+    protected override _createTargetRenderTexture(): void {
         const engine = this._scene.getEngine();
         const size = { width: this._mapSize, height: this._mapSize, layers: this.numCascades };
         this._shadowMap = new RenderTargetTexture(
@@ -814,11 +832,18 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             undefined,
             this._useRedTextureType ? Constants.TEXTUREFORMAT_RED : Constants.TEXTUREFORMAT_RGBA
         );
-        this._shadowMap.createDepthStencilTexture(engine.useReverseDepthBuffer ? Constants.GREATER : Constants.LESS, true);
+        this._shadowMap.createDepthStencilTexture(
+            engine.useReverseDepthBuffer ? Constants.GREATER : Constants.LESS,
+            true,
+            undefined,
+            undefined,
+            undefined,
+            `DepthStencilForCSMShadowGenerator-${this._light.name}`
+        );
         this._shadowMap.noPrePassRenderer = true;
     }
 
-    protected _initializeShadowMap(): void {
+    protected override _initializeShadowMap(): void {
         super._initializeShadowMap();
 
         if (this._shadowMap === null) {
@@ -854,9 +879,9 @@ export class CascadedShadowGenerator extends ShadowGenerator {
             this._cascadeMaxExtents[cascadeIndex] = new Vector3();
             this._frustumCenter[cascadeIndex] = new Vector3();
             this._shadowCameraPos[cascadeIndex] = new Vector3();
-            this._frustumCornersWorldSpace[cascadeIndex] = new Array(CascadedShadowGenerator._FrustumCornersNDCSpace.length);
+            this._frustumCornersWorldSpace[cascadeIndex] = new Array(CascadedShadowGenerator._FrustumCornersNdcSpace.length);
 
-            for (let i = 0; i < CascadedShadowGenerator._FrustumCornersNDCSpace.length; ++i) {
+            for (let i = 0; i < CascadedShadowGenerator._FrustumCornersNdcSpace.length; ++i) {
                 this._frustumCornersWorldSpace[cascadeIndex][i] = new Vector3();
             }
         }
@@ -893,11 +918,11 @@ export class CascadedShadowGenerator extends ShadowGenerator {
         this._splitFrustum();
     }
 
-    protected _bindCustomEffectForRenderSubMeshForShadowMap(subMesh: SubMesh, effect: Effect): void {
+    protected override _bindCustomEffectForRenderSubMeshForShadowMap(subMesh: SubMesh, effect: Effect): void {
         effect.setMatrix("viewProjection", this.getCascadeTransformMatrix(this._currentLayer)!);
     }
 
-    protected _isReadyCustomDefines(defines: any): void {
+    protected override _isReadyCustomDefines(defines: any): void {
         defines.push("#define SM_DEPTHCLAMP " + (this._depthClamp && this._filter !== ShadowGenerator.FILTER_PCSS ? "1" : "0"));
     }
 
@@ -906,7 +931,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * @param defines Defines of the material we want to update
      * @param lightIndex Index of the light in the enabled light list of the material
      */
-    public prepareDefines(defines: any, lightIndex: number): void {
+    public override prepareDefines(defines: any, lightIndex: number): void {
         super.prepareDefines(defines, lightIndex);
 
         const scene = this._scene;
@@ -938,7 +963,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * @param lightIndex Index of the light in the enabled light list of the material owning the effect
      * @param effect The effect we are binfing the information for
      */
-    public bindShadowLight(lightIndex: string, effect: Effect): void {
+    public override bindShadowLight(lightIndex: string, effect: Effect): void {
         const light = this._light;
         const scene = this._scene;
 
@@ -965,7 +990,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
 
         // Only PCF uses depth stencil texture.
         if (this._filter === ShadowGenerator.FILTER_PCF) {
-            effect.setDepthStencilTexture("shadowSampler" + lightIndex, shadowMap);
+            effect.setDepthStencilTexture("shadowTexture" + lightIndex, shadowMap);
             light._uniformBuffer.updateFloat4("shadowsInfo", this.getDarkness(), width, 1 / width, this.frustumEdgeFalloff, lightIndex);
         } else if (this._filter === ShadowGenerator.FILTER_PCSS) {
             for (let cascadeIndex = 0; cascadeIndex < this._numCascades; ++cascadeIndex) {
@@ -982,14 +1007,15 @@ export class CascadedShadowGenerator extends ShadowGenerator {
                         ? 1
                         : (this._cascadeMaxExtents[cascadeIndex].z - this._cascadeMinExtents[cascadeIndex].z) / (this._cascadeMaxExtents[0].z - this._cascadeMinExtents[0].z);
             }
-            effect.setDepthStencilTexture("shadowSampler" + lightIndex, shadowMap);
-            effect.setTexture("depthSampler" + lightIndex, shadowMap);
+            effect.setDepthStencilTexture("shadowTexture" + lightIndex, shadowMap);
+            effect.setTexture("depthTexture" + lightIndex, shadowMap);
+
             effect.setArray2("lightSizeUVCorrection" + lightIndex, this._lightSizeUVCorrection);
             effect.setArray("depthCorrection" + lightIndex, this._depthCorrection);
             effect.setFloat("penumbraDarkness" + lightIndex, this.penumbraDarkness);
             light._uniformBuffer.updateFloat4("shadowsInfo", this.getDarkness(), 1 / width, this._contactHardeningLightSizeUVRatio * width, this.frustumEdgeFalloff, lightIndex);
         } else {
-            effect.setTexture("shadowSampler" + lightIndex, shadowMap);
+            effect.setTexture("shadowTexture" + lightIndex, shadowMap);
             light._uniformBuffer.updateFloat4("shadowsInfo", this.getDarkness(), width, 1 / width, this.frustumEdgeFalloff, lightIndex);
         }
 
@@ -1006,7 +1032,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * (eq to view projection * shadow projection matrices)
      * @returns The transform matrix used to create the shadow map
      */
-    public getTransformMatrix(): Matrix {
+    public override getTransformMatrix(): Matrix {
         return this.getCascadeTransformMatrix(0)!;
     }
 
@@ -1014,8 +1040,10 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * Disposes the ShadowGenerator.
      * Returns nothing.
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
+
+        this._scene.onBeforeRenderObservable.remove(this._onRenderDepthRendererObserver);
 
         if (this._freezeShadowCastersBoundingInfoObservable) {
             this._scene.onBeforeRenderObservable.remove(this._freezeShadowCastersBoundingInfoObservable);
@@ -1032,7 +1060,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * Serializes the shadow generator setup to a json object.
      * @returns The serialized JSON object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject: any = super.serialize();
         const shadowMap = this.getShadowMap();
 
@@ -1072,7 +1100,7 @@ export class CascadedShadowGenerator extends ShadowGenerator {
      * @param scene The scene to create the shadow map for
      * @returns The parsed shadow generator
      */
-    public static Parse(parsedShadowGenerator: any, scene: Scene): ShadowGenerator {
+    public static override Parse(parsedShadowGenerator: any, scene: Scene): ShadowGenerator {
         const shadowGenerator = ShadowGenerator.Parse(
             parsedShadowGenerator,
             scene,

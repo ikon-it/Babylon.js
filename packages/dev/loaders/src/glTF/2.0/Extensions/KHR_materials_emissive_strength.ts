@@ -6,8 +6,20 @@ import type { IMaterial } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IKHRMaterialsEmissiveStrength } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_materials_emissive_strength";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_materials_emissive_strength extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_materials_emissive_strength"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_emissive_strength/README.md)
@@ -47,9 +59,11 @@ export class KHR_materials_emissive_strength implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsEmissiveStrength>(context, material, this.name, (extensionContext, extension) => {
-            return this._loader.loadMaterialPropertiesAsync(context, material, babylonMaterial).then(() => {
+        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsEmissiveStrength>(context, material, this.name, async (extensionContext, extension) => {
+            // eslint-disable-next-line github/no-then
+            return await this._loader.loadMaterialPropertiesAsync(context, material, babylonMaterial).then(() => {
                 this._loadEmissiveProperties(extensionContext, extension, babylonMaterial);
             });
         });
@@ -61,9 +75,10 @@ export class KHR_materials_emissive_strength implements IGLTFLoaderExtension {
         }
 
         if (properties.emissiveStrength !== undefined) {
-            babylonMaterial.emissiveColor.scaleToRef(properties.emissiveStrength, babylonMaterial.emissiveColor);
+            babylonMaterial.emissiveIntensity = properties.emissiveStrength;
         }
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_materials_emissive_strength(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_materials_emissive_strength(loader));

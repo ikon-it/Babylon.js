@@ -1,21 +1,12 @@
 import type { Camera } from "../Cameras/camera";
 import type { Scene } from "../scene";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { ISceneComponent } from "../sceneComponent";
 import { SceneComponentConstants } from "../sceneComponent";
 import type { Layer } from "./layer";
 import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import type { AbstractScene } from "../abstractScene";
 import { EngineStore } from "../Engines/engineStore";
-
-declare module "../abstractScene" {
-    export interface AbstractScene {
-        /**
-         * The list of layers (background and foreground) of the scene
-         */
-        layers: Array<Layer>;
-    }
-}
+import type { IAssetContainer } from "core/IAssetContainer";
 
 /**
  * Defines the layer scene component responsible to manage any layers
@@ -32,7 +23,7 @@ export class LayerSceneComponent implements ISceneComponent {
      */
     public scene: Scene;
 
-    private _engine: Engine;
+    private _engine: AbstractEngine;
 
     /**
      * Creates a new instance of the component for the given scene
@@ -44,7 +35,6 @@ export class LayerSceneComponent implements ISceneComponent {
             return;
         }
         this._engine = this.scene.getEngine();
-        this.scene.layers = [] as Layer[];
     }
 
     /**
@@ -160,13 +150,13 @@ export class LayerSceneComponent implements ISceneComponent {
      * Adds all the elements from the container to the scene
      * @param container the container holding the elements
      */
-    public addFromContainer(container: AbstractScene): void {
+    public addFromContainer(container: IAssetContainer): void {
         if (!container.layers) {
             return;
         }
-        container.layers.forEach((layer) => {
+        for (const layer of container.layers) {
             this.scene.layers.push(layer);
-        });
+        }
     }
 
     /**
@@ -174,11 +164,11 @@ export class LayerSceneComponent implements ISceneComponent {
      * @param container contains the elements to remove
      * @param dispose if the removed element should be disposed (default: false)
      */
-    public removeFromContainer(container: AbstractScene, dispose = false): void {
+    public removeFromContainer(container: IAssetContainer, dispose = false): void {
         if (!container.layers) {
             return;
         }
-        container.layers.forEach((layer) => {
+        for (const layer of container.layers) {
             const index = this.scene.layers.indexOf(layer);
             if (index !== -1) {
                 this.scene.layers.splice(index, 1);
@@ -186,6 +176,6 @@ export class LayerSceneComponent implements ISceneComponent {
             if (dispose) {
                 layer.dispose();
             }
-        });
+        }
     }
 }

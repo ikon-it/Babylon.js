@@ -1,13 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {
-    SerializationHelper,
-    serialize,
-    serializeAsColor3,
-    expandToProperty,
-    serializeAsTexture,
-    serializeAsVector3,
-    serializeAsImageProcessingConfiguration,
-} from "../../Misc/decorators";
+import { serialize, serializeAsColor3, expandToProperty, serializeAsTexture, serializeAsVector3, serializeAsImageProcessingConfiguration } from "../../Misc/decorators";
 import { SmartArray } from "../../Misc/smartArray";
 import type { Observer } from "../../Misc/observable";
 import { Logger } from "../../Misc/logger";
@@ -20,11 +12,10 @@ import type { SubMesh } from "../../Meshes/subMesh";
 import type { AbstractMesh } from "../../Meshes/abstractMesh";
 import type { Mesh } from "../../Meshes/mesh";
 import type { IEffectCreationOptions } from "../../Materials/effect";
-import { MaterialHelper } from "../../Materials/materialHelper";
 import { MaterialDefines } from "../../Materials/materialDefines";
 import { PushMaterial } from "../../Materials/pushMaterial";
 import type { ColorCurves } from "../../Materials/colorCurves";
-import type { IImageProcessingConfigurationDefines } from "../../Materials/imageProcessingConfiguration";
+import type { IImageProcessingConfigurationDefines } from "../../Materials/imageProcessingConfiguration.defines";
 import { ImageProcessingConfiguration } from "../../Materials/imageProcessingConfiguration";
 import type { BaseTexture } from "../../Materials/Textures/baseTexture";
 import { Texture } from "../../Materials/Textures/texture";
@@ -35,10 +26,27 @@ import { RegisterClass } from "../../Misc/typeStore";
 import { MaterialFlags } from "../materialFlags";
 import { Color3 } from "../../Maths/math.color";
 
-import "../../Shaders/background.fragment";
-import "../../Shaders/background.vertex";
 import { EffectFallbacks } from "../effectFallbacks";
-import { addClipPlaneUniforms, bindClipPlane } from "../clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "../clipPlaneMaterialHelper";
+import {
+    BindBonesParameters,
+    BindFogParameters,
+    BindLights,
+    BindLogDepth,
+    BindTextureMatrix,
+    HandleFallbacksForShadows,
+    PrepareAttributesForBones,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForLights,
+    PrepareDefinesForMergedUV,
+    PrepareDefinesForMisc,
+    PrepareDefinesForMultiview,
+    PrepareUniformsAndSamplersList,
+} from "../materialHelper.functions";
+import { SerializationHelper } from "../../Misc/decorators.serialization";
+import { ShaderLanguage } from "../shaderLanguage";
 
 /**
  * Background material defines definition.
@@ -131,8 +139,7 @@ class BackgroundMaterialDefines extends MaterialDefines implements IImageProcess
     public VIGNETTE = false;
     public VIGNETTEBLENDMODEMULTIPLY = false;
     public VIGNETTEBLENDMODEOPAQUE = false;
-    public TONEMAPPING = false;
-    public TONEMAPPING_ACES = false;
+    public TONEMAPPING = 0;
     public CONTRAST = false;
     public COLORCURVES = false;
     public COLORGRADING = false;
@@ -197,6 +204,7 @@ class BackgroundMaterialDefines extends MaterialDefines implements IImageProcess
 
 /**
  * Background material used to create an efficient environment around your scene.
+ * #157MGZ: simple test
  */
 export class BackgroundMaterial extends PushMaterial {
     /**
@@ -644,13 +652,16 @@ export class BackgroundMaterial extends PushMaterial {
     private _primaryShadowColor = Color3.Black();
     private _primaryHighlightColor = Color3.Black();
 
+    private _shadersLoaded = false;
+
     /**
      * Instantiates a Background Material in the given scene
      * @param name The friendly name of the material
      * @param scene The scene to add the material to
+     * @param forceGLSL Use the GLSL code generation for the shader (even on WebGPU). Default is false
      */
-    constructor(name: string, scene?: Scene) {
-        super(name, scene);
+    constructor(name: string, scene?: Scene, forceGLSL = false) {
+        super(name, scene, undefined, forceGLSL);
 
         // Setup the default processing configuration to the scene.
         this._attachImageProcessingConfiguration(null);
@@ -673,7 +684,7 @@ export class BackgroundMaterial extends PushMaterial {
     /**
      * Gets a boolean indicating that current material needs to register RTT
      */
-    public get hasRenderTargetTextures(): boolean {
+    public override get hasRenderTargetTextures(): boolean {
         if (this._diffuseTexture && this._diffuseTexture.isRenderTarget) {
             return true;
         }
@@ -689,7 +700,7 @@ export class BackgroundMaterial extends PushMaterial {
      * The entire material has been created in order to prevent overdraw.
      * @returns false
      */
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return true;
     }
 
@@ -697,7 +708,7 @@ export class BackgroundMaterial extends PushMaterial {
      * The entire material has been created in order to prevent overdraw.
      * @returns true if blending is enable
      */
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1 || (this._diffuseTexture != null && this._diffuseTexture.hasAlpha) || this._shadowOnly;
     }
 
@@ -708,7 +719,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param useInstances Specify wether or not the material is used with instances
      * @returns true if all the dependencies are ready (Textures, Effects...)
      */
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances: boolean = false): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances: boolean = false): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (drawWrapper.effect && this.isFrozen) {
@@ -731,11 +742,11 @@ export class BackgroundMaterial extends PushMaterial {
         const engine = scene.getEngine();
 
         // Lights
-        MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights);
+        PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights);
         defines._needNormals = true;
 
         // Multiview
-        MaterialHelper.PrepareDefinesForMultiview(scene, defines);
+        PrepareDefinesForMultiview(scene, defines);
 
         // Textures
         if (defines._areTexturesDirty) {
@@ -750,7 +761,7 @@ export class BackgroundMaterial extends PushMaterial {
                         return false;
                     }
 
-                    MaterialHelper.PrepareDefinesForMergedUV(this._diffuseTexture, defines, "DIFFUSE");
+                    PrepareDefinesForMergedUV(this._diffuseTexture, defines, "DIFFUSE");
                     defines.DIFFUSEHASALPHA = this._diffuseTexture.hasAlpha;
                     defines.GAMMADIFFUSE = this._diffuseTexture.gammaSpace;
                     defines.OPACITYFRESNEL = this._opacityFresnel;
@@ -878,13 +889,13 @@ export class BackgroundMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
 
         // Values that need to be evaluated on every frame
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances, null, subMesh.getRenderingMesh().hasThinInstances);
+        PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances, null, subMesh.getRenderingMesh().hasThinInstances);
 
         // Attribs
-        if (MaterialHelper.PrepareDefinesForAttributes(mesh, defines, false, true, false)) {
+        if (PrepareDefinesForAttributes(mesh, defines, false, true, false)) {
             if (mesh) {
                 if (!scene.getEngine().getCaps().standardDerivatives && !mesh.isVerticesDataPresent(VertexBuffer.NormalKind)) {
                     mesh.createNormals(true);
@@ -912,7 +923,7 @@ export class BackgroundMaterial extends PushMaterial {
                 fallbacks.addFallback(0, "MULTIVIEW");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks, this._maxSimultaneousLights);
+            HandleFallbacksForShadows(defines, fallbacks, this._maxSimultaneousLights);
 
             //Attributes
             const attribs = [VertexBuffer.PositionKind];
@@ -929,8 +940,8 @@ export class BackgroundMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.UV2Kind);
             }
 
-            MaterialHelper.PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
+            PrepareAttributesForInstances(attribs, defines);
 
             const uniforms = [
                 "world",
@@ -963,7 +974,7 @@ export class BackgroundMaterial extends PushMaterial {
                 "logarithmicDepthConstant",
             ];
 
-            addClipPlaneUniforms(uniforms);
+            AddClipPlaneUniforms(uniforms);
             const samplers = ["diffuseSampler", "reflectionSampler", "reflectionSamplerLow", "reflectionSamplerHigh"];
             const uniformBuffers = ["Material", "Scene"];
 
@@ -972,7 +983,7 @@ export class BackgroundMaterial extends PushMaterial {
                 ImageProcessingConfiguration.PrepareSamplers(samplers, defines);
             }
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -993,6 +1004,18 @@ export class BackgroundMaterial extends PushMaterial {
                     onCompiled: this.onCompiled,
                     onError: this.onError,
                     indexParameters: { maxSimultaneousLights: this._maxSimultaneousLights },
+                    shaderLanguage: this._shaderLanguage,
+                    extraInitializationsAsync: this._shadersLoaded
+                        ? undefined
+                        : async () => {
+                              if (this.shaderLanguage === ShaderLanguage.WGSL) {
+                                  await Promise.all([import("../../ShadersWGSL/background.vertex"), import("../../ShadersWGSL/background.fragment")]);
+                              } else {
+                                  await Promise.all([import("../../Shaders/background.vertex"), import("../../Shaders/background.fragment")]);
+                              }
+
+                              this._shadersLoaded = true;
+                          },
                 },
                 engine
             );
@@ -1057,7 +1080,7 @@ export class BackgroundMaterial extends PushMaterial {
     /**
      * Build the uniform buffer used in the material.
      */
-    public buildUniformLayout(): void {
+    public override buildUniformLayout(): void {
         // Order is important !
         this._uniformBuffer.addUniform("vPrimaryColor", 4);
         this._uniformBuffer.addUniform("vPrimaryColorShadow", 4);
@@ -1080,7 +1103,7 @@ export class BackgroundMaterial extends PushMaterial {
     /**
      * Unbind the material.
      */
-    public unbind(): void {
+    public override unbind(): void {
         if (this._diffuseTexture && this._diffuseTexture.isRenderTarget) {
             this._uniformBuffer.setTexture("diffuseSampler", null);
         }
@@ -1096,7 +1119,7 @@ export class BackgroundMaterial extends PushMaterial {
      * Bind only the world matrix to the material.
      * @param world The world matrix to bind.
      */
-    public bindOnlyWorldMatrix(world: Matrix): void {
+    public override bindOnlyWorldMatrix(world: Matrix): void {
         this._activeEffect!.setMatrix("world", world);
     }
 
@@ -1106,7 +1129,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param mesh the mesh to bind for.
      * @param subMesh The submesh to bind for.
      */
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <BackgroundMaterialDefines>subMesh.materialDefines;
@@ -1124,7 +1147,7 @@ export class BackgroundMaterial extends PushMaterial {
         this.bindOnlyWorldMatrix(world);
 
         // Bones
-        MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
+        BindBonesParameters(mesh, this._activeEffect);
 
         const mustRebind = this._mustRebind(scene, effect, subMesh, mesh.visibility);
         if (mustRebind) {
@@ -1138,7 +1161,7 @@ export class BackgroundMaterial extends PushMaterial {
                 if (scene.texturesEnabled) {
                     if (this._diffuseTexture && MaterialFlags.DiffuseTextureEnabled) {
                         this._uniformBuffer.updateFloat2("vDiffuseInfos", this._diffuseTexture.coordinatesIndex, this._diffuseTexture.level);
-                        MaterialHelper.BindTextureMatrix(this._diffuseTexture, this._uniformBuffer, "diffuse");
+                        BindTextureMatrix(this._diffuseTexture, this._uniformBuffer, "diffuse");
                     }
 
                     if (reflectionTexture && MaterialFlags.ReflectionTextureEnabled) {
@@ -1209,7 +1232,7 @@ export class BackgroundMaterial extends PushMaterial {
             }
 
             // Clip plane
-            bindClipPlane(this._activeEffect, this, scene);
+            BindClipPlane(this._activeEffect, this, scene);
 
             scene.bindEyePosition(effect);
         } else if (scene.getEngine()._features.needToAlwaysBindUniformBuffers) {
@@ -1219,18 +1242,18 @@ export class BackgroundMaterial extends PushMaterial {
 
         if (mustRebind || !this.isFrozen) {
             if (scene.lightsEnabled) {
-                MaterialHelper.BindLights(scene, mesh, this._activeEffect, defines, this._maxSimultaneousLights);
+                BindLights(scene, mesh, this._activeEffect, defines, this._maxSimultaneousLights);
             }
 
             // View
             this.bindView(effect);
 
             // Fog
-            MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect, true);
+            BindFogParameters(scene, mesh, this._activeEffect, true);
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
 
             // image processing
@@ -1249,7 +1272,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param texture - Base texture to use.
      * @returns - Boolean specifying if a texture is used in the material.
      */
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -1270,7 +1293,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param forceDisposeEffect Force disposal of the associated effect.
      * @param forceDisposeTextures Force disposal of the associated textures.
      */
-    public dispose(forceDisposeEffect: boolean = false, forceDisposeTextures: boolean = false): void {
+    public override dispose(forceDisposeEffect: boolean = false, forceDisposeTextures: boolean = false): void {
         if (forceDisposeTextures) {
             if (this.diffuseTexture) {
                 this.diffuseTexture.dispose();
@@ -1294,7 +1317,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param name The cloned name.
      * @returns The cloned material.
      */
-    public clone(name: string): BackgroundMaterial {
+    public override clone(name: string): BackgroundMaterial {
         return SerializationHelper.Clone(() => new BackgroundMaterial(name, this.getScene()), this);
     }
 
@@ -1302,7 +1325,7 @@ export class BackgroundMaterial extends PushMaterial {
      * Serializes the current material to its JSON representation.
      * @returns The JSON representation.
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.BackgroundMaterial";
         return serializationObject;
@@ -1312,7 +1335,7 @@ export class BackgroundMaterial extends PushMaterial {
      * Gets the class name of the material
      * @returns "BackgroundMaterial"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "BackgroundMaterial";
     }
 
@@ -1323,7 +1346,7 @@ export class BackgroundMaterial extends PushMaterial {
      * @param rootUrl The root url of the assets the material depends upon
      * @returns the instantiated BackgroundMaterial.
      */
-    public static Parse(source: any, scene: Scene, rootUrl: string): BackgroundMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): BackgroundMaterial {
         return SerializationHelper.Parse(() => new BackgroundMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

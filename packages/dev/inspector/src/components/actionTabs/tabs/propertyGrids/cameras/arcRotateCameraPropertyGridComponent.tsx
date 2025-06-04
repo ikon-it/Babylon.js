@@ -25,7 +25,7 @@ export class ArcRotateCameraPropertyGridComponent extends React.Component<IArcRo
         super(props);
     }
 
-    render() {
+    override render() {
         const camera = this.props.camera;
 
         return (
@@ -174,6 +174,13 @@ export class ArcRotateCameraPropertyGridComponent extends React.Component<IArcRo
                         label="Upper radius limit"
                         target={camera}
                         propertyName="upperRadiusLimit"
+                        onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                    />
+                    <FloatLineComponent
+                        lockObject={this.props.lockObject}
+                        label="Lower target Y limit"
+                        target={camera}
+                        propertyName="lowerTargetYLimit"
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                     />
                 </LineContainerComponent>

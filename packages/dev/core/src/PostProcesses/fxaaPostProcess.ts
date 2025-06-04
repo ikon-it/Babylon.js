@@ -4,13 +4,12 @@ import type { Effect } from "../Materials/effect";
 import { Texture } from "../Materials/Textures/texture";
 import type { PostProcessOptions } from "./postProcess";
 import { PostProcess } from "./postProcess";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
 
-import "../Shaders/fxaa.fragment";
-import "../Shaders/fxaa.vertex";
 import { RegisterClass } from "../Misc/typeStore";
-import { SerializationHelper } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
+import { ThinFXAAPostProcess } from "./thinFXAAPostProcess";
 
 import type { Scene } from "../scene";
 /**
@@ -22,48 +21,46 @@ export class FxaaPostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "FxaaPostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "FxaaPostProcess";
     }
+
+    protected override _effectWrapper: ThinFXAAPostProcess;
 
     constructor(
         name: string,
         options: number | PostProcessOptions,
         camera: Nullable<Camera> = null,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE
     ) {
-        super(name, "fxaa", ["texelSize"], null, options, camera, samplingMode || Texture.BILINEAR_SAMPLINGMODE, engine, reusable, null, textureType, "fxaa", undefined, true);
+        const localOptions = {
+            uniforms: ThinFXAAPostProcess.Uniforms,
+            size: typeof options === "number" ? options : undefined,
+            camera,
+            samplingMode: samplingMode || Texture.BILINEAR_SAMPLINGMODE,
+            engine,
+            reusable,
+            textureType,
+            ...(options as PostProcessOptions),
+        };
 
-        const defines = this._getDefines();
-        this.updateEffect(defines);
-
-        this.onApplyObservable.add((effect: Effect) => {
-            const texelSize = this.texelSize;
-            effect.setFloat2("texelSize", texelSize.x, texelSize.y);
+        super(name, ThinFXAAPostProcess.FragmentUrl, {
+            effectWrapper: typeof options === "number" || !options.effectWrapper ? new ThinFXAAPostProcess(name, engine, localOptions) : undefined,
+            ...localOptions,
         });
-    }
 
-    private _getDefines(): Nullable<string> {
-        const engine = this.getEngine();
-        if (!engine) {
-            return null;
-        }
-
-        const glInfo = engine.getGlInfo();
-        if (glInfo && glInfo.renderer && glInfo.renderer.toLowerCase().indexOf("mali") > -1) {
-            return "#define MALI 1\n";
-        }
-
-        return null;
+        this.onApplyObservable.add((_effect: Effect) => {
+            this._effectWrapper.texelSize = this.texelSize;
+        });
     }
 
     /**
      * @internal
      */
-    public static _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
+    public static override _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
         return SerializationHelper.Parse(
             () => {
                 return new FxaaPostProcess(

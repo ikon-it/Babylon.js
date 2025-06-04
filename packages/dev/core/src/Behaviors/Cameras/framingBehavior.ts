@@ -12,7 +12,7 @@ import { PrecisionDate } from "../../Misc/precisionDate";
 import type { AbstractMesh } from "../../Meshes/abstractMesh";
 import type { TransformNode } from "../../Meshes/transformNode";
 import { Vector3 } from "../../Maths/math.vector";
-import type { Animatable } from "../../Animations/animatable";
+import type { Animatable } from "../../Animations/animatable.core";
 import { Animation } from "../../Animations/animation";
 
 /**
@@ -274,7 +274,7 @@ export class FramingBehavior implements Behavior<ArcRotateCamera> {
 
     /**
      * Targets the given mesh with its children and updates zoom level accordingly.
-     * @param mesh  The mesh to target.
+     * @param mesh The mesh to target.
      * @param focusOnOriginXZ Determines if the camera should focus on 0 in the X and Z axis instead of the mesh
      * @param onAnimationEnd Callback triggered at the end of the framing animation
      */
@@ -324,6 +324,10 @@ export class FramingBehavior implements Behavior<ArcRotateCamera> {
         const top = maximumWorld.y;
         const zoomTargetY = bottom + (top - bottom) * this._positionScale;
         const radiusWorld = maximumWorld.subtract(minimumWorld).scale(0.5);
+
+        if (!isFinite(zoomTargetY)) {
+            return false; // Abort mission as there is no target
+        }
 
         if (focusOnOriginXZ) {
             zoomTarget = new Vector3(0, zoomTargetY, 0);

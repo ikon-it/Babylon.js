@@ -89,7 +89,7 @@ export interface IWebXRVertexData {
     mesh?: Mesh;
 }
 
-let meshIdProvider = 0;
+let MeshIdProvider = 0;
 
 /**
  * The mesh detector is used to detect meshes in the real world when in AR
@@ -139,7 +139,7 @@ export class WebXRMeshDetector extends WebXRAbstractFeature {
         }
     }
 
-    public detach(): boolean {
+    public override detach(): boolean {
         if (!super.detach()) {
             return false;
         }
@@ -160,7 +160,7 @@ export class WebXRMeshDetector extends WebXRAbstractFeature {
         return true;
     }
 
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
         this.onMeshAddedObservable.clear();
         this.onMeshRemovedObservable.clear();
@@ -195,7 +195,7 @@ export class WebXRMeshDetector extends WebXRAbstractFeature {
                 detectedMeshes.forEach((xrMesh) => {
                     if (!this._detectedMeshes.has(xrMesh)) {
                         const partialVertexData: Partial<IWebXRVertexData> = {
-                            id: meshIdProvider++,
+                            id: MeshIdProvider++,
                             xrMesh: xrMesh,
                         };
                         const vertexData = this._updateVertexDataWithXRMesh(xrMesh, partialVertexData, frame);

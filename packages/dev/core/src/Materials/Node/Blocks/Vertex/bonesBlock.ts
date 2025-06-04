@@ -6,15 +6,14 @@ import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
 import type { Mesh } from "../../../../Meshes/mesh";
 import type { Effect } from "../../../effect";
-import { MaterialHelper } from "../../../materialHelper";
 import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
 import { InputBlock } from "../Input/inputBlock";
 import { RegisterClass } from "../../../../Misc/typeStore";
 
-import "../../../../Shaders/ShadersInclude/bonesDeclaration";
-import "../../../../Shaders/ShadersInclude/bonesVertex";
 import type { EffectFallbacks } from "../../../effectFallbacks";
+import { BindBonesParameters, PrepareDefinesForBones } from "../../../materialHelper.functions";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Block used to add support for vertex skinning (bones)
@@ -40,18 +39,33 @@ export class BonesBlock extends NodeMaterialBlock {
      * Initialize the block and prepare the context for build
      * @param state defines the state that will be used for the build
      */
-    public initialize(state: NodeMaterialBuildState) {
+    public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("boneSampler");
         state._excludeVariableName("boneTextureWidth");
         state._excludeVariableName("mBones");
         state._excludeVariableName("BonesPerMesh");
+
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this._initShaderSourceAsync(state.shaderLanguage);
+    }
+
+    private async _initShaderSourceAsync(shaderLanguage: ShaderLanguage) {
+        this._codeIsReady = false;
+        if (shaderLanguage === ShaderLanguage.WGSL) {
+            await Promise.all([import("../../../../ShadersWGSL/ShadersInclude/bonesDeclaration"), import("../../../../ShadersWGSL/ShadersInclude/bonesVertex")]);
+        } else {
+            await Promise.all([import("../../../../Shaders/ShadersInclude/bonesDeclaration"), import("../../../../Shaders/ShadersInclude/bonesVertex")]);
+        }
+
+        this._codeIsReady = true;
+        this.onCodeIsReadyObservable.notifyObservers(this);
     }
 
     /**
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "BonesBlock";
     }
 
@@ -97,7 +111,7 @@ export class BonesBlock extends NodeMaterialBlock {
         return this._outputs[0];
     }
 
-    public autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
+    public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.matricesIndices.isConnected) {
             let matricesIndicesInput = material.getInputBlockByPredicate((b) => b.isAttribute && b.name === "matricesIndices" && additionalFilteringInfo(b));
 
@@ -127,24 +141,24 @@ export class BonesBlock extends NodeMaterialBlock {
         }
     }
 
-    public provideFallbacks(mesh: AbstractMesh, fallbacks: EffectFallbacks) {
+    public override provideFallbacks(mesh: AbstractMesh, fallbacks: EffectFallbacks) {
         if (mesh && mesh.useBones && mesh.computeBonesUsingShaders && mesh.skeleton) {
             fallbacks.addCPUSkinningFallback(0, mesh);
         }
     }
 
-    public bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
-        MaterialHelper.BindBonesParameters(mesh, effect);
+    public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
+        BindBonesParameters(mesh, effect);
     }
 
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         if (!defines._areAttributesDirty) {
             return;
         }
-        MaterialHelper.PrepareDefinesForBones(mesh, defines);
+        PrepareDefinesForBones(mesh, defines);
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         // Register for compilation fallbacks
@@ -190,9 +204,9 @@ export class BonesBlock extends NodeMaterialBlock {
         const worldInput = this.world;
 
         state.compilationString += `#if NUM_BONE_INFLUENCERS>0\n`;
-        state.compilationString += this._declareOutput(output, state) + ` = ${worldInput.associatedVariableName} * ${influenceVariablename};\n`;
+        state.compilationString += state._declareOutput(output) + ` = ${worldInput.associatedVariableName} * ${influenceVariablename};\n`;
         state.compilationString += `#else\n`;
-        state.compilationString += this._declareOutput(output, state) + ` = ${worldInput.associatedVariableName};\n`;
+        state.compilationString += state._declareOutput(output) + ` = ${worldInput.associatedVariableName};\n`;
         state.compilationString += `#endif\n`;
 
         return this;

@@ -1,4 +1,4 @@
-import { serialize, SerializationHelper } from "../../Misc/decorators";
+import { serialize } from "../../Misc/decorators";
 import { Observable } from "../../Misc/observable";
 import type { Nullable } from "../../types";
 import { Matrix, TmpVectors, Vector3 } from "../../Maths/math.vector";
@@ -7,13 +7,13 @@ import { Constants } from "../../Engines/constants";
 import { GetClass, RegisterClass } from "../../Misc/typeStore";
 import { _WarnImport } from "../../Misc/devTools";
 import type { IInspectable } from "../../Misc/iInspectable";
-import type { ThinEngine } from "../../Engines/thinEngine";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 import { TimingTools } from "../../Misc/timingTools";
 import { InstantiationTools } from "../../Misc/instantiationTools";
 import { Plane } from "../../Maths/math.plane";
 import { EncodeArrayBufferToBase64 } from "../../Misc/stringTools";
 import { GenerateBase64StringFromTexture, GenerateBase64StringFromTextureAsync } from "../../Misc/copyTools";
-import { CompatibilityOptions } from "../../Compat/compatibilityOptions";
+import { useOpenGLOrientationForUV } from "../../Compat/compatibilityOptions";
 import type { InternalTexture } from "./internalTexture";
 
 import type { CubeTexture } from "../../Materials/Textures/cubeTexture";
@@ -21,6 +21,8 @@ import type { MirrorTexture } from "../../Materials/Textures/mirrorTexture";
 import type { RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
 import type { Scene } from "../../scene";
 import type { VideoTexture, VideoTextureSettings } from "./videoTexture";
+
+import { SerializationHelper } from "../../Misc/decorators.serialization";
 
 /**
  * Defines the available options when creating a texture
@@ -67,6 +69,9 @@ export interface ITextureCreationOptions {
 
     /** Defines the underlying texture texture space */
     gammaSpace?: boolean;
+
+    /** Defines the extension to use to pick the right loader */
+    forcedExtension?: string;
 }
 
 /**
@@ -284,7 +289,7 @@ export class Texture extends BaseTexture {
     /**
      * Are mip maps generated for this texture or not.
      */
-    get noMipmap(): boolean {
+    override get noMipmap(): boolean {
         return this._noMipmap;
     }
 
@@ -317,6 +322,7 @@ export class Texture extends BaseTexture {
     private _cachedVRotationCenter: number = -1;
     private _cachedWRotationCenter: number = -1;
     private _cachedHomogeneousRotationInUVTransform: boolean = false;
+    private _cachedIdentity3x2: boolean = true;
 
     private _cachedReflectionTextureMatrix: Nullable<Matrix> = null;
     private _cachedReflectionUOffset = -1;
@@ -353,11 +359,11 @@ export class Texture extends BaseTexture {
      * Is the texture preventing material to render while loading.
      * If false, a default texture will be used instead of the loading one during the preparation step.
      */
-    public set isBlocking(value: boolean) {
+    public override set isBlocking(value: boolean) {
         this._isBlocking = value;
     }
     @serialize()
-    public get isBlocking(): boolean {
+    public override get isBlocking(): boolean {
         return this._isBlocking;
     }
 
@@ -389,7 +395,7 @@ export class Texture extends BaseTexture {
      */
     constructor(
         url: Nullable<string>,
-        sceneOrEngine?: Nullable<Scene | ThinEngine>,
+        sceneOrEngine?: Nullable<Scene | AbstractEngine>,
         noMipmapOrOptions?: boolean | ITextureCreationOptions,
         invertY?: boolean,
         samplingMode: number = Texture.TRILINEAR_SAMPLINGMODE,
@@ -415,7 +421,7 @@ export class Texture extends BaseTexture {
 
         if (typeof noMipmapOrOptions === "object" && noMipmapOrOptions !== null) {
             noMipmap = noMipmapOrOptions.noMipmap ?? false;
-            invertY = noMipmapOrOptions.invertY ?? (CompatibilityOptions.UseOpenGLOrientationForUV ? false : true);
+            invertY = noMipmapOrOptions.invertY ?? !useOpenGLOrientationForUV;
             samplingMode = noMipmapOrOptions.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE;
             onLoad = noMipmapOrOptions.onLoad ?? null;
             onError = noMipmapOrOptions.onError ?? null;
@@ -428,13 +434,14 @@ export class Texture extends BaseTexture {
             useSRGBBuffer = noMipmapOrOptions.useSRGBBuffer ?? false;
             internalTexture = noMipmapOrOptions.internalTexture ?? null;
             gammaSpace = noMipmapOrOptions.gammaSpace ?? gammaSpace;
+            forcedExtension = noMipmapOrOptions.forcedExtension ?? forcedExtension;
         } else {
             noMipmap = !!noMipmapOrOptions;
         }
 
         this._gammaSpace = gammaSpace;
         this._noMipmap = noMipmap;
-        this._invertY = invertY === undefined ? (CompatibilityOptions.UseOpenGLOrientationForUV ? false : true) : invertY;
+        this._invertY = invertY === undefined ? !useOpenGLOrientationForUV : invertY;
         this._initialSamplingMode = samplingMode;
         this._buffer = buffer;
         this._deleteBuffer = deleteBuffer;
@@ -443,7 +450,7 @@ export class Texture extends BaseTexture {
         this._creationFlags = creationFlags;
         this._useSRGBBuffer = useSRGBBuffer;
         this._forcedExtension = forcedExtension;
-        if (format) {
+        if (format !== undefined) {
             this._format = format;
         }
 
@@ -590,7 +597,7 @@ export class Texture extends BaseTexture {
      * Finish the loading sequence of a texture flagged as delayed load.
      * @internal
      */
-    public delayLoad(): void {
+    public override delayLoad(): void {
         if (this.delayLoadState !== Constants.DELAYLOADSTATE_NOTLOADED) {
             return;
         }
@@ -656,29 +663,11 @@ export class Texture extends BaseTexture {
     }
 
     /**
-     * Checks if the texture has the same transform matrix than another texture
-     * @param texture texture to check against
-     * @returns true if the transforms are the same, else false
-     */
-    public checkTransformsAreIdentical(texture: Nullable<Texture>): boolean {
-        return (
-            texture !== null &&
-            this.uOffset === texture.uOffset &&
-            this.vOffset === texture.vOffset &&
-            this.uScale === texture.uScale &&
-            this.vScale === texture.vScale &&
-            this.uAng === texture.uAng &&
-            this.vAng === texture.vAng &&
-            this.wAng === texture.wAng
-        );
-    }
-
-    /**
      * Get the current texture matrix which includes the requested offsetting, tiling and rotation components.
      * @param uBase The horizontal base offset multiplier (1 by default)
      * @returns the transform matrix of the texture.
      */
-    public getTextureMatrix(uBase = 1): Matrix {
+    public override getTextureMatrix(uBase = 1): Matrix {
         if (
             this.uOffset === this._cachedUOffset &&
             this.vOffset === this._cachedVOffset &&
@@ -715,7 +704,7 @@ export class Texture extends BaseTexture {
             this._t2 = Vector3.Zero();
         }
 
-        Matrix.RotationYawPitchRollToRef(this.vAng, this.uAng, this.wAng, this._rowGenerationMatrix!);
+        Matrix.RotationYawPitchRollToRef(this.vAng, this.uAng, this.wAng, this._rowGenerationMatrix);
 
         if (this.homogeneousRotationInUVTransform) {
             Matrix.TranslationToRef(-this._cachedURotationCenter, -this._cachedVRotationCenter, -this._cachedWRotationCenter, TmpVectors.Matrix[0]);
@@ -723,7 +712,7 @@ export class Texture extends BaseTexture {
             Matrix.ScalingToRef(this._cachedUScale, this._cachedVScale, 0, TmpVectors.Matrix[2]);
             Matrix.TranslationToRef(this._cachedUOffset, this._cachedVOffset, 0, TmpVectors.Matrix[3]);
 
-            TmpVectors.Matrix[0].multiplyToRef(this._rowGenerationMatrix!, this._cachedTextureMatrix);
+            TmpVectors.Matrix[0].multiplyToRef(this._rowGenerationMatrix, this._cachedTextureMatrix);
             this._cachedTextureMatrix.multiplyToRef(TmpVectors.Matrix[1], this._cachedTextureMatrix);
             this._cachedTextureMatrix.multiplyToRef(TmpVectors.Matrix[2], this._cachedTextureMatrix);
             this._cachedTextureMatrix.multiplyToRef(TmpVectors.Matrix[3], this._cachedTextureMatrix);
@@ -765,9 +754,12 @@ export class Texture extends BaseTexture {
             return this._cachedTextureMatrix;
         }
 
-        if (this.optimizeUVAllocation) {
+        const previousIdentity3x2 = this._cachedIdentity3x2;
+        this._cachedIdentity3x2 = this._cachedTextureMatrix.isIdentityAs3x2();
+
+        if (this.optimizeUVAllocation && previousIdentity3x2 !== this._cachedIdentity3x2) {
             // We flag the materials that are using this texture as "texture dirty" because depending on the fact that the matrix is the identity or not, some defines
-            // will get different values (see MaterialHelper.PrepareDefinesForMergedUV), meaning we should regenerate the effect accordingly
+            // will get different values (see PrepareDefinesForMergedUV), meaning we should regenerate the effect accordingly
             scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag, (mat) => {
                 return mat.hasTexture(this);
             });
@@ -780,7 +772,7 @@ export class Texture extends BaseTexture {
      * Get the current matrix used to apply reflection. This is useful to rotate an environment texture for instance.
      * @returns The reflection texture transform
      */
-    public getReflectionTextureMatrix(): Matrix {
+    public override getReflectionTextureMatrix(): Matrix {
         const scene = this.getScene();
 
         if (!scene) {
@@ -856,7 +848,7 @@ export class Texture extends BaseTexture {
      * Clones the texture.
      * @returns the cloned texture
      */
-    public clone(): Texture {
+    public override clone(): Texture {
         const options: ITextureCreationOptions = {
             noMipmap: this._noMipmap,
             invertY: this._invertY,
@@ -881,7 +873,7 @@ export class Texture extends BaseTexture {
      * Serialize the texture to a JSON representation we can easily use in the respective Parse function.
      * @returns The JSON representation of the texture
      */
-    public serialize(): any {
+    public override serialize(): any {
         const savedName = this.name;
 
         if (!Texture.SerializeBuffers) {
@@ -901,11 +893,12 @@ export class Texture extends BaseTexture {
         }
 
         if (Texture.SerializeBuffers || Texture.ForceSerializeBuffers) {
-            if (typeof this._buffer === "string" && (this._buffer as string).substr(0, 5) === "data:") {
+            if (typeof this._buffer === "string" && this._buffer.startsWith("data:")) {
                 serializationObject.base64String = this._buffer;
                 serializationObject.name = serializationObject.name.replace("data:", "");
             } else if (this.url && this.url.startsWith("data:") && this._buffer instanceof Uint8Array) {
-                serializationObject.base64String = "data:image/png;base64," + EncodeArrayBufferToBase64(this._buffer);
+                const mimeType = this.mimeType || "image/png";
+                serializationObject.base64String = `data:${mimeType};base64,${EncodeArrayBufferToBase64(this._buffer)}`;
             } else if (Texture.ForceSerializeBuffers || (this.url && this.url.startsWith("blob:")) || this._forceSerialize) {
                 serializationObject.base64String =
                     !this._engine || this._engine._features.supportSyncTextureRead ? GenerateBase64StringFromTexture(this) : GenerateBase64StringFromTextureAsync(this);
@@ -917,8 +910,9 @@ export class Texture extends BaseTexture {
         serializationObject._creationFlags = this._creationFlags;
         serializationObject._useSRGBBuffer = this._useSRGBBuffer;
         if (Texture._SerializeInternalTextureUniqueId) {
-            serializationObject.internalTextureUniqueId = this._texture?.uniqueId ?? undefined;
+            serializationObject.internalTextureUniqueId = this._texture?.uniqueId;
         }
+        serializationObject.internalTextureLabel = this._texture?.label;
         serializationObject.noMipmap = this._noMipmap;
 
         this.name = savedName;
@@ -930,14 +924,14 @@ export class Texture extends BaseTexture {
      * Get the current class name of the texture useful for serialization or dynamic coding.
      * @returns "Texture"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "Texture";
     }
 
     /**
      * Dispose the texture and release its associated resources.
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
 
         this.onLoadObservable.clear();
@@ -1015,8 +1009,12 @@ export class Texture extends BaseTexture {
                 }
             }
 
-            if (hasInternalTextureUniqueId && !internalTexture) {
-                texture?._texture?._setUniqueId(parsedTexture.internalTextureUniqueId);
+            if (texture && texture._texture) {
+                if (hasInternalTextureUniqueId && !internalTexture) {
+                    texture._texture._setUniqueId(parsedTexture.internalTextureUniqueId);
+                }
+
+                texture._texture.label = parsedTexture.internalTextureLabel;
             }
         };
 
@@ -1136,6 +1134,7 @@ export class Texture extends BaseTexture {
      * @param onError define a callback triggered when an error occurred during the loading session
      * @param format define the format of the texture we are trying to load (Engine.TEXTUREFORMAT_RGBA...)
      * @param creationFlags specific flags to use when creating the texture (Constants.TEXTURE_CREATIONFLAG_STORAGE for storage textures, for eg)
+     * @param forcedExtension defines the extension to use to pick the right loader
      * @returns the created texture
      */
     public static CreateFromBase64String(
@@ -1148,9 +1147,25 @@ export class Texture extends BaseTexture {
         onLoad: Nullable<() => void> = null,
         onError: Nullable<() => void> = null,
         format: number = Constants.TEXTUREFORMAT_RGBA,
-        creationFlags?: number
+        creationFlags?: number,
+        forcedExtension?: string
     ): Texture {
-        return new Texture("data:" + name, scene, noMipmapOrOptions, invertY, samplingMode, onLoad, onError, data, false, format, undefined, undefined, creationFlags);
+        return new Texture(
+            "data:" + name,
+            scene,
+            noMipmapOrOptions,
+            invertY,
+            samplingMode,
+            onLoad,
+            onError,
+            data,
+            false,
+            format,
+            undefined,
+            undefined,
+            creationFlags,
+            forcedExtension
+        );
     }
 
     /**
@@ -1166,6 +1181,7 @@ export class Texture extends BaseTexture {
      * @param onError define a callback triggered when an error occurred during the loading session
      * @param format define the format of the texture we are trying to load (Engine.TEXTUREFORMAT_RGBA...)
      * @param creationFlags specific flags to use when creating the texture (Constants.TEXTURE_CREATIONFLAG_STORAGE for storage textures, for eg)
+     * @param forcedExtension defines the extension to use to pick the right loader
      * @returns the created texture
      */
     public static LoadFromDataString(
@@ -1179,13 +1195,29 @@ export class Texture extends BaseTexture {
         onLoad: Nullable<() => void> = null,
         onError: Nullable<(message?: string, exception?: any) => void> = null,
         format: number = Constants.TEXTUREFORMAT_RGBA,
-        creationFlags?: number
+        creationFlags?: number,
+        forcedExtension?: string
     ): Texture {
-        if (name.substr(0, 5) !== "data:") {
+        if (name.substring(0, 5) !== "data:") {
             name = "data:" + name;
         }
 
-        return new Texture(name, scene, noMipmapOrOptions, invertY, samplingMode, onLoad, onError, buffer, deleteBuffer, format, undefined, undefined, creationFlags);
+        return new Texture(
+            name,
+            scene,
+            noMipmapOrOptions,
+            invertY,
+            samplingMode,
+            onLoad,
+            onError,
+            buffer,
+            deleteBuffer,
+            format,
+            undefined,
+            undefined,
+            creationFlags,
+            forcedExtension
+        );
     }
 }
 

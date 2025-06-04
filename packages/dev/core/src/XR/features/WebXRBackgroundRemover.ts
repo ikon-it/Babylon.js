@@ -60,7 +60,7 @@ export class WebXRBackgroundRemover extends WebXRAbstractFeature {
     constructor(
         _xrSessionManager: WebXRSessionManager,
         /**
-         * read-only options to be used in this module
+         * [Empty Object] read-only options to be used in this module
          */
         public readonly options: IWebXRBackgroundRemoverOptions = {}
     ) {
@@ -73,7 +73,7 @@ export class WebXRBackgroundRemover extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public attach(): boolean {
+    public override attach(): boolean {
         this._setBackgroundState(false);
         return super.attach();
     }
@@ -84,7 +84,7 @@ export class WebXRBackgroundRemover extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public detach(): boolean {
+    public override detach(): boolean {
         this._setBackgroundState(true);
         return super.detach();
     }
@@ -92,7 +92,7 @@ export class WebXRBackgroundRemover extends WebXRAbstractFeature {
     /**
      * Dispose this feature and all of the resources attached
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
         this.onBackgroundStateChangedObservable.clear();
     }
@@ -126,7 +126,9 @@ export class WebXRBackgroundRemover extends WebXRAbstractFeature {
         }
 
         if (this.options.backgroundMeshes) {
-            this.options.backgroundMeshes.forEach((mesh) => mesh.setEnabled(newState));
+            for (const mesh of this.options.backgroundMeshes) {
+                mesh.setEnabled(newState);
+            }
         }
 
         this.onBackgroundStateChangedObservable.notifyObservers(newState);

@@ -1,15 +1,17 @@
-import { serializeAsMeshReference, serializeAsVector3, SerializationHelper } from "../Misc/decorators";
+import { serializeAsMeshReference, serializeAsVector3 } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { Matrix, Vector3 } from "../Maths/math.vector";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import type { Nullable } from "../types";
-import { AbstractScene } from "../abstractScene";
-import type { Scene } from "../scene";
+import { Scene } from "../scene";
 import { Constants } from "../Engines/constants";
 import type { UniformBuffer } from "../Materials/uniformBuffer";
+import type { IAssetContainer } from "core/IAssetContainer";
 
-declare module "../abstractScene" {
-    export interface AbstractScene {
+declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface Scene {
         /**
          * The list of reflection probes added to the scene
          * @see https://doc.babylonjs.com/features/featuresDeepDive/environment/reflectionProbes
@@ -31,7 +33,7 @@ declare module "../abstractScene" {
     }
 }
 
-AbstractScene.prototype.removeReflectionProbe = function (toRemove: ReflectionProbe): number {
+Scene.prototype.removeReflectionProbe = function (toRemove: ReflectionProbe): number {
     if (!this.reflectionProbes) {
         return -1;
     }
@@ -44,7 +46,7 @@ AbstractScene.prototype.removeReflectionProbe = function (toRemove: ReflectionPr
     return index;
 };
 
-AbstractScene.prototype.addReflectionProbe = function (newReflectionProbe: ReflectionProbe): void {
+Scene.prototype.addReflectionProbe = function (newReflectionProbe: ReflectionProbe): void {
     if (!this.reflectionProbes) {
         this.reflectionProbes = [];
     }
@@ -80,7 +82,7 @@ export class ReflectionProbe {
     public metadata: any = null;
 
     /** @internal */
-    public _parentContainer: Nullable<AbstractScene> = null;
+    public _parentContainer: Nullable<IAssetContainer> = null;
 
     /**
      * Creates a new reflection probe

@@ -15,6 +15,7 @@ import { Observable } from "core/Misc/observable";
 import { Constants } from "core/Engines/constants";
 import { Tools } from "core/Misc/tools";
 import type { Color4 } from "core/Maths/math.color";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 interface ITransmissionHelperHolder {
     /**
@@ -273,32 +274,27 @@ class TransmissionHelper {
         this._opaqueRenderTarget.samples = this._options.samples;
         this._opaqueRenderTarget.renderSprites = true;
         this._opaqueRenderTarget.renderParticles = true;
-
-        let sceneImageProcessingapplyByPostProcess: boolean;
+        this._opaqueRenderTarget.disableImageProcessing = true;
 
         let saveSceneEnvIntensity: number;
         this._opaqueRenderTarget.onBeforeBindObservable.add((opaqueRenderTarget) => {
             saveSceneEnvIntensity = this._scene.environmentIntensity;
             this._scene.environmentIntensity = 1.0;
-            sceneImageProcessingapplyByPostProcess = this._scene.imageProcessingConfiguration.applyByPostProcess;
             if (!this._options.clearColor) {
                 this._scene.clearColor.toLinearSpaceToRef(opaqueRenderTarget.clearColor, this._scene.getEngine().useExactSrgbConversions);
             } else {
                 opaqueRenderTarget.clearColor.copyFrom(this._options.clearColor);
             }
-            // we do not use the applyByPostProcess setter to avoid flagging all the materials as "image processing dirty"!
-            this._scene.imageProcessingConfiguration._applyByPostProcess = true;
         });
         this._opaqueRenderTarget.onAfterUnbindObservable.add(() => {
             this._scene.environmentIntensity = saveSceneEnvIntensity;
-            this._scene.imageProcessingConfiguration._applyByPostProcess = sceneImageProcessingapplyByPostProcess;
         });
 
-        this._transparentMeshesCache.forEach((mesh: AbstractMesh) => {
+        for (const mesh of this._transparentMeshesCache) {
             if (this._shouldRenderAsTransmission(mesh.material)) {
                 (mesh.material as PBRMaterial).refractionTexture = this._opaqueRenderTarget;
             }
-        });
+        }
     }
 
     /**
@@ -316,6 +312,17 @@ class TransmissionHelper {
 }
 
 const NAME = "KHR_materials_transmission";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_materials_transmission extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_materials_transmission"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_transmission/README.md)
@@ -358,21 +365,23 @@ export class KHR_materials_transmission implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsTransmission>(context, material, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IKHRMaterialsTransmission>(context, material, this.name, async (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
-            promises.push(this._loader.loadMaterialBasePropertiesAsync(context, material, babylonMaterial));
             promises.push(this._loader.loadMaterialPropertiesAsync(context, material, babylonMaterial));
             promises.push(this._loadTransparentPropertiesAsync(extensionContext, material, babylonMaterial, extension));
-            return Promise.all(promises).then(() => {});
+            // eslint-disable-next-line github/no-then
+            return await Promise.all(promises).then(() => {});
         });
     }
 
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/promise-function-async
     private _loadTransparentPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material, extension: IKHRMaterialsTransmission): Promise<void> {
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
         }
-        const pbrMaterial = babylonMaterial as PBRMaterial;
+        const pbrMaterial = babylonMaterial;
 
         // Enables "refraction" texture which represents transmitted light.
         pbrMaterial.subSurface.isRefractionEnabled = true;
@@ -402,7 +411,9 @@ export class KHR_materials_transmission implements IGLTFLoaderExtension {
         pbrMaterial.subSurface.maximumThickness = 0.0;
         if (extension.transmissionTexture) {
             (extension.transmissionTexture as ITextureInfo).nonColorData = true;
+            // eslint-disable-next-line github/no-then
             return this._loader.loadTextureInfoAsync(`${context}/transmissionTexture`, extension.transmissionTexture, undefined).then((texture: BaseTexture) => {
+                texture.name = `${babylonMaterial.name} (Transmission)`;
                 pbrMaterial.subSurface.refractionIntensityTexture = texture;
                 pbrMaterial.subSurface.useGltfStyleTextures = true;
             });
@@ -412,4 +423,5 @@ export class KHR_materials_transmission implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_materials_transmission(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_materials_transmission(loader));

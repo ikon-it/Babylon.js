@@ -2,7 +2,7 @@ import type { Nullable } from "../../types";
 import { Tools } from "../../Misc/tools";
 import { serialize } from "../../Misc/decorators";
 import type { Camera } from "../../Cameras/camera";
-import type { Engine } from "../../Engines/engine";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 import type { PostProcessRenderEffect } from "./postProcessRenderEffect";
 import type { IInspectable } from "../../Misc/iInspectable";
 
@@ -44,12 +44,19 @@ export class PostProcessRenderPipeline {
     }
 
     /**
+     * Gets the active engine
+     */
+    public get engine(): AbstractEngine {
+        return this._engine;
+    }
+
+    /**
      * Initializes a PostProcessRenderPipeline
      * @param _engine engine to add the pipeline to
      * @param name name of the pipeline
      */
     constructor(
-        private _engine: Engine,
+        private _engine: AbstractEngine,
         name: string
     ) {
         this._name = name;

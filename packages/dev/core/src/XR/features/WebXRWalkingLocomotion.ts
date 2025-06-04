@@ -175,6 +175,7 @@ class WalkingTracker {
     private _steppingLeft = false;
     private _t = -1;
     private _maxT = -1;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     private _maxTPosition = new Vector2();
     private _vitality = 0;
 
@@ -207,6 +208,7 @@ class WalkingTracker {
         this._vitality = 1;
     }
 
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     private _updateTAndVitality(x: number, y: number) {
         this._currentPosition.copyFromFloats(x, y);
 
@@ -415,7 +417,7 @@ export class WebXRWalkingLocomotion extends WebXRAbstractFeature {
      * Walking locomotion is only compatible with "immersive-vr" sessions.
      * @returns true if compatible, false otherwise
      */
-    public isCompatible(): boolean {
+    public override isCompatible(): boolean {
         return this._sessionManager.sessionMode === undefined || this._sessionManager.sessionMode === "immersive-vr";
     }
 
@@ -424,12 +426,12 @@ export class WebXRWalkingLocomotion extends WebXRAbstractFeature {
      * Typically called automatically by the features manager.
      * @returns true if attach succeeded, false otherwise
      */
-    public attach(): boolean {
+    public override attach(): boolean {
         if (!this.isCompatible || !super.attach()) {
             return false;
         }
 
-        this._walker = new Walker(this._sessionManager.scene.getEngine());
+        this._walker = new Walker(this._sessionManager.scene.getEngine() as Engine);
         return true;
     }
 
@@ -438,7 +440,7 @@ export class WebXRWalkingLocomotion extends WebXRAbstractFeature {
      * Typically called automatically by the features manager.
      * @returns true if detach succeeded, false otherwise
      */
-    public detach(): boolean {
+    public override detach(): boolean {
         if (!super.detach()) {
             return false;
         }

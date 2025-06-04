@@ -17,9 +17,10 @@ import { TextureLinkLineComponent } from "../../../lines/textureLinkLineComponen
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 import { Sprite } from "core/Sprites/sprite";
 import { Tools } from "core/Misc/tools";
-import { FileButtonLineComponent } from "shared-ui-components/lines/fileButtonLineComponent";
+import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { Constants } from "core/Engines/constants";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
+import { AlphaModeOptions } from "shared-ui-components/constToOptionsMaps";
 
 interface ISpriteManagerPropertyGridComponentProps {
     globalState: GlobalState;
@@ -92,9 +93,11 @@ export class SpriteManagerPropertyGridComponent extends React.Component<ISpriteM
         this.props.globalState.onSelectionChangedObservable.notifyObservers(null);
 
         SpriteManager.ParseFromSnippetAsync(snippedId, scene)
+            // eslint-disable-next-line github/no-then
             .then((newManager) => {
                 this.props.globalState.onSelectionChangedObservable.notifyObservers(newManager);
             })
+            // eslint-disable-next-line github/no-then
             .catch((err) => {
                 alert("Unable to load your sprite manager: " + err);
             });
@@ -116,6 +119,7 @@ export class SpriteManagerPropertyGridComponent extends React.Component<ISpriteM
                     }
                     this.forceUpdate();
                     if (navigator.clipboard) {
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
                         navigator.clipboard.writeText(spriteManager.snippetId);
                     }
 
@@ -150,18 +154,8 @@ export class SpriteManagerPropertyGridComponent extends React.Component<ISpriteM
         xmlHttp.send(JSON.stringify(dataToSend));
     }
 
-    render() {
+    override render() {
         const spriteManager = this.props.spriteManager;
-
-        const alphaModeOptions = [
-            { label: "Combine", value: Constants.ALPHA_COMBINE },
-            { label: "One one", value: Constants.ALPHA_ONEONE },
-            { label: "Add", value: Constants.ALPHA_ADD },
-            { label: "Subtract", value: Constants.ALPHA_SUBTRACT },
-            { label: "Multiply", value: Constants.ALPHA_MULTIPLY },
-            { label: "Maximized", value: Constants.ALPHA_MAXIMIZED },
-            { label: "Pre-multiplied", value: Constants.ALPHA_PREMULTIPLIED },
-        ];
 
         return (
             <>
@@ -180,7 +174,7 @@ export class SpriteManagerPropertyGridComponent extends React.Component<ISpriteM
                     <ButtonLineComponent label="Dispose" onClick={() => this.disposeManager()} />
                 </LineContainerComponent>
                 <LineContainerComponent title="FILE" selection={this.props.globalState}>
-                    <FileButtonLineComponent label="Load" onClick={(file) => this.loadFromFile(file)} accept=".json" />
+                    <FileButtonLine label="Load" onClick={(file) => this.loadFromFile(file)} accept=".json" />
                     <ButtonLineComponent label="Save" onClick={() => this.saveToFile()} />
                 </LineContainerComponent>
                 <LineContainerComponent title="SNIPPET" selection={this.props.globalState}>
@@ -213,9 +207,9 @@ export class SpriteManagerPropertyGridComponent extends React.Component<ISpriteM
                         step={1}
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                     />
-                    <OptionsLineComponent
+                    <OptionsLine
                         label="Alpha mode"
-                        options={alphaModeOptions}
+                        options={AlphaModeOptions}
                         target={spriteManager}
                         propertyName="blendMode"
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}

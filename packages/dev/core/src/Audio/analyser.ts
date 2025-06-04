@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "../types";
 import type { Scene } from "../scene";
-import { Engine } from "../Engines/engine";
 import type { IAudioEngine } from "./Interfaces/IAudioEngine";
 import { Tools } from "../Misc/tools";
 import { EngineStore } from "../Engines/engineStore";
+import { AbstractEngine } from "core/Engines/abstractEngine";
 
 /**
  * Class used to work with sound analyzer using fast fourier transform (FFT)
@@ -13,27 +13,22 @@ import { EngineStore } from "../Engines/engineStore";
 export class Analyser {
     /**
      * Gets or sets the smoothing
-     * @ignorenaming
      */
     public SMOOTHING = 0.75;
     /**
      * Gets or sets the FFT table size
-     * @ignorenaming
      */
     public FFT_SIZE = 512;
     /**
      * Gets or sets the bar graph amplitude
-     * @ignorenaming
      */
     public BARGRAPHAMPLITUDE = 256;
     /**
      * Gets or sets the position of the debug canvas
-     * @ignorenaming
      */
     public DEBUGCANVASPOS = { x: 20, y: 20 };
     /**
      * Gets or sets the debug canvas size
-     * @ignorenaming
      */
     public DEBUGCANVASSIZE = { width: 320, height: 200 };
 
@@ -57,11 +52,11 @@ export class Analyser {
             return;
         }
         this._scene = scene;
-        if (!Engine.audioEngine) {
+        if (!AbstractEngine.audioEngine) {
             Tools.Warn("No audio engine initialized, failed to create an audio analyser");
             return;
         }
-        this._audioEngine = Engine.audioEngine;
+        this._audioEngine = AbstractEngine.audioEngine;
         if (this._audioEngine.canUseWebAudio && this._audioEngine.audioContext) {
             this._webAudioAnalyser = this._audioEngine.audioContext.createAnalyser();
             this._webAudioAnalyser.minDecibels = -140;

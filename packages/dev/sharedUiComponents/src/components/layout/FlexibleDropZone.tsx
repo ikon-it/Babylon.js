@@ -1,5 +1,5 @@
-import type { FC } from "react";
-import style from "./FlexibleDropZone.modules.scss";
+import type { FC, PropsWithChildren } from "react";
+import * as style from "./FlexibleDropZone.module.scss";
 import { FlexibleResizeBar } from "./FlexibleResizeBar";
 import { ResizeDirections } from "./types";
 
@@ -23,7 +23,7 @@ export interface IFlexibleDropZoneProps {
  * @param props properties
  * @returns drop zone element
  */
-export const FlexibleDropZone: FC<IFlexibleDropZoneProps> = (props) => {
+export const FlexibleDropZone: FC<PropsWithChildren<IFlexibleDropZoneProps>> = (props) => {
     return (
         <div className={style.flexibleDropZoneContainer}>
             {props.children}

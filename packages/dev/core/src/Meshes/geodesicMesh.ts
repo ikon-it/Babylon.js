@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import { Vector3, TmpVectors } from "../Maths/math.vector";
-import { Scalar } from "../Maths/math.scalar";
+import { HighestCommonFactor } from "../Maths/math.scalar.functions";
 import { PHI } from "../Maths/math.constants";
 import { _IsoVector } from "../Maths/math.isovector";
 
@@ -90,7 +91,7 @@ export class _PrimaryIsoTriangle {
         let m1 = 1;
         let n1 = 0;
         if (n !== 0) {
-            g = Scalar.HCF(m, n);
+            g = HighestCommonFactor(m, n);
         }
         m1 = m / g;
         n1 = n / g;
@@ -409,7 +410,7 @@ export class _PrimaryIsoTriangle {
 
         //shared vertices along edges when needed
         if (n > 0) {
-            const g = Scalar.HCF(m, n);
+            const g = HighestCommonFactor(m, n);
             const m1 = m / g;
             const n1 = n / g;
 
@@ -579,7 +580,7 @@ export class GeodesicData extends PolyhedronData {
     /**
      * @internal
      */
-    public edgematch: (number | string)[][];
+    public override edgematch: (number | string)[][];
     /**
      * @internal
      */
@@ -764,7 +765,7 @@ export class GeodesicData extends PolyhedronData {
         this.adjacentFaces = [];
         for (let m = 0; m < map.length; m++) {
             goldbergPolyhedronData.face[m] = this.setOrder(m, map[m].concat([]));
-            map[m].forEach((el: number) => {
+            for (const el of map[m]) {
                 cx = 0;
                 cy = 0;
                 cz = 0;
@@ -776,7 +777,7 @@ export class GeodesicData extends PolyhedronData {
                     cz += vertex[2];
                 }
                 goldbergPolyhedronData.vertex[el] = [cx / 3, cy / 3, cz / 3];
-            });
+            }
         }
         return goldbergPolyhedronData;
     }

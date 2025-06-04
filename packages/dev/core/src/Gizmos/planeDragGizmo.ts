@@ -185,8 +185,8 @@ export class PlaneDragGizmo extends Gizmo implements IPlaneDragGizmo {
         light.includedOnlyMeshes = light.includedOnlyMeshes.concat(this._rootMesh.getChildMeshes(false));
 
         const cache: GizmoAxisCache = {
-            gizmoMeshes: this._gizmoMesh.getChildMeshes() as Mesh[],
-            colliderMeshes: this._gizmoMesh.getChildMeshes() as Mesh[],
+            gizmoMeshes: this._gizmoMesh.getChildMeshes(),
+            colliderMeshes: this._gizmoMesh.getChildMeshes(),
             material: this._coloredMaterial,
             hoverMaterial: this._hoverMaterial,
             disableMaterial: this._disableMaterial,
@@ -211,7 +211,7 @@ export class PlaneDragGizmo extends Gizmo implements IPlaneDragGizmo {
         });
     }
 
-    protected _attachedNodeChanged(value: Nullable<Node>) {
+    protected override _attachedNodeChanged(value: Nullable<Node>) {
         if (this.dragBehavior) {
             this.dragBehavior.enabled = value ? true : false;
         }
@@ -238,7 +238,7 @@ export class PlaneDragGizmo extends Gizmo implements IPlaneDragGizmo {
     /**
      * Disposes of the gizmo
      */
-    public dispose() {
+    public override dispose() {
         this.onSnapObservable.clear();
         this.gizmoLayer.utilityLayerScene.onPointerObservable.remove(this._pointerObserver);
         this.dragBehavior.detach();
@@ -246,10 +246,11 @@ export class PlaneDragGizmo extends Gizmo implements IPlaneDragGizmo {
         if (this._gizmoMesh) {
             this._gizmoMesh.dispose();
         }
-        [this._coloredMaterial, this._hoverMaterial, this._disableMaterial].forEach((matl) => {
+        const materials = [this._coloredMaterial, this._hoverMaterial, this._disableMaterial];
+        for (const matl of materials) {
             if (matl) {
                 matl.dispose();
             }
-        });
+        }
     }
 }

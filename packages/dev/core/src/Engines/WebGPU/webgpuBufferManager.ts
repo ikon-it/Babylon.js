@@ -3,8 +3,8 @@ import type { DataBuffer } from "../../Buffers/dataBuffer";
 import { WebGPUDataBuffer } from "../../Meshes/WebGPU/webgpuDataBuffer";
 import { FromHalfFloat } from "../../Misc/textureTools";
 import type { Nullable } from "../../types";
+import { allocateAndCopyTypedBuffer } from "../abstractEngine.functions";
 import { Constants } from "../constants";
-import { allocateAndCopyTypedBuffer } from "../Extensions/engine.readTexture";
 import type { WebGPUEngine } from "../webgpuEngine";
 // eslint-disable-next-line @typescript-eslint/naming-convention
 import * as WebGPUConstants from "./webgpuConstants";
@@ -53,8 +53,9 @@ export class WebGPUBufferManager {
 
     public createBuffer(viewOrSize: ArrayBufferView | number, flags: GPUBufferUsageFlags, label?: string): WebGPUDataBuffer {
         const isView = (viewOrSize as ArrayBufferView).byteLength !== undefined;
-        const buffer = this.createRawBuffer(viewOrSize, flags, undefined, label);
-        const dataBuffer = new WebGPUDataBuffer(buffer);
+        const dataBuffer = new WebGPUDataBuffer();
+        const labelId = "DataBufferUniqueId=" + dataBuffer.uniqueId;
+        dataBuffer.buffer = this.createRawBuffer(viewOrSize, flags, undefined, label ? labelId + "-" + label : labelId);
         dataBuffer.references = 1;
         dataBuffer.capacity = isView ? (viewOrSize as ArrayBufferView).byteLength : (viewOrSize as number);
         dataBuffer.engineId = this._engine.uniqueId;
@@ -66,46 +67,53 @@ export class WebGPUBufferManager {
         return dataBuffer;
     }
 
+    // This calls GPUBuffer.writeBuffer() with no alignment corrections
+    // dstByteOffset and byteLength must both be aligned to 4 bytes and bytes moved must be within src and dst arrays
     public setRawData(buffer: GPUBuffer, dstByteOffset: number, src: ArrayBufferView, srcByteOffset: number, byteLength: number): void {
+        srcByteOffset += src.byteOffset;
+
         this._device.queue.writeBuffer(buffer, dstByteOffset, src.buffer, srcByteOffset, byteLength);
     }
 
+    // This calls GPUBuffer.writeBuffer() with alignment corrections (dstByteOffset and byteLength will be aligned to 4 byte boundaries)
+    // If alignment is needed, src must be a full copy of dataBuffer, or at least should be large enough to cope with the additional bytes copied because of alignment!
     public setSubData(dataBuffer: WebGPUDataBuffer, dstByteOffset: number, src: ArrayBufferView, srcByteOffset = 0, byteLength = 0): void {
         const buffer = dataBuffer.underlyingResource as GPUBuffer;
 
-        byteLength = byteLength || src.byteLength;
-        byteLength = Math.min(byteLength, dataBuffer.capacity - dstByteOffset);
+        byteLength = byteLength || src.byteLength - srcByteOffset;
 
-        // After Migration to Canary
-        let chunkStart = src.byteOffset + srcByteOffset;
-        let chunkEnd = chunkStart + byteLength;
+        // Make sure the dst offset is aligned to 4 bytes
+        const startPre = dstByteOffset & 3;
 
-        // 4 bytes alignments for upload
-        const alignedLength = (byteLength + 3) & ~3;
-        if (alignedLength !== byteLength) {
-            const tempView = new Uint8Array(src.buffer.slice(chunkStart, chunkEnd));
-            src = new Uint8Array(alignedLength);
-            (src as Uint8Array).set(tempView);
+        srcByteOffset -= startPre;
+        dstByteOffset -= startPre;
+
+        // Make sure the byte length is aligned to 4 bytes
+        const originalByteLength = byteLength;
+
+        byteLength = (byteLength + startPre + 3) & ~3;
+
+        // Check if the backing buffer of src is large enough to cope with the additional bytes copied because of alignment
+        const backingBufferSize = src.buffer.byteLength - src.byteOffset;
+
+        if (backingBufferSize < byteLength) {
+            // Not enough place in the backing buffer for the aligned copy.
+            // Creates a new buffer and copy the source data to it.
+            // The buffer will have byteLength - originalByteLength zeros at the end.
+            const tmpBuffer = new Uint8Array(byteLength);
+            tmpBuffer.set(new Uint8Array(src.buffer, src.byteOffset + srcByteOffset, originalByteLength));
+            src = tmpBuffer;
             srcByteOffset = 0;
-            chunkStart = 0;
-            chunkEnd = alignedLength;
-            byteLength = alignedLength;
         }
 
-        // Chunk
-        const maxChunk = 1024 * 1024 * 15;
-        let offset = 0;
-        while (chunkEnd - (chunkStart + offset) > maxChunk) {
-            this._device.queue.writeBuffer(buffer, dstByteOffset + offset, src.buffer, chunkStart + offset, maxChunk);
-            offset += maxChunk;
-        }
-
-        this._device.queue.writeBuffer(buffer, dstByteOffset + offset, src.buffer, chunkStart + offset, byteLength - offset);
+        this.setRawData(buffer, dstByteOffset, src, srcByteOffset, byteLength);
     }
 
     private _getHalfFloatAsFloatRGBAArrayBuffer(dataLength: number, arrayBuffer: ArrayBuffer, destArray?: Float32Array): Float32Array {
         if (!destArray) {
             destArray = new Float32Array(dataLength);
+        } else {
+            dataLength = Math.min(dataLength, destArray.length);
         }
         const srcData = new Uint16Array(arrayBuffer);
         while (dataLength--) {
@@ -115,6 +123,7 @@ export class WebGPUBufferManager {
         return destArray;
     }
 
+    // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/promise-function-async
     public readDataFromBuffer(
         gpuBuffer: GPUBuffer,
         size: number,
@@ -131,6 +140,7 @@ export class WebGPUBufferManager {
         const floatFormat = type === Constants.TEXTURETYPE_FLOAT ? 2 : type === Constants.TEXTURETYPE_HALF_FLOAT ? 1 : 0;
         const engineId = this._engine.uniqueId;
         return new Promise((resolve, reject) => {
+            // eslint-disable-next-line github/no-then
             gpuBuffer.mapAsync(WebGPUConstants.MapMode.Read, offset, size).then(
                 () => {
                     const copyArrayBuffer = gpuBuffer.getMappedRange(offset, size);
@@ -161,7 +171,7 @@ export class WebGPUBufferManager {
                             switch (floatFormat) {
                                 case 0: // byte format
                                     data = new Uint8Array(data.buffer);
-                                    (data as Uint8Array).set(new Uint8Array(copyArrayBuffer));
+                                    (data as Uint8Array).set(new Uint8Array(copyArrayBuffer, 0, Math.min(data.byteLength, size)));
                                     break;
                                 case 1: // half float
                                     // TODO WEBGPU use computer shaders (or render pass) to make the conversion?
@@ -169,7 +179,7 @@ export class WebGPUBufferManager {
                                     break;
                                 case 2: // float
                                     data = new Float32Array(data.buffer);
-                                    (data as Float32Array).set(new Float32Array(copyArrayBuffer));
+                                    (data as Float32Array).set(new Float32Array(copyArrayBuffer, 0, data.byteLength / 4));
                                     break;
                             }
                         }
@@ -181,7 +191,7 @@ export class WebGPUBufferManager {
                             bytesPerRow *= 2;
                             bytesPerRowAligned *= 2;
                         }
-                        const data2 = new Uint8Array(data!.buffer);
+                        const data2 = new Uint8Array(data.buffer);
                         let offset = bytesPerRow,
                             offset2 = 0;
                         for (let y = 1; y < height; ++y) {
@@ -200,13 +210,14 @@ export class WebGPUBufferManager {
                     if (destroyBuffer) {
                         this.releaseBuffer(gpuBuffer);
                     }
-                    resolve(data!);
+                    resolve(data);
                 },
                 (reason) => {
                     if (this._engine.isDisposed || this._engine.uniqueId !== engineId) {
                         // The engine was disposed while waiting for the promise, or a context loss/restoration has occurred: don't reject
                         resolve(new Uint8Array());
                     } else {
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                         reject(reason);
                     }
                 }

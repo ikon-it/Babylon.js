@@ -6,7 +6,7 @@ import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObj
 import { Image } from "gui/2D/controls/image";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
 import { makeTargetsProxy } from "shared-ui-components/lines/targetsProxy";
@@ -14,7 +14,7 @@ import { makeTargetsProxy } from "shared-ui-components/lines/targetsProxy";
 import stretchFillIcon from "shared-ui-components/imgs/stretchFillIcon.svg";
 import imageLinkIcon from "shared-ui-components/imgs/imageLinkIcon.svg";
 import cropIcon from "shared-ui-components/imgs/cropIcon.svg";
-import cellIDIcon from "shared-ui-components/imgs/cellIDIcon.svg";
+import cellIdIcon from "shared-ui-components/imgs/cellIDIcon.svg";
 import autoResizeIcon from "shared-ui-components/imgs/autoResizeIcon.svg";
 import sizeIcon from "shared-ui-components/imgs/sizeIcon.svg";
 import animationSheetIcon from "shared-ui-components/imgs/animationSheetIcon.svg";
@@ -37,7 +37,7 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
         this.updateObservers([], props.images);
     }
 
-    shouldComponentUpdate(nextProps: IImagePropertyGridComponentProps) {
+    override shouldComponentUpdate(nextProps: IImagePropertyGridComponentProps) {
         this.updateObservers(this.props.images, nextProps.images);
         return true;
     }
@@ -45,7 +45,10 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
     updateObservers(oldImages: Image[], newImages: Image[]) {
         for (const image of newImages) {
             if (!oldImages.includes(image)) {
-                this._observers.set(image, image.onImageLoadedObservable.add(() => this.forceUpdate())!);
+                this._observers.set(
+                    image,
+                    image.onImageLoadedObservable.add(() => this.forceUpdate())
+                );
             }
         }
         for (const image of oldImages) {
@@ -56,7 +59,7 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
         }
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         this.updateObservers(this.props.images, []);
     }
 
@@ -75,11 +78,15 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
     getMaxCells() {
         let maxCells = Number.MAX_SAFE_INTEGER;
         for (const image of this.props.images) {
-            if (image.cellWidth === 0 || image.cellHeight === 0) continue;
+            if (image.cellWidth === 0 || image.cellHeight === 0) {
+                continue;
+            }
             const cols = Math.ceil(image.imageWidth / image.cellWidth);
             const rows = Math.ceil(image.imageHeight / image.cellHeight);
             const max = cols * rows - 1;
-            if (max < maxCells) maxCells = max;
+            if (max < maxCells) {
+                maxCells = max;
+            }
         }
         return maxCells;
     }
@@ -94,7 +101,7 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
         this.forceUpdate();
     }
 
-    render() {
+    override render() {
         const images = this.props.images;
         const image = images[0]; // for nine slice
 
@@ -184,7 +191,7 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
                 </div>
                 <div className="ge-divider">
                     <IconComponent icon={stretchFillIcon} label="Stretch" />
-                    <OptionsLineComponent label=" " options={stretchOptions} target={proxy} propertyName="stretch" onSelect={(value) => this.setState({ mode: value })} />
+                    <OptionsLine label=" " options={stretchOptions} target={proxy} propertyName="stretch" onSelect={(value) => this.setState({ mode: value })} />
                 </div>
                 {images.length === 1 && image.stretch === Image.STRETCH_NINE_PATCH && (
                     <>
@@ -264,7 +271,7 @@ export class ImagePropertyGridComponent extends React.Component<IImagePropertyGr
                         <div className="ge-divider double">
                             <FloatLineComponent
                                 iconLabel={"Cell Id"}
-                                icon={cellIDIcon}
+                                icon={cellIdIcon}
                                 lockObject={this.props.lockObject}
                                 label=""
                                 isInteger={true}

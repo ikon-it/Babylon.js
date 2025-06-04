@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3, SerializationHelper } from "core/Misc/decorators";
+import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3 } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
 
@@ -8,7 +9,6 @@ import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import type { IEffectCreationOptions } from "core/Materials/effect";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { MaterialFlags } from "core/Materials/materialFlags";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -21,7 +21,21 @@ import { RegisterClass } from "core/Misc/typeStore";
 import "./triplanar.fragment";
 import "./triplanar.vertex";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import { addClipPlaneUniforms, bindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import {
+    BindBonesParameters,
+    BindFogParameters,
+    BindLights,
+    BindLogDepth,
+    HandleFallbacksForShadows,
+    PrepareAttributesForBones,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForLights,
+    PrepareDefinesForMisc,
+    PrepareUniformsAndSamplersList,
+} from "core/Materials/materialHelper.functions";
 
 class TriPlanarMaterialDefines extends MaterialDefines {
     public DIFFUSEX = false;
@@ -54,6 +68,8 @@ class TriPlanarMaterialDefines extends MaterialDefines {
     public SKIPFINALCOLORCLAMP = false;
     public NONUNIFORMSCALING = false;
     public LOGARITHMICDEPTH = false;
+    public AREALIGHTSUPPORTED = true;
+    public AREALIGHTNOROUGHTNESS = true;
 
     constructor() {
         super();
@@ -121,20 +137,20 @@ export class TriPlanarMaterial extends PushMaterial {
         super(name, scene);
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1.0;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
     // Methods
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -191,16 +207,16 @@ export class TriPlanarMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
 
         // Lights
-        defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
+        defines._needNormals = PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
 
         // Values that need to be evaluated on every frame
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
+        PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, true);
+        PrepareDefinesForAttributes(mesh, defines, true, true);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -213,7 +229,7 @@ export class TriPlanarMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
+            HandleFallbacksForShadows(defines, fallbacks, this.maxSimultaneousLights);
 
             if (defines.NUM_BONE_INFLUENCERS > 0) {
                 fallbacks.addCPUSkinningFallback(0, mesh);
@@ -232,8 +248,8 @@ export class TriPlanarMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.ColorKind);
             }
 
-            MaterialHelper.PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
+            PrepareAttributesForInstances(attribs, defines);
 
             // Legacy browser patch
             const shaderName = "triplanar";
@@ -252,13 +268,23 @@ export class TriPlanarMaterial extends PushMaterial {
                 "mBones",
                 "tileSize",
             ];
-            const samplers = ["diffuseSamplerX", "diffuseSamplerY", "diffuseSamplerZ", "normalSamplerX", "normalSamplerY", "normalSamplerZ", "logarithmicDepthConstant"];
+            const samplers = [
+                "diffuseSamplerX",
+                "diffuseSamplerY",
+                "diffuseSamplerZ",
+                "normalSamplerX",
+                "normalSamplerY",
+                "normalSamplerZ",
+                "logarithmicDepthConstant",
+                "areaLightsLTC1Sampler",
+                "areaLightsLTC2Sampler",
+            ];
 
             const uniformBuffers: string[] = [];
 
-            addClipPlaneUniforms(uniforms);
+            AddClipPlaneUniforms(uniforms);
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -286,6 +312,16 @@ export class TriPlanarMaterial extends PushMaterial {
                 this._materialContext
             );
         }
+
+        // Check if Area Lights have LTC texture.
+        if (defines["AREALIGHTUSED"]) {
+            for (let index = 0; index < mesh.lightSources.length; index++) {
+                if (!mesh.lightSources[index]._isReady()) {
+                    return false;
+                }
+            }
+        }
+
         if (!subMesh.effect || !subMesh.effect.isReady()) {
             return false;
         }
@@ -297,7 +333,7 @@ export class TriPlanarMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <TriPlanarMaterialDefines>subMesh.materialDefines;
@@ -316,7 +352,7 @@ export class TriPlanarMaterial extends PushMaterial {
         this._activeEffect.setMatrix("viewProjection", scene.getTransformMatrix());
 
         // Bones
-        MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
+        BindBonesParameters(mesh, this._activeEffect);
 
         this._activeEffect.setFloat("tileSize", this.tileSize);
 
@@ -341,7 +377,7 @@ export class TriPlanarMaterial extends PushMaterial {
                 this._activeEffect.setTexture("normalSamplerZ", this.normalTextureZ);
             }
             // Clip plane
-            bindClipPlane(effect, this, scene);
+            BindClipPlane(effect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
@@ -350,7 +386,7 @@ export class TriPlanarMaterial extends PushMaterial {
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -363,7 +399,7 @@ export class TriPlanarMaterial extends PushMaterial {
         }
 
         if (scene.lightsEnabled && !this.disableLighting) {
-            MaterialHelper.BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
+            BindLights(scene, mesh, this._activeEffect, defines, this.maxSimultaneousLights);
         }
 
         // View
@@ -372,12 +408,12 @@ export class TriPlanarMaterial extends PushMaterial {
         }
 
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         const results = [];
 
         if (this.mixTexture && this.mixTexture.animations && this.mixTexture.animations.length > 0) {
@@ -387,7 +423,7 @@ export class TriPlanarMaterial extends PushMaterial {
         return results;
     }
 
-    public getActiveTextures(): BaseTexture[] {
+    public override getActiveTextures(): BaseTexture[] {
         const activeTextures = super.getActiveTextures();
 
         if (this._diffuseTextureX) {
@@ -417,7 +453,7 @@ export class TriPlanarMaterial extends PushMaterial {
         return activeTextures;
     }
 
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -448,7 +484,7 @@ export class TriPlanarMaterial extends PushMaterial {
         return false;
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         if (this.mixTexture) {
             this.mixTexture.dispose();
         }
@@ -456,22 +492,22 @@ export class TriPlanarMaterial extends PushMaterial {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): TriPlanarMaterial {
+    public override clone(name: string): TriPlanarMaterial {
         return SerializationHelper.Clone(() => new TriPlanarMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.TriPlanarMaterial";
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "TriPlanarMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): TriPlanarMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): TriPlanarMaterial {
         return SerializationHelper.Parse(() => new TriPlanarMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

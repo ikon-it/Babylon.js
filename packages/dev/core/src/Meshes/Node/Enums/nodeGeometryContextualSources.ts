@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 /**
  * Defines the kind of contextual sources for node geometry
  */
@@ -36,4 +37,8 @@ export enum NodeGeometryContextualSources {
     LoopID = 0x000f,
     /** InstanceID */
     InstanceID = 0x0010,
+    /** LatticeID */
+    LatticeID = 0x0011,
+    /** LatticeControl */
+    LatticeControl = 0x0012,
 }

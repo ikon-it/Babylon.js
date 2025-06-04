@@ -5,14 +5,15 @@ import type { PostProcessOptions } from "./postProcess";
 import { PostProcess } from "./postProcess";
 import { Constants } from "../Engines/constants";
 import { GeometryBufferRenderer } from "../Rendering/geometryBufferRenderer";
-import { serialize, SerializationHelper } from "../Misc/decorators";
+import { serialize } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 import type { PrePassRenderer } from "../Rendering/prePassRenderer";
 import { ScreenSpaceReflectionsConfiguration } from "../Rendering/screenSpaceReflectionsConfiguration";
 
 import "../Shaders/screenSpaceReflection.fragment";
 import { RegisterClass } from "../Misc/typeStore";
 
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Scene } from "../scene";
 import { Logger } from "core/Misc/logger";
 
@@ -74,7 +75,7 @@ export class ScreenSpaceReflectionPostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "ScreenSpaceReflectionPostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "ScreenSpaceReflectionPostProcess";
     }
 
@@ -97,9 +98,9 @@ export class ScreenSpaceReflectionPostProcess extends PostProcess {
         options: number | PostProcessOptions,
         camera: Nullable<Camera>,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         blockCompilation = false,
         forceGeometryBuffer = false
     ) {
@@ -284,7 +285,7 @@ export class ScreenSpaceReflectionPostProcess extends PostProcess {
     /**
      * @internal
      */
-    public static _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
+    public static override _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
         return SerializationHelper.Parse(
             () => {
                 return new ScreenSpaceReflectionPostProcess(

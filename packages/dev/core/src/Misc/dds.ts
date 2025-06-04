@@ -1,17 +1,15 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { Scalar } from "../Maths/math.scalar";
-import { SphericalPolynomial } from "../Maths/sphericalPolynomial";
+import { Clamp } from "../Maths/math.scalar.functions";
+import type { SphericalPolynomial } from "../Maths/sphericalPolynomial";
 import { Constants } from "../Engines/constants";
-import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
+import type { InternalTexture } from "../Materials/Textures/internalTexture";
 import type { Nullable } from "../types";
 import { Logger } from "../Misc/logger";
 import { CubeMapToSphericalPolynomialTools } from "../Misc/HighDynamicRange/cubemapToSphericalPolynomial";
-import type { Scene } from "../scene";
-import { BaseTexture } from "../Materials/Textures/baseTexture";
-import { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import { FromHalfFloat, ToHalfFloat } from "./textureTools";
 
-import "../Engines/Extensions/engine.cubeTexture";
+import "../Engines/AbstractEngine/abstractEngine.cubeTexture";
 
 // Based on demo done by Brandon Jones - http://media.tojicode.com/webgl-samples/dds.html
 // All values and structures referenced from:
@@ -137,7 +135,7 @@ export interface DDSInfo {
      */
     dxgiFormat: number;
     /**
-     * Texture type eg. Engine.TEXTURETYPE_UNSIGNED_INT, Engine.TEXTURETYPE_FLOAT
+     * Texture type eg. Engine.TEXTURETYPE_UNSIGNED_BYTE, Engine.TEXTURETYPE_FLOAT
      */
     textureType: number;
     /**
@@ -171,7 +169,7 @@ export class DDSTools {
 
         const fourCC = header[off_pfFourCC];
         const dxgiFormat = fourCC === FOURCC_DX10 ? extendedHeader[off_dxgiFormat] : 0;
-        let textureType = Constants.TEXTURETYPE_UNSIGNED_INT;
+        let textureType = Constants.TEXTURETYPE_UNSIGNED_BYTE;
 
         switch (fourCC) {
             case FOURCC_D3DFMT_R16G16B16A16F:
@@ -298,13 +296,13 @@ export class DDSTools {
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const srcPos = (x + y * width) * 4;
-                destArray[index] = Scalar.Clamp(srcData[srcPos]) * 255;
-                destArray[index + 1] = Scalar.Clamp(srcData[srcPos + 1]) * 255;
-                destArray[index + 2] = Scalar.Clamp(srcData[srcPos + 2]) * 255;
+                destArray[index] = Clamp(srcData[srcPos]) * 255;
+                destArray[index + 1] = Clamp(srcData[srcPos + 1]) * 255;
+                destArray[index + 2] = Clamp(srcData[srcPos + 2]) * 255;
                 if (DDSTools.StoreLODInAlphaChannel) {
                     destArray[index + 3] = lod;
                 } else {
-                    destArray[index + 3] = Scalar.Clamp(srcData[srcPos + 3]) * 255;
+                    destArray[index + 3] = Clamp(srcData[srcPos + 3]) * 255;
                 }
                 index += 4;
             }
@@ -320,13 +318,13 @@ export class DDSTools {
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const srcPos = (x + y * width) * 4;
-                destArray[index] = Scalar.Clamp(FromHalfFloat(srcData[srcPos])) * 255;
-                destArray[index + 1] = Scalar.Clamp(FromHalfFloat(srcData[srcPos + 1])) * 255;
-                destArray[index + 2] = Scalar.Clamp(FromHalfFloat(srcData[srcPos + 2])) * 255;
+                destArray[index] = Clamp(FromHalfFloat(srcData[srcPos])) * 255;
+                destArray[index + 1] = Clamp(FromHalfFloat(srcData[srcPos + 1])) * 255;
+                destArray[index + 2] = Clamp(FromHalfFloat(srcData[srcPos + 2])) * 255;
                 if (DDSTools.StoreLODInAlphaChannel) {
                     destArray[index + 3] = lod;
                 } else {
-                    destArray[index + 3] = Scalar.Clamp(FromHalfFloat(srcData[srcPos + 3])) * 255;
+                    destArray[index + 3] = Clamp(FromHalfFloat(srcData[srcPos + 3])) * 255;
                 }
                 index += 4;
             }
@@ -419,7 +417,7 @@ export class DDSTools {
      * @internal
      */
     public static UploadDDSLevels(
-        engine: ThinEngine,
+        engine: AbstractEngine,
         texture: InternalTexture,
         data: ArrayBufferView,
         info: DDSInfo,
@@ -572,7 +570,7 @@ export class DDSTools {
                                 }
                             }
 
-                            texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                            texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
                         } else {
                             const floatAvailable = caps.textureFloat && ((destTypeMustBeFilterable && caps.textureFloatLinearFiltering) || !destTypeMustBeFilterable);
                             const halfFloatAvailable = caps.textureHalfFloat && ((destTypeMustBeFilterable && caps.textureHalfFloatLinearFiltering) || !destTypeMustBeFilterable);
@@ -642,7 +640,7 @@ export class DDSTools {
                             engine._uploadDataToTextureDirectly(texture, floatArray, face, i);
                         }
                     } else if (info.isRGB) {
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
                         if (bpp === 24) {
                             texture.format = Constants.TEXTUREFORMAT_RGB;
                             dataLength = width * height * 3;
@@ -663,14 +661,14 @@ export class DDSTools {
 
                         byteArray = DDSTools._GetLuminanceArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer);
                         texture.format = Constants.TEXTUREFORMAT_LUMINANCE;
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
 
                         engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
                     } else {
                         dataLength = (((Math.max(4, width) / 4) * Math.max(4, height)) / 4) * blockBytes;
                         byteArray = new Uint8Array(data.buffer, data.byteOffset + dataOffset, dataLength);
 
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
                         engine._uploadCompressedDataToTextureDirectly(texture, internalCompressedFormat, width, height, byteArray, face, i);
                     }
                 }
@@ -705,149 +703,3 @@ export class DDSTools {
         }
     }
 }
-
-declare module "../Engines/thinEngine" {
-    export interface ThinEngine {
-        /**
-         * Create a cube texture from prefiltered data (ie. the mipmaps contain ready to use data for PBR reflection)
-         * @param rootUrl defines the url where the file to load is located
-         * @param scene defines the current scene
-         * @param lodScale defines scale to apply to the mip map selection
-         * @param lodOffset defines offset to apply to the mip map selection
-         * @param onLoad defines an optional callback raised when the texture is loaded
-         * @param onError defines an optional callback raised if there is an issue to load the texture
-         * @param format defines the format of the data
-         * @param forcedExtension defines the extension to use to pick the right loader
-         * @param createPolynomials defines wheter or not to create polynomails harmonics for the texture
-         * @returns the cube texture as an InternalTexture
-         */
-        createPrefilteredCubeTexture(
-            rootUrl: string,
-            scene: Nullable<Scene>,
-            lodScale: number,
-            lodOffset: number,
-            onLoad?: Nullable<(internalTexture: Nullable<InternalTexture>) => void>,
-            onError?: Nullable<(message?: string, exception?: any) => void>,
-            format?: number,
-            forcedExtension?: any,
-            createPolynomials?: boolean
-        ): InternalTexture;
-    }
-}
-
-/**
- * Create a cube texture from prefiltered data (ie. the mipmaps contain ready to use data for PBR reflection)
- * @param rootUrl defines the url where the file to load is located
- * @param scene defines the current scene
- * @param lodScale defines scale to apply to the mip map selection
- * @param lodOffset defines offset to apply to the mip map selection
- * @param onLoad defines an optional callback raised when the texture is loaded
- * @param onError defines an optional callback raised if there is an issue to load the texture
- * @param format defines the format of the data
- * @param forcedExtension defines the extension to use to pick the right loader
- * @param createPolynomials defines wheter or not to create polynomails harmonics for the texture
- * @returns the cube texture as an InternalTexture
- */
-ThinEngine.prototype.createPrefilteredCubeTexture = function (
-    rootUrl: string,
-    scene: Nullable<Scene>,
-    lodScale: number,
-    lodOffset: number,
-    onLoad: Nullable<(internalTexture: Nullable<InternalTexture>) => void> = null,
-    onError: Nullable<(message?: string, exception?: any) => void> = null,
-    format?: number,
-    forcedExtension: any = null,
-    createPolynomials: boolean = true
-): InternalTexture {
-    const callback = (loadData: any) => {
-        if (!loadData) {
-            if (onLoad) {
-                onLoad(null);
-            }
-            return;
-        }
-
-        const texture = loadData.texture as InternalTexture;
-        if (!createPolynomials) {
-            texture._sphericalPolynomial = new SphericalPolynomial();
-        } else if (loadData.info.sphericalPolynomial) {
-            texture._sphericalPolynomial = loadData.info.sphericalPolynomial;
-        }
-        texture._source = InternalTextureSource.CubePrefiltered;
-
-        if (this.getCaps().textureLOD) {
-            // Do not add extra process if texture lod is supported.
-            if (onLoad) {
-                onLoad(texture);
-            }
-            return;
-        }
-
-        const mipSlices = 3;
-
-        const gl = this._gl;
-        const width = loadData.width;
-        if (!width) {
-            return;
-        }
-
-        const textures: BaseTexture[] = [];
-        for (let i = 0; i < mipSlices; i++) {
-            //compute LOD from even spacing in smoothness (matching shader calculation)
-            const smoothness = i / (mipSlices - 1);
-            const roughness = 1 - smoothness;
-
-            const minLODIndex = lodOffset; // roughness = 0
-            const maxLODIndex = Scalar.Log2(width) * lodScale + lodOffset; // roughness = 1
-
-            const lodIndex = minLODIndex + (maxLODIndex - minLODIndex) * roughness;
-            const mipmapIndex = Math.round(Math.min(Math.max(lodIndex, 0), maxLODIndex));
-
-            const glTextureFromLod = new InternalTexture(this, InternalTextureSource.Temp);
-            glTextureFromLod.type = texture.type;
-            glTextureFromLod.format = texture.format;
-            glTextureFromLod.width = Math.pow(2, Math.max(Scalar.Log2(width) - mipmapIndex, 0));
-            glTextureFromLod.height = glTextureFromLod.width;
-            glTextureFromLod.isCube = true;
-            glTextureFromLod._cachedWrapU = Constants.TEXTURE_CLAMP_ADDRESSMODE;
-            glTextureFromLod._cachedWrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE;
-            this._bindTextureDirectly(gl.TEXTURE_CUBE_MAP, glTextureFromLod, true);
-
-            glTextureFromLod.samplingMode = Constants.TEXTURE_LINEAR_LINEAR;
-            gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-            if (loadData.isDDS) {
-                const info: DDSInfo = loadData.info;
-                const data: any = loadData.data;
-                this._unpackFlipY(info.isCompressed);
-
-                DDSTools.UploadDDSLevels(this, glTextureFromLod, data, info, true, 6, mipmapIndex);
-            } else {
-                Logger.Warn("DDS is the only prefiltered cube map supported so far.");
-            }
-
-            this._bindTextureDirectly(gl.TEXTURE_CUBE_MAP, null);
-
-            // Wrap in a base texture for easy binding.
-            const lodTexture = new BaseTexture(scene);
-            lodTexture._isCube = true;
-            lodTexture._texture = glTextureFromLod;
-
-            glTextureFromLod.isReady = true;
-            textures.push(lodTexture);
-        }
-
-        texture._lodTextureHigh = textures[2];
-        texture._lodTextureMid = textures[1];
-        texture._lodTextureLow = textures[0];
-
-        if (onLoad) {
-            onLoad(texture);
-        }
-    };
-
-    return this.createCubeTexture(rootUrl, scene, null, false, callback, onError, format, forcedExtension, createPolynomials, lodScale, lodOffset);
-};

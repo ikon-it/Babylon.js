@@ -12,14 +12,15 @@ import { Color4 } from "core/Maths/math.color";
 import { Constants } from "core/Engines/constants";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { RegisterClass } from "core/Misc/typeStore";
-import { SerializationHelper, serialize } from "core/Misc/decorators";
+import { serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import { VertexBuffer } from "core/Buffers/buffer";
 
 import "./shaders/mrdlInnerquad.fragment";
 import "./shaders/mrdlInnerquad.vertex";
+import { HandleFallbacksForShadows, PrepareAttributesForInstances, PrepareDefinesForAttributes, PrepareUniformsAndSamplersList } from "core/Materials/materialHelper.functions";
 
 class MRDLInnerquadMaterialDefines extends MaterialDefines {
     constructor() {
@@ -75,20 +76,20 @@ export class MRDLInnerquadMaterial extends PushMaterial {
         this.backFaceCulling = false;
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return true;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
     // Methods
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -111,7 +112,7 @@ export class MRDLInnerquadMaterial extends PushMaterial {
         const engine = scene.getEngine();
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, false);
+        PrepareDefinesForAttributes(mesh, defines, true, false);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -125,7 +126,7 @@ export class MRDLInnerquadMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks);
+            HandleFallbacksForShadows(defines, fallbacks);
 
             defines.IMAGEPROCESSINGPOSTPROCESS = scene.imageProcessingConfiguration.applyByPostProcess;
 
@@ -152,7 +153,7 @@ export class MRDLInnerquadMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.TangentKind);
             }
 
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForInstances(attribs, defines);
 
             // Legacy browser patch
             const shaderName = "mrdlInnerquad";
@@ -177,7 +178,7 @@ export class MRDLInnerquadMaterial extends PushMaterial {
             const samplers: string[] = [];
             const uniformBuffers: string[] = [];
 
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -214,7 +215,7 @@ export class MRDLInnerquadMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <MRDLInnerquadMaterialDefines>subMesh.materialDefines;
@@ -254,30 +255,30 @@ export class MRDLInnerquadMaterial extends PushMaterial {
      * Get the list of animatables in the material.
      * @returns the list of animatables object used in the material
      */
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         return [];
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): MRDLInnerquadMaterial {
+    public override clone(name: string): MRDLInnerquadMaterial {
         return SerializationHelper.Clone(() => new MRDLInnerquadMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): unknown {
+    public override serialize(): unknown {
         const serializationObject = SerializationHelper.Serialize(this);
         serializationObject.customType = "BABYLON.MRDLInnerquadMaterial";
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "MRDLInnerquadMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): MRDLInnerquadMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): MRDLInnerquadMaterial {
         return SerializationHelper.Parse(() => new MRDLInnerquadMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

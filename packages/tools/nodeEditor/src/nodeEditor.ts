@@ -1,9 +1,7 @@
 import * as React from "react";
-import * as ReactDOM from "react-dom";
 import { GlobalState } from "./globalState";
 import { GraphEditor } from "./graphEditor";
 import type { NodeMaterial } from "core/Materials/Node/nodeMaterial";
-import { Popup } from "./sharedComponents/popup";
 import { SerializationTools } from "./serializationTools";
 import type { Observable } from "core/Misc/observable";
 import { PreviewType } from "./components/preview/previewType";
@@ -13,6 +11,8 @@ import { RegisterToDisplayManagers } from "./graphSystem/registerToDisplayLedger
 import { RegisterToPropertyTabManagers } from "./graphSystem/registerToPropertyLedger";
 import { RegisterTypeLedger } from "./graphSystem/registerToTypeLedger";
 import type { Color4 } from "core/Maths/math.color";
+import { CreatePopup } from "shared-ui-components/popupHelper";
+import { createRoot } from "react-dom/client";
 
 /**
  * Interface used to specify creation options for the node editor
@@ -30,6 +30,7 @@ export interface INodeEditorOptions {
  */
 export class NodeEditor {
     private static _CurrentState: GlobalState;
+    private static _PopupWindow: Window | null;
 
     /**
      * Show the node editor
@@ -42,16 +43,19 @@ export class NodeEditor {
         RegisterTypeLedger();
 
         if (this._CurrentState) {
-            const popupWindow = (Popup as any)["node-editor"];
-            if (popupWindow) {
-                popupWindow.close();
+            if (this._PopupWindow) {
+                this._PopupWindow.close();
             }
         }
 
         let hostElement = options.hostElement;
 
         if (!hostElement) {
-            hostElement = Popup.CreatePopup("BABYLON.JS NODE EDITOR", "node-editor", 1000, 800)!;
+            hostElement = CreatePopup("BABYLON.JS NODE EDITOR", {
+                onWindowCreateCallback: (w) => (this._PopupWindow = w),
+                width: 1000,
+                height: 800,
+            })!;
         }
 
         const globalState = new GlobalState();
@@ -60,7 +64,7 @@ export class NodeEditor {
         globalState.hostElement = hostElement;
         globalState.hostDocument = hostElement.ownerDocument!;
         globalState.customSave = options.customSave;
-        globalState.hostWindow = hostElement.ownerDocument!.defaultView!;
+        globalState.hostWindow = hostElement.ownerDocument.defaultView!;
         globalState.stateManager.hostDocument = globalState.hostDocument;
         if (options.backgroundColor) {
             globalState.backgroundColor = options.backgroundColor;
@@ -70,7 +74,8 @@ export class NodeEditor {
             globalState: globalState,
         });
 
-        ReactDOM.render(graphEditor, hostElement);
+        const root = createRoot(hostElement);
+        root.render(graphEditor);
 
         if (options.customLoadObservable) {
             options.customLoadObservable.add((data) => {
@@ -88,17 +93,15 @@ export class NodeEditor {
         });
 
         // Close the popup window when the page is refreshed or scene is disposed
-        const popupWindow = (Popup as any)["node-editor"];
-        if (globalState.nodeMaterial && popupWindow) {
+        if (globalState.nodeMaterial && this._PopupWindow) {
             globalState.nodeMaterial.getScene().onDisposeObservable.addOnce(() => {
-                if (popupWindow) {
-                    popupWindow.close();
+                if (this._PopupWindow) {
+                    this._PopupWindow.close();
                 }
             });
             window.onbeforeunload = () => {
-                const popupWindow = (Popup as any)["node-editor"];
-                if (popupWindow) {
-                    popupWindow.close();
+                if (this._PopupWindow) {
+                    this._PopupWindow.close();
                 }
             };
         }

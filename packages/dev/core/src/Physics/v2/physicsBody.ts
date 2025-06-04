@@ -1,4 +1,5 @@
-import type { IBasePhysicsCollisionEvent, IPhysicsCollisionEvent, IPhysicsEnginePluginV2, PhysicsMassProperties, PhysicsMotionType } from "./IPhysicsEnginePlugin";
+import type { IBasePhysicsCollisionEvent, IPhysicsCollisionEvent, IPhysicsEnginePluginV2, PhysicsMassProperties } from "./IPhysicsEnginePlugin";
+import { PhysicsMotionType, PhysicsPrestepType } from "./IPhysicsEnginePlugin";
 import type { PhysicsShape } from "./physicsShape";
 import { Vector3, Quaternion, TmpVectors } from "../../Maths/math.vector";
 import type { Scene } from "../../scene";
@@ -12,6 +13,7 @@ import type { Node } from "../../node";
 import type { Mesh } from "core/Meshes/mesh";
 import type { AbstractMesh } from "../../Meshes/abstractMesh";
 import type { TransformNode } from "../../Meshes/transformNode";
+import type { BoundingBox } from "core/Culling/boundingBox";
 
 /**
  * PhysicsBody is useful for creating a physics body that can be used in a physics engine. It allows
@@ -47,11 +49,23 @@ export class PhysicsBody {
      * The transform node associated with this Physics Body
      */
     transformNode: TransformNode;
+
     /**
      * Disable pre-step that consists in updating Physics Body from Transform Node Translation/Orientation.
      * True by default for maximum performance.
      */
-    disablePreStep: boolean = true;
+    public get disablePreStep(): boolean {
+        return this._prestepType == PhysicsPrestepType.DISABLED;
+    }
+
+    public set disablePreStep(value: boolean) {
+        this._prestepType = value ? PhysicsPrestepType.DISABLED : PhysicsPrestepType.TELEPORT;
+    }
+
+    /**
+     * Disable sync from physics to transformNode. This value is set to true at body creation or at motionType setting when the body is not dynamic.
+     */
+    disableSync: boolean = false;
 
     /**
      * Physics engine will try to make this body sleeping and not active
@@ -66,6 +80,7 @@ export class PhysicsBody {
 
     private _motionType: PhysicsMotionType;
 
+    private _prestepType: PhysicsPrestepType = PhysicsPrestepType.DISABLED;
     /**
      * Constructs a new physics body for the given node.
      * @param transformNode - The Transform Node to construct the physics body for. For better performance, it is advised that this node does not have a parent.
@@ -97,7 +112,7 @@ export class PhysicsBody {
             throw new Error("No Physics Plugin available.");
         }
 
-        this._physicsPlugin = physicsPlugin as IPhysicsEnginePluginV2;
+        this._physicsPlugin = physicsPlugin;
         if (!transformNode.rotationQuaternion) {
             transformNode.rotationQuaternion = Quaternion.FromEulerAngles(transformNode.rotation.x, transformNode.rotation.y, transformNode.rotation.z);
         }
@@ -105,6 +120,9 @@ export class PhysicsBody {
         this.startAsleep = startsAsleep;
 
         this._motionType = motionType;
+
+        // only dynamic and animated body needs sync from physics to transformNode
+        this.disableSync = motionType == PhysicsMotionType.STATIC;
 
         // instances?
         const m = transformNode as Mesh;
@@ -201,6 +219,14 @@ export class PhysicsBody {
     }
 
     /**
+     * Returns the bounding box of the physics body.
+     * @returns The bounding box of the physics body.
+     */
+    public getBoundingBox(): BoundingBox {
+        return this._physicsPlugin.getBodyBoundingBox(this);
+    }
+
+    /**
      * Sets the event mask for the physics engine.
      *
      * @param eventMask - A bitmask that determines which events will be sent to the physics engine.
@@ -233,6 +259,7 @@ export class PhysicsBody {
      * @param instanceIndex - If this body is instanced, the index of the instance to set the motion type for.
      */
     public setMotionType(motionType: PhysicsMotionType, instanceIndex?: number) {
+        this.disableSync = motionType == PhysicsMotionType.STATIC;
         this._physicsPlugin.setMotionType(this, motionType, instanceIndex);
     }
 
@@ -243,6 +270,22 @@ export class PhysicsBody {
      */
     public getMotionType(instanceIndex?: number): PhysicsMotionType {
         return this._physicsPlugin.getMotionType(this, instanceIndex);
+    }
+
+    /**
+     * Set the prestep type of the body
+     * @param prestepType prestep type provided by PhysicsPrestepType
+     */
+    public setPrestepType(prestepType: PhysicsPrestepType): void {
+        this._prestepType = prestepType;
+    }
+
+    /**
+     * Get the current prestep type of the body
+     * @returns the type of prestep associated with the body and its instance index
+     */
+    public getPrestepType(): PhysicsPrestepType {
+        return this._prestepType;
     }
 
     /**
@@ -433,6 +476,15 @@ export class PhysicsBody {
     }
 
     /**
+     * Add torque to a physics body
+     * @param angularImpulse The angular impulse vector.
+     * @param instanceIndex For a instanced body, the instance to where the impulse should be applied. If not specified, the impulse is applied to all instances.
+     */
+    public applyAngularImpulse(angularImpulse: Vector3, instanceIndex?: number): void {
+        this._physicsPlugin.applyAngularImpulse(this, angularImpulse, instanceIndex);
+    }
+
+    /**
      * Applies a force to the physics object.
      *
      * @param force The force vector.
@@ -453,7 +505,7 @@ export class PhysicsBody {
      *
      * This method is useful for retrieving the geometry of the body from the physics plugin, which can be used for various physics calculations.
      */
-    public getGeometry(): {} {
+    public getGeometry(): object {
         return this._physicsPlugin.getBodyGeometry(this);
     }
 

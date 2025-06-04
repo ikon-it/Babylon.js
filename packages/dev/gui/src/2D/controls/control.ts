@@ -18,20 +18,23 @@ import { Measure } from "../measure";
 import type { Style } from "../style";
 import { Matrix2D, Vector2WithInfo } from "../math2D";
 import { GetClass, RegisterClass } from "core/Misc/typeStore";
-import { SerializationHelper, serialize } from "core/Misc/decorators";
+import { serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { ICanvasGradient, ICanvasRenderingContext } from "core/Engines/ICanvas";
 import { EngineStore } from "core/Engines/engineStore";
 import type { IAccessibilityTag } from "core/IAccessibilityTag";
-import type { IPointerEvent } from "core/Events/deviceInputEvents";
+import type { IKeyboardEvent, IPointerEvent } from "core/Events/deviceInputEvents";
 import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { Animation } from "core/Animations/animation";
 import type { BaseGradient } from "./gradient/BaseGradient";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
+import type { IFocusableControl } from "./focusableControl";
 
 /**
  * Root class used for all 2D controls
  * @see https://doc.babylonjs.com/features/featuresDeepDive/gui/gui#controls
  */
-export class Control implements IAnimatable {
+export class Control implements IAnimatable, IFocusableControl {
     /**
      * Gets or sets a boolean indicating if alpha must be an inherited value (false by default)
      */
@@ -120,6 +123,9 @@ export class Control implements IAnimatable {
     private _gradient: Nullable<BaseGradient> = null;
     /** @internal */
     protected _rebuildLayout = false;
+
+    /** @internal */
+    protected _urlRewriter?: (url: string) => string;
 
     /**
      * Observable that fires when the control's enabled state changes
@@ -359,6 +365,11 @@ export class Control implements IAnimatable {
      * An event triggered when a control is clicked on
      */
     public onPointerClickObservable = new Observable<Vector2WithInfo>();
+
+    /**
+     * An event triggered when a control receives an ENTER key down event
+     */
+    public onEnterPressedObservable = new Observable<Control>();
 
     /**
      * An event triggered when pointer enters the control
@@ -1245,7 +1256,9 @@ export class Control implements IAnimatable {
                 }
             }
             if ((control as Container).children !== undefined) {
-                (control as Container).children.forEach(recursivelyFirePointerOut);
+                for (const child of (control as Container).children) {
+                    recursivelyFirePointerOut(child);
+                }
             }
         };
         recursivelyFirePointerOut(this);
@@ -1298,6 +1311,96 @@ export class Control implements IAnimatable {
      * Array of animations
      */
     animations: Nullable<Animation[]> = null;
+
+    // Focus functionality
+
+    protected _focusedColor: Nullable<string> = null;
+    /**
+     * Border color when control is focused
+     * When not defined the ADT color will be used. If no ADT color is defined, focused state won't have any border
+     */
+    public get focusedColor(): Nullable<string> {
+        return this._focusedColor;
+    }
+    public set focusedColor(value: Nullable<string>) {
+        this._focusedColor = value;
+    }
+    /**
+     * The tab index of this control. -1 indicates this control is not part of the tab navigation.
+     * A positive value indicates the order of the control in the tab navigation.
+     * A value of 0 indicated the control will be focused after all controls with a positive index.
+     * More than one control can have the same tab index and the navigation would then go through all controls with the same value in an order defined by the layout or the hierarchy.
+     * The value can be changed at any time.
+     * @see https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex
+     */
+    public tabIndex: number = -1;
+    protected _isFocused = false;
+    protected _unfocusedColor: Nullable<string> = null;
+
+    /** Observable raised when the control gets the focus */
+    public onFocusObservable = new Observable<Control>();
+    /** Observable raised when the control loses the focus */
+    public onBlurObservable = new Observable<Control>();
+    /** Observable raised when a key event was processed */
+    public onKeyboardEventProcessedObservable = new Observable<IKeyboardEvent>();
+
+    /** @internal */
+    public onBlur(): void {
+        if (this._isFocused) {
+            this._isFocused = false;
+            if (this.focusedColor && this._unfocusedColor != null) {
+                // Set color back to saved unfocused color
+                this.color = this._unfocusedColor;
+            }
+            this.onBlurObservable.notifyObservers(this);
+        }
+    }
+
+    /** @internal */
+    public onFocus(): void {
+        this._isFocused = true;
+
+        if (this.focusedColor) {
+            // Save the unfocused color
+            this._unfocusedColor = this.color;
+            this.color = this.focusedColor;
+        }
+        this.onFocusObservable.notifyObservers(this);
+    }
+
+    /**
+     * Function called to get the list of controls that should not steal the focus from this control
+     * @returns an array of controls
+     */
+    public keepsFocusWith(): Nullable<Control[]> {
+        return null;
+    }
+
+    /**
+     * Function to focus a button programmatically
+     */
+    public focus() {
+        this._host.moveFocusToControl(this);
+    }
+
+    /**
+     * Function to unfocus a button programmatically
+     */
+    public blur() {
+        this._host.focusedControl = null;
+    }
+
+    /**
+     * Handles the keyboard event
+     * @param evt Defines the KeyboardEvent
+     */
+    public processKeyboard(evt: IKeyboardEvent): void {
+        // if enter, trigger the new observable
+        if (evt.key === "Enter") {
+            this.onEnterPressedObservable.notifyObservers(this);
+        }
+        this.onKeyboardEventProcessedObservable.notifyObservers(evt, -1, this);
+    }
 
     // Functions
 
@@ -2243,7 +2346,7 @@ export class Control implements IAnimatable {
      * @internal
      */
     public _onPointerOut(target: Control, pi: Nullable<PointerInfoBase>, force = false): void {
-        if (!force && (!this._isEnabled || target === this)) {
+        if (!force && !this._isEnabled) {
             return;
         }
         this._enterCount = 0;
@@ -2266,6 +2369,10 @@ export class Control implements IAnimatable {
         // Prevent pointerout to lose control context.
         // Event redundancy is checked inside the function.
         this._onPointerEnter(this, pi);
+
+        if (this.tabIndex !== -1) {
+            this.host.focusedControl = this;
+        }
 
         if (this._downCount !== 0) {
             return false;
@@ -2301,7 +2408,9 @@ export class Control implements IAnimatable {
 
         let canNotifyClick: boolean = notifyClick;
         if (notifyClick && (this._enterCount > 0 || this._enterCount === -1)) {
-            canNotifyClick = this.onPointerClickObservable.notifyObservers(new Vector2WithInfo(coordinates, buttonIndex), -1, target, this, pi);
+            if (!this._host.usePointerTapForClickEvent) {
+                canNotifyClick = this.onPointerClickObservable.notifyObservers(new Vector2WithInfo(coordinates, buttonIndex), -1, target, this, pi);
+            }
         }
         const canNotify: boolean = this.onPointerUpObservable.notifyObservers(new Vector2WithInfo(coordinates, buttonIndex), -1, target, this, pi);
 
@@ -2312,6 +2421,31 @@ export class Control implements IAnimatable {
         if (pi && this.uniqueId !== this._host.rootContainer.uniqueId) {
             this._host._capturedPointerIds.delete((pi.event as IPointerEvent).pointerId);
         }
+
+        if (this._host.usePointerTapForClickEvent && this.isPointerBlocker) {
+            this._host._shouldBlockPointer = false;
+        }
+    }
+
+    public _onPointerPick(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, notifyClick: boolean, pi: Nullable<PointerInfoBase>): boolean {
+        if (!this._host.usePointerTapForClickEvent) {
+            return false;
+        }
+
+        let canNotifyClick: boolean = notifyClick;
+        if (notifyClick && (this._enterCount > 0 || this._enterCount === -1)) {
+            canNotifyClick = this.onPointerClickObservable.notifyObservers(new Vector2WithInfo(coordinates, buttonIndex), -1, target, this, pi);
+        }
+        const canNotify: boolean = this.onPointerUpObservable.notifyObservers(new Vector2WithInfo(coordinates, buttonIndex), -1, target, this, pi);
+
+        if (canNotify && this.parent != null && !this.isPointerBlocker) {
+            this.parent._onPointerPick(target, coordinates, pointerId, buttonIndex, canNotifyClick, pi);
+        }
+
+        if (this._host.usePointerTapForClickEvent && this.isPointerBlocker) {
+            this._host._shouldBlockPointer = true;
+        }
+        return true;
     }
 
     /**
@@ -2322,7 +2456,7 @@ export class Control implements IAnimatable {
             this._onPointerUp(this, Vector2.Zero(), pointerId, 0, true);
         } else {
             for (const key in this._downPointerIds) {
-                this._onPointerUp(this, Vector2.Zero(), +key as number, 0, true);
+                this._onPointerUp(this, Vector2.Zero(), +key, 0, true);
             }
         }
     }
@@ -2375,28 +2509,30 @@ export class Control implements IAnimatable {
 
             this._host._lastControlOver[pointerId] = this;
             return true;
-        }
-
-        if (type === PointerEventTypes.POINTERDOWN) {
+        } else if (type === PointerEventTypes.POINTERDOWN) {
             this._onPointerDown(this, this._dummyVector2, pointerId, buttonIndex, pi);
             this._host._registerLastControlDown(this, pointerId);
             this._host._lastPickedControl = this;
             return true;
-        }
-
-        if (type === PointerEventTypes.POINTERUP) {
+        } else if (type === PointerEventTypes.POINTERUP) {
             if (this._host._lastControlDown[pointerId]) {
                 this._host._lastControlDown[pointerId]._onPointerUp(this, this._dummyVector2, pointerId, buttonIndex, true, pi);
             }
-            delete this._host._lastControlDown[pointerId];
+            if (!this._host.usePointerTapForClickEvent) {
+                delete this._host._lastControlDown[pointerId];
+            }
             return true;
-        }
-
-        if (type === PointerEventTypes.POINTERWHEEL) {
+        } else if (type === PointerEventTypes.POINTERWHEEL) {
             if (this._host._lastControlOver[pointerId]) {
                 this._host._lastControlOver[pointerId]._onWheelScroll(deltaX, deltaY);
                 return true;
             }
+        } else if (type === PointerEventTypes.POINTERTAP) {
+            if (this._host._lastControlDown[pointerId]) {
+                this._host._lastControlDown[pointerId]._onPointerPick(this, this._dummyVector2, pointerId, buttonIndex, true, pi);
+            }
+            delete this._host._lastControlDown[pointerId];
+            return true;
         }
 
         return false;
@@ -2427,10 +2563,13 @@ export class Control implements IAnimatable {
             "px " +
             this._getStyleProperty("fontFamily", "Arial");
 
-        this._fontOffset = Control._GetFontOffset(this._font);
+        this._fontOffset = Control._GetFontOffset(this._font, this._host?.getScene()?.getEngine());
 
         //children need to be refreshed
-        this.getDescendants().forEach((child) => child._markAllAsDirty());
+        const descendants = this.getDescendants();
+        for (const child of descendants) {
+            child._markAllAsDirty();
+        }
     }
 
     /**
@@ -2464,7 +2603,6 @@ export class Control implements IAnimatable {
     public clone(host?: AdvancedDynamicTexture): Control {
         const serialization: any = {};
         this.serialize(serialization, true);
-
         const controlType = Tools.Instantiate("BABYLON.GUI." + serialization.className);
         const cloned = new controlType();
         cloned.parse(serialization, host);
@@ -2476,9 +2614,11 @@ export class Control implements IAnimatable {
      * Parses a serialized object into this control
      * @param serializedObject the object with the serialized properties
      * @param host the texture where the control will be instantiated. Can be empty, in which case the control will be created on the same texture
+     * @param urlRewriter defines an url rewriter to update urls before sending them to the controls
      * @returns this control
      */
-    public parse(serializedObject: any, host?: AdvancedDynamicTexture): Control {
+    public parse(serializedObject: any, host?: AdvancedDynamicTexture, urlRewriter?: (url: string) => string): Control {
+        this._urlRewriter = urlRewriter;
         SerializationHelper.Parse(() => this, serializedObject, null);
 
         this.name = serializedObject.name;
@@ -2492,21 +2632,40 @@ export class Control implements IAnimatable {
      * Serializes the current control
      * @param serializationObject defined the JSON serialized object
      * @param force if the control should be serialized even if the isSerializable flag is set to false (default false)
+     * @param allowCanvas defines if the control is allowed to use a Canvas2D object to serialize (true by default)
      */
-    public serialize(serializationObject: any, force: boolean = false) {
+    public serialize(serializationObject: any, force: boolean = false, allowCanvas: boolean = true) {
         if (!this.isSerializable && !force) {
             return;
+        }
+        let idealWidth = 0;
+        let idealHeight = 0;
+        // the host's ideal width and height are influencing the serialization, as they are used in getValue() of ValueAndUnit.
+        // for a proper serialization, we need to temporarily set them to 0 and re-set them back afterwards.
+        if (this.host) {
+            idealHeight = this.host.idealHeight;
+            idealWidth = this.host.idealWidth;
+            this.host.idealWidth = 0;
+            this.host.idealHeight = 0;
         }
         SerializationHelper.Serialize(this, serializationObject);
         serializationObject.name = this.name;
         serializationObject.className = this.getClassName();
 
         // Call prepareFont to guarantee the font is properly set before serializing
-        this._prepareFont();
-        if (this._font) {
+        if (allowCanvas) {
+            this._prepareFont();
+        }
+        if (this._fontFamily) {
             serializationObject.fontFamily = this._fontFamily;
+        }
+        if (this.fontSize) {
             serializationObject.fontSize = this.fontSize;
+        }
+        if (this.fontWeight) {
             serializationObject.fontWeight = this.fontWeight;
+        }
+        if (this.fontStyle) {
             serializationObject.fontStyle = this.fontStyle;
         }
 
@@ -2517,12 +2676,17 @@ export class Control implements IAnimatable {
 
         // Animations
         SerializationHelper.AppendSerializedAnimations(this, serializationObject);
+        // re-set the ideal width and height
+        if (this.host) {
+            this.host.idealWidth = idealWidth;
+            this.host.idealHeight = idealHeight;
+        }
     }
 
     /**
      * @internal
      */
-    public _parseFromContent(serializedObject: any, host: AdvancedDynamicTexture) {
+    public _parseFromContent(serializedObject: any, host: AdvancedDynamicTexture, urlRewriter?: (url: string) => string) {
         if (serializedObject.fontFamily) {
             this.fontFamily = serializedObject.fontFamily;
         }
@@ -2585,6 +2749,11 @@ export class Control implements IAnimatable {
         this.onPointerUpObservable.clear();
         this.onPointerClickObservable.clear();
         this.onWheelObservable.clear();
+
+        // focus
+        this.onBlurObservable.clear();
+        this.onFocusObservable.clear();
+        this.onKeyboardEventProcessedObservable.clear();
 
         if (this._styleObserver && this._style) {
             this._style.onChangedObservable.remove(this._styleObserver);
@@ -2652,12 +2821,12 @@ export class Control implements IAnimatable {
     /**
      * @internal
      */
-    public static _GetFontOffset(font: string): { ascent: number; height: number; descent: number } {
+    public static _GetFontOffset(font: string, engineToUse?: AbstractEngine): { ascent: number; height: number; descent: number } {
         if (Control._FontHeightSizes[font]) {
             return Control._FontHeightSizes[font];
         }
 
-        const engine = EngineStore.LastCreatedEngine;
+        const engine = engineToUse || EngineStore.LastCreatedEngine;
         if (!engine) {
             throw new Error("Invalid engine. Unable to create a canvas.");
         }
@@ -2672,15 +2841,24 @@ export class Control implements IAnimatable {
      * Creates a Control from parsed data
      * @param serializedObject defines parsed data
      * @param host defines the hosting AdvancedDynamicTexture
+     * @param urlRewriter defines an url rewriter to update urls before sending them to the controls
      * @returns a new Control
      */
-    public static Parse(serializedObject: any, host: AdvancedDynamicTexture): Control {
+    public static Parse(serializedObject: any, host: AdvancedDynamicTexture, urlRewriter?: (url: string) => string): Control {
         const controlType = Tools.Instantiate("BABYLON.GUI." + serializedObject.className);
-        const control = SerializationHelper.Parse(() => new controlType(), serializedObject, null);
+        const control = SerializationHelper.Parse(
+            () => {
+                const newControl = new controlType() as Control;
+                newControl._urlRewriter = urlRewriter;
+                return newControl;
+            },
+            serializedObject,
+            null
+        );
 
         control.name = serializedObject.name;
 
-        control._parseFromContent(serializedObject, host);
+        control._parseFromContent(serializedObject, host, urlRewriter);
 
         return control;
     }
@@ -2690,13 +2868,16 @@ export class Control implements IAnimatable {
     /**
      * @internal
      */
-    protected static drawEllipse(x: number, y: number, width: number, height: number, context: ICanvasRenderingContext): void {
+    protected static drawEllipse(x: number, y: number, width: number, height: number, arc: number, context: ICanvasRenderingContext): void {
         context.translate(x, y);
         context.scale(width, height);
 
         context.beginPath();
-        context.arc(0, 0, 1, 0, 2 * Math.PI);
-        context.closePath();
+        context.arc(0, 0, 1, 0, 2 * Math.PI * arc, arc < 0);
+
+        if (arc >= 1) {
+            context.closePath();
+        }
 
         context.scale(1 / width, 1 / height);
         context.translate(-x, -y);

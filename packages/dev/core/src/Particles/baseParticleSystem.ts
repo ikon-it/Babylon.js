@@ -3,23 +3,13 @@ import type { Nullable } from "../types";
 import { Vector2, Vector3 } from "../Maths/math.vector";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import type { ImageProcessingConfiguration } from "../Materials/imageProcessingConfiguration";
-import { ImageProcessingConfigurationDefines } from "../Materials/imageProcessingConfiguration";
+import { ImageProcessingConfigurationDefines } from "../Materials/imageProcessingConfiguration.defines";
 import type { ColorGradient, FactorGradient, Color3Gradient, IValueGradient } from "../Misc/gradients";
-import type { IParticleEmitterType } from "../Particles/EmitterTypes/index";
-import {
-    BoxParticleEmitter,
-    PointParticleEmitter,
-    HemisphericParticleEmitter,
-    SphereParticleEmitter,
-    SphereDirectedParticleEmitter,
-    CylinderParticleEmitter,
-    CylinderDirectedParticleEmitter,
-    ConeParticleEmitter,
-} from "../Particles/EmitterTypes/index";
+import type { BoxParticleEmitter } from "../Particles/EmitterTypes/boxParticleEmitter";
 import { Constants } from "../Engines/constants";
 import type { BaseTexture } from "../Materials/Textures/baseTexture";
 import { Color4 } from "../Maths/math.color";
-import type { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 
 import "../Engines/Extensions/engine.dynamicBuffer";
 import type { IClipPlanesHolder } from "../Misc/interfaces/iClipPlanesHolder";
@@ -28,6 +18,13 @@ import type { Animation } from "../Animations/animation";
 import type { Scene } from "../scene";
 import type { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
 import type { RawTexture } from "../Materials/Textures/rawTexture";
+import type { IParticleEmitterType } from "./EmitterTypes/IParticleEmitterType";
+import type { PointParticleEmitter } from "./EmitterTypes/pointParticleEmitter";
+import type { HemisphericParticleEmitter } from "./EmitterTypes/hemisphericParticleEmitter";
+import type { SphereDirectedParticleEmitter, SphereParticleEmitter } from "./EmitterTypes/sphereParticleEmitter";
+import type { CylinderDirectedParticleEmitter, CylinderParticleEmitter } from "./EmitterTypes/cylinderParticleEmitter";
+import type { ConeDirectedParticleEmitter, ConeParticleEmitter } from "./EmitterTypes/coneParticleEmitter";
+import { RegisterClass } from "../Misc/typeStore";
 
 /**
  * This represents the base class for particle system in Babylon.
@@ -37,11 +34,11 @@ import type { RawTexture } from "../Materials/Textures/rawTexture";
  */
 export class BaseParticleSystem implements IClipPlanesHolder {
     /**
-     * Source color is added to the destination color without alpha affecting the result
+     * Source color is added to the destination color without alpha affecting the result. Great for additive glow effects (fire, magic, lasers)
      */
     public static BLENDMODE_ONEONE = 0;
     /**
-     * Blend current color and particle color using particle’s alpha
+     * Blend current color and particle color using particle’s alpha. Same as Constants.ALPHA_COMBINE, the go-to for transparency. 100% alpha means source, 0% alpha means background. Glass, UI fade, smoke
      */
     public static BLENDMODE_STANDARD = 1;
     /**
@@ -52,11 +49,15 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * Multiply current color with particle color
      */
     public static BLENDMODE_MULTIPLY = 3;
-
     /**
      * Multiply current color with particle color then add current color and particle color multiplied by particle’s alpha
      */
     public static BLENDMODE_MULTIPLYADD = 4;
+    /**
+     * Subtracts source (particle) from destination (current color), leading to darker results
+     * - NOTE: Init as -1 so we can properly map all modes to Engine Const's (otherwise ALPHA_SUBTRACT will conflict with BLENDMODE_MULTIPLY since both use 3)
+     */
+    public static BLENDMODE_SUBTRACT = -1;
 
     /**
      * List of animations used by the particle system.
@@ -108,10 +109,21 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      */
     public updateSpeed = 0.01;
 
+    protected _targetStopDuration = 0;
     /**
      * The amount of time the particle system is running (depends of the overall update speed).
      */
-    public targetStopDuration = 0;
+    public get targetStopDuration() {
+        return this._targetStopDuration;
+    }
+
+    public set targetStopDuration(value: number) {
+        if (this._targetStopDuration === value) {
+            return;
+        }
+
+        this._targetStopDuration = value;
+    }
 
     /**
      * Specifies whether the particle system will be disposed once it reaches the end of the animation.
@@ -212,7 +224,7 @@ export class BaseParticleSystem implements IClipPlanesHolder {
     _wasDispatched = false;
 
     protected _rootUrl = "";
-    private _noiseTexture: Nullable<ProceduralTexture>;
+    protected _noiseTexture: Nullable<ProceduralTexture>;
 
     /**
      * Gets or sets a texture used to add random noise to particle positions
@@ -239,7 +251,9 @@ export class BaseParticleSystem implements IClipPlanesHolder {
     public onAnimationEnd: Nullable<() => void> = null;
 
     /**
-     * Blend mode use to render the particle, it can be either ParticleSystem.BLENDMODE_ONEONE or ParticleSystem.BLENDMODE_STANDARD.
+     * Blend mode use to render the particle
+     * For original blend modes which are exposed from ParticleSystem (OneOne, Standard, Add, Multiply, MultiplyAdd, and Subtract), use ParticleSystem.BLENDMODE_FOO
+     * For all other blend modes, use Engine Constants.ALPHA_FOO blend modes
      */
     public blendMode = BaseParticleSystem.BLENDMODE_ONEONE;
 
@@ -262,10 +276,12 @@ export class BaseParticleSystem implements IClipPlanesHolder {
     /**
      * If using a spritesheet (isAnimationSheetEnabled) defines the first sprite cell to display
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public startSpriteCellID = 0;
     /**
      * If using a spritesheet (isAnimationSheetEnabled) defines the last sprite cell to display
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public endSpriteCellID = 0;
     /**
      * If using a spritesheet (isAnimationSheetEnabled), defines the sprite cell width to use
@@ -287,8 +303,19 @@ export class BaseParticleSystem implements IClipPlanesHolder {
     /** Gets or sets a Vector2 used to move the pivot (by default (0,0)) */
     public translationPivot = new Vector2(0, 0);
 
+    protected _animationSheetEnabled = false;
     /** @internal */
-    public _isAnimationSheetEnabled: boolean;
+    public get _isAnimationSheetEnabled() {
+        return this._animationSheetEnabled;
+    }
+
+    public set _isAnimationSheetEnabled(value: boolean) {
+        if (this._animationSheetEnabled === value) {
+            return;
+        }
+
+        this._animationSheetEnabled = value;
+    }
 
     /**
      * Gets or sets a boolean indicating that hosted animations (in the system.animations array) must be started when system.start() is called
@@ -388,18 +415,28 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      */
     public gravity = Vector3.Zero();
 
-    protected _colorGradients: Nullable<Array<ColorGradient>> = null;
-    protected _sizeGradients: Nullable<Array<FactorGradient>> = null;
-    protected _lifeTimeGradients: Nullable<Array<FactorGradient>> = null;
-    protected _angularSpeedGradients: Nullable<Array<FactorGradient>> = null;
-    protected _velocityGradients: Nullable<Array<FactorGradient>> = null;
-    protected _limitVelocityGradients: Nullable<Array<FactorGradient>> = null;
-    protected _dragGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _colorGradients: Nullable<Array<ColorGradient>> = null;
+    /** @internal */
+    public _sizeGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _lifeTimeGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _angularSpeedGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _velocityGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _limitVelocityGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _dragGradients: Nullable<Array<FactorGradient>> = null;
     protected _emitRateGradients: Nullable<Array<FactorGradient>> = null;
-    protected _startSizeGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _startSizeGradients: Nullable<Array<FactorGradient>> = null;
     protected _rampGradients: Nullable<Array<Color3Gradient>> = null;
-    protected _colorRemapGradients: Nullable<Array<FactorGradient>> = null;
-    protected _alphaRemapGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _colorRemapGradients: Nullable<Array<FactorGradient>> = null;
+    /** @internal */
+    public _alphaRemapGradients: Nullable<Array<FactorGradient>> = null;
 
     protected _hasTargetStopDurationDependantGradient() {
         return (
@@ -407,6 +444,34 @@ export class BaseParticleSystem implements IClipPlanesHolder {
             (this._emitRateGradients && this._emitRateGradients.length > 0) ||
             (this._lifeTimeGradients && this._lifeTimeGradients.length > 0)
         );
+    }
+
+    protected _setEngineBasedOnBlendMode(blendMode: number): void {
+        switch (blendMode) {
+            case BaseParticleSystem.BLENDMODE_MULTIPLYADD:
+                // Don't want to update engine since there is no equivalent engine alpha mode, instead it gets handled within particleSystem
+                return;
+            case BaseParticleSystem.BLENDMODE_ADD:
+                blendMode = Constants.ALPHA_ADD;
+                break;
+            case BaseParticleSystem.BLENDMODE_ONEONE:
+                blendMode = Constants.ALPHA_ONEONE;
+                break;
+            case BaseParticleSystem.BLENDMODE_STANDARD:
+                blendMode = Constants.ALPHA_COMBINE;
+                break;
+            case BaseParticleSystem.BLENDMODE_MULTIPLY:
+                blendMode = Constants.ALPHA_MULTIPLY;
+                break;
+            case BaseParticleSystem.BLENDMODE_SUBTRACT:
+                blendMode = Constants.ALPHA_SUBTRACT;
+                break;
+            default:
+                // For all other blend modes that were added after the initial particleSystem implementation,
+                // the ParticleSystem.BLENDMODE_FOO are already mapped to the underlying Constants.ALPHA_FOO
+                break;
+        }
+        this._engine.setAlphaMode(blendMode);
     }
 
     /**
@@ -660,7 +725,7 @@ export class BaseParticleSystem implements IClipPlanesHolder {
     /**
      * The engine the particle system belongs to.
      */
-    protected _engine: ThinEngine;
+    protected _engine: AbstractEngine;
 
     /**
      * Local cache of defines for image processing.
@@ -746,39 +811,27 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * Creates a Point Emitter for the particle system (emits directly from the emitter position)
      * @param direction1 Particles are emitted between the direction1 and direction2 from within the box
      * @param direction2 Particles are emitted between the direction1 and direction2 from within the box
-     * @returns the emitter
      */
     public createPointEmitter(direction1: Vector3, direction2: Vector3): PointParticleEmitter {
-        const particleEmitter = new PointParticleEmitter();
-        particleEmitter.direction1 = direction1;
-        particleEmitter.direction2 = direction2;
-
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
      * Creates a Hemisphere Emitter for the particle system (emits along the hemisphere radius)
      * @param radius The radius of the hemisphere to emit from
      * @param radiusRange The range of the hemisphere to emit from [0-1] 0 Surface Only, 1 Entire Radius
-     * @returns the emitter
      */
     public createHemisphericEmitter(radius = 1, radiusRange = 1): HemisphericParticleEmitter {
-        const particleEmitter = new HemisphericParticleEmitter(radius, radiusRange);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
      * Creates a Sphere Emitter for the particle system (emits along the sphere radius)
      * @param radius The radius of the sphere to emit from
      * @param radiusRange The range of the sphere to emit from [0-1] 0 Surface Only, 1 Entire Radius
-     * @returns the emitter
      */
     public createSphereEmitter(radius = 1, radiusRange = 1): SphereParticleEmitter {
-        const particleEmitter = new SphereParticleEmitter(radius, radiusRange);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
@@ -786,12 +839,9 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * @param radius The radius of the sphere to emit from
      * @param direction1 Particles are emitted between the direction1 and direction2 from within the sphere
      * @param direction2 Particles are emitted between the direction1 and direction2 from within the sphere
-     * @returns the emitter
      */
     public createDirectedSphereEmitter(radius = 1, direction1 = new Vector3(0, 1.0, 0), direction2 = new Vector3(0, 1.0, 0)): SphereDirectedParticleEmitter {
-        const particleEmitter = new SphereDirectedParticleEmitter(radius, direction1, direction2);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
@@ -800,12 +850,9 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * @param height The height of the emission cylinder
      * @param radiusRange The range of emission [0-1] 0 Surface only, 1 Entire Radius
      * @param directionRandomizer How much to randomize the particle direction [0-1]
-     * @returns the emitter
      */
     public createCylinderEmitter(radius = 1, height = 1, radiusRange = 1, directionRandomizer = 0): CylinderParticleEmitter {
-        const particleEmitter = new CylinderParticleEmitter(radius, height, radiusRange, directionRandomizer);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
@@ -815,7 +862,6 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * @param radiusRange the range of the emission cylinder [0-1] 0 Surface only, 1 Entire Radius (1 by default)
      * @param direction1 Particles are emitted between the direction1 and direction2 from within the cylinder
      * @param direction2 Particles are emitted between the direction1 and direction2 from within the cylinder
-     * @returns the emitter
      */
     public createDirectedCylinderEmitter(
         radius = 1,
@@ -824,21 +870,20 @@ export class BaseParticleSystem implements IClipPlanesHolder {
         direction1 = new Vector3(0, 1.0, 0),
         direction2 = new Vector3(0, 1.0, 0)
     ): CylinderDirectedParticleEmitter {
-        const particleEmitter = new CylinderDirectedParticleEmitter(radius, height, radiusRange, direction1, direction2);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 
     /**
      * Creates a Cone Emitter for the particle system (emits from the cone to the particle position)
      * @param radius The radius of the cone to emit from
      * @param angle The base angle of the cone
-     * @returns the emitter
      */
     public createConeEmitter(radius = 1, angle = Math.PI / 4): ConeParticleEmitter {
-        const particleEmitter = new ConeParticleEmitter(radius, angle);
-        this.particleEmitterType = particleEmitter;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
+    }
+
+    public createDirectedConeEmitter(radius = 1, angle = Math.PI / 4, direction1 = new Vector3(0, 1.0, 0), direction2 = new Vector3(0, 1.0, 0)): ConeDirectedParticleEmitter {
+        throw new Error("Method not implemented.");
     }
 
     /**
@@ -847,15 +892,11 @@ export class BaseParticleSystem implements IClipPlanesHolder {
      * @param direction2 Particles are emitted between the direction1 and direction2 from within the box
      * @param minEmitBox Particles are emitted from the box between minEmitBox and maxEmitBox
      * @param maxEmitBox  Particles are emitted from the box between minEmitBox and maxEmitBox
-     * @returns the emitter
      */
     public createBoxEmitter(direction1: Vector3, direction2: Vector3, minEmitBox: Vector3, maxEmitBox: Vector3): BoxParticleEmitter {
-        const particleEmitter = new BoxParticleEmitter();
-        this.particleEmitterType = particleEmitter;
-        this.direction1 = direction1;
-        this.direction2 = direction2;
-        this.minEmitBox = minEmitBox;
-        this.maxEmitBox = maxEmitBox;
-        return particleEmitter;
+        throw new Error("Method not implemented.");
     }
 }
+
+// Register Class Name
+RegisterClass("BABYLON.BaseParticleSystem", BaseParticleSystem);

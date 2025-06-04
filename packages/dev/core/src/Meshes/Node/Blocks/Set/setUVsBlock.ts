@@ -19,7 +19,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
      * Gets or sets a boolean indicating that this block can evaluate context
      * Build performance is improved when this value is set to false as the system will cache values instead of reevaluating everything per context change
      */
-    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { rebuild: true } })
+    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
     public evaluateContext = true;
 
     /**
@@ -27,6 +27,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
      */
     @editableInPropertyPage("Texture coordinates index", PropertyTypeForEdition.List, "ADVANCED", {
         notifiers: { update: true },
+        embedded: true,
         options: [
             { label: "UV1", value: 0 },
             { label: "UV2", value: 1 },
@@ -79,7 +80,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "SetUVsBlock";
     }
 
@@ -104,7 +105,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         const func = (state: NodeGeometryBuildState) => {
             state.pushExecutionContext(this);
 
@@ -176,7 +177,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         let codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.textureCoordinateIndex};\n`;
         codeString += `${this._codeVariableName}.evaluateContext = ${this.evaluateContext ? "true" : "false"};\n`;
         return codeString;
@@ -186,7 +187,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.evaluateContext = this.evaluateContext;
@@ -195,7 +196,7 @@ export class SetUVsBlock extends NodeGeometryBlock implements INodeGeometryExecu
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.textureCoordinateIndex = serializationObject.textureCoordinateIndex;

@@ -8,7 +8,7 @@ import type { NodeGeometryBuildState } from "./nodeGeometryBuildState";
 /**
  * Enum used to define the compatibility state between two connection points
  */
-export enum NodeGeometryConnectionPointCompatibilityStates {
+export const enum NodeGeometryConnectionPointCompatibilityStates {
     /** Points are compatibles */
     Compatible,
     /** Points are incompatible because of their types */
@@ -20,7 +20,7 @@ export enum NodeGeometryConnectionPointCompatibilityStates {
 /**
  * Defines the direction of a connection point
  */
-export enum NodeGeometryConnectionPointDirection {
+export const enum NodeGeometryConnectionPointDirection {
     /** Input */
     Input,
     /** Output */
@@ -56,6 +56,9 @@ export class NodeGeometryConnectionPoint {
     /** @internal */
     public _defaultConnectionPointType: Nullable<NodeGeometryBlockConnectionPointTypes> = null;
 
+    /** @internal */
+    public _isMainLinkSource = false;
+
     /** Gets the direction of the point */
     public get direction() {
         return this._direction;
@@ -75,6 +78,11 @@ export class NodeGeometryConnectionPoint {
      * Observable triggered when this point is connected
      */
     public onConnectionObservable = new Observable<NodeGeometryConnectionPoint>();
+
+    /**
+     * Observable triggered when this point is disconnected
+     */
+    public onDisconnectionObservable = new Observable<NodeGeometryConnectionPoint>();
 
     /**
      * Gets or sets a boolean indicating that this connection point is exposed on a frame
@@ -119,8 +127,17 @@ export class NodeGeometryConnectionPoint {
                 return this._connectedPoint.type;
             }
 
-            if (this._linkedConnectionSource && this._linkedConnectionSource.isConnected) {
-                return this._linkedConnectionSource.type;
+            if (this._linkedConnectionSource) {
+                if (this._linkedConnectionSource.isConnected) {
+                    return this._linkedConnectionSource.type;
+                }
+                if (this._linkedConnectionSource._defaultConnectionPointType) {
+                    return this._linkedConnectionSource._defaultConnectionPointType;
+                }
+            }
+
+            if (this._defaultConnectionPointType) {
+                return this._defaultConnectionPointType;
             }
         }
 
@@ -204,7 +221,7 @@ export class NodeGeometryConnectionPoint {
 
     /** Get the inner type (ie AutoDetect for instance instead of the inferred one) */
     public get innerType() {
-        if (this._linkedConnectionSource && this._linkedConnectionSource.isConnected) {
+        if (this._linkedConnectionSource && !this._isMainLinkSource && this._linkedConnectionSource.isConnected) {
             return this.type;
         }
         return this._type;
@@ -244,9 +261,9 @@ export class NodeGeometryConnectionPoint {
     public getConnectedValue(state: NodeGeometryBuildState) {
         if (this.isConnected) {
             if (this._connectedPoint?._storedFunction) {
-                this._connectedPoint!._callCount++;
-                this._connectedPoint!._executionCount++;
-                return this._connectedPoint!._storedFunction(state);
+                this._connectedPoint._callCount++;
+                this._connectedPoint._executionCount++;
+                return this._connectedPoint._storedFunction(state);
             }
             this._connectedPoint!._callCount++;
             this._connectedPoint!._executionCount = 1;
@@ -333,7 +350,7 @@ export class NodeGeometryConnectionPoint {
     public connectTo(connectionPoint: NodeGeometryConnectionPoint, ignoreConstraints = false): NodeGeometryConnectionPoint {
         if (!ignoreConstraints && !this.canConnectTo(connectionPoint)) {
             // eslint-disable-next-line no-throw-literal
-            throw "Cannot connect these two connectors.";
+            throw `Cannot connect these two connectors. source: "${this.ownerBlock.name}".${this.name}, target: "${connectionPoint.ownerBlock.name}".${connectionPoint.name}`;
         }
 
         this._endpoints.push(connectionPoint);
@@ -359,6 +376,10 @@ export class NodeGeometryConnectionPoint {
 
         this._endpoints.splice(index, 1);
         endpoint._connectedPoint = null;
+
+        this.onDisconnectionObservable.notifyObservers(endpoint);
+        endpoint.onDisconnectionObservable.notifyObservers(this);
+
         return this;
     }
 
@@ -400,6 +421,13 @@ export class NodeGeometryConnectionPoint {
             serializationObject.inputName = this.name;
             serializationObject.targetBlockId = this.connectedPoint.ownerBlock.uniqueId;
             serializationObject.targetConnectionName = this.connectedPoint.name;
+            serializationObject.isExposedOnFrame = true;
+            serializationObject.exposedPortPosition = this.exposedPortPosition;
+        }
+
+        if (this.isExposedOnFrame || this.exposedPortPosition >= 0) {
+            serializationObject.isExposedOnFrame = true;
+            serializationObject.exposedPortPosition = this.exposedPortPosition;
         }
 
         return serializationObject;
@@ -410,5 +438,6 @@ export class NodeGeometryConnectionPoint {
      */
     public dispose() {
         this.onConnectionObservable.clear();
+        this.onDisconnectionObservable.clear();
     }
 }

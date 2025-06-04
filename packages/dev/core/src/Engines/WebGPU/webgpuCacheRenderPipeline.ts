@@ -10,9 +10,10 @@ import type { DataBuffer } from "../../Buffers/dataBuffer";
 import type { Nullable } from "../../types";
 import type { WebGPUHardwareTexture } from "./webgpuHardwareTexture";
 import type { WebGPUPipelineContext } from "./webgpuPipelineContext";
-import { WebGPUShaderProcessor } from "./webgpuShaderProcessor";
 import { WebGPUTextureHelper } from "./webgpuTextureHelper";
 import { renderableTextureFormatToIndex } from "./webgpuTextureManager";
+import { checkNonFloatVertexBuffers } from "core/Buffers/buffer.nonFloatVertexBuffers";
+import { Logger } from "core/Misc/logger";
 
 enum StatePosition {
     StencilReadMask = 0,
@@ -61,26 +62,10 @@ const stencilOpToIndex: { [name: number]: number } = {
     0x8508: 7, // DECR_WRAP
 };
 
-const vertexBufferKindForNonFloatProcessing: { [kind: string]: boolean } = {
-    [VertexBuffer.PositionKind]: true,
-    [VertexBuffer.NormalKind]: true,
-    [VertexBuffer.TangentKind]: true,
-    [VertexBuffer.UVKind]: true,
-    [VertexBuffer.UV2Kind]: true,
-    [VertexBuffer.UV3Kind]: true,
-    [VertexBuffer.UV4Kind]: true,
-    [VertexBuffer.UV5Kind]: true,
-    [VertexBuffer.UV6Kind]: true,
-    [VertexBuffer.ColorKind]: true,
-    [VertexBuffer.ColorInstanceKind]: true,
-    [VertexBuffer.MatricesIndicesKind]: true,
-    [VertexBuffer.MatricesWeightsKind]: true,
-    [VertexBuffer.MatricesIndicesExtraKind]: true,
-    [VertexBuffer.MatricesWeightsExtraKind]: true,
-};
-
 /** @internal */
 export abstract class WebGPUCacheRenderPipeline {
+    public static LogErrorIfNoVertexBuffer = false;
+
     public static NumCacheHitWithoutHash = 0;
     public static NumCacheHitWithHash = 0;
     public static NumCacheMiss = 0;
@@ -140,22 +125,6 @@ export abstract class WebGPUCacheRenderPipeline {
     private _indexBuffer: Nullable<DataBuffer>;
     private _textureState: number;
     private _useTextureStage: boolean;
-
-    private static _IsSignedType(type: number): boolean {
-        switch (type) {
-            case VertexBuffer.BYTE:
-            case VertexBuffer.SHORT:
-            case VertexBuffer.INT:
-            case VertexBuffer.FLOAT:
-                return true;
-            case VertexBuffer.UNSIGNED_BYTE:
-            case VertexBuffer.UNSIGNED_SHORT:
-            case VertexBuffer.UNSIGNED_INT:
-                return false;
-            default:
-                throw new Error(`Invalid type '${type}'`);
-        }
-    }
 
     constructor(device: GPUDevice, emptyVertexBuffer: VertexBuffer) {
         this._device = device;
@@ -580,6 +549,14 @@ export abstract class WebGPUCacheRenderPipeline {
                 return WebGPUConstants.BlendFactor.Constant;
             case Constants.GL_ALPHA_FUNCTION_ONE_MINUS_CONSTANT_ALPHA:
                 return WebGPUConstants.BlendFactor.OneMinusConstant;
+            case Constants.GL_ALPHA_FUNCTION_SRC1_COLOR:
+                return WebGPUConstants.BlendFactor.Src1;
+            case Constants.GL_ALPHA_FUNCTION_ONE_MINUS_SRC1_COLOR:
+                return WebGPUConstants.BlendFactor.OneMinusSrc1;
+            case Constants.GL_ALPHA_FUNCTION_SRC1_ALPHA:
+                return WebGPUConstants.BlendFactor.Src1Alpha;
+            case Constants.GL_ALPHA_FUNCTION_ONE_MINUS_SRC1_ALPHA:
+                return WebGPUConstants.BlendFactor.OneMinusSrc1Alpha;
             default:
                 return WebGPUConstants.BlendFactor.One;
         }
@@ -817,6 +794,11 @@ export abstract class WebGPUCacheRenderPipeline {
                 // In WebGL it's valid to not bind a vertex buffer to an attribute, but it's not valid in WebGPU
                 // So we must bind a dummy buffer when we are not given one for a specific attribute
                 vertexBuffer = this._emptyVertexBuffer;
+                if (WebGPUCacheRenderPipeline.LogErrorIfNoVertexBuffer) {
+                    Logger.Error(
+                        `No vertex buffer is provided for the "${attributes[index]}" attribute. A default empty vertex buffer will be used, but this may generate errors in some browsers.`
+                    );
+                }
             }
 
             const buffer = vertexBuffer.effectiveBuffer?.underlyingResource;
@@ -898,7 +880,7 @@ export abstract class WebGPUCacheRenderPipeline {
                 if (entry.texture) {
                     const name = shaderProcessingContext.bindGroupLayoutEntryInfo[i][entry.binding].name;
                     const textureInfo = shaderProcessingContext.availableTextures[name];
-                    const samplerInfo = textureInfo.autoBindSampler ? shaderProcessingContext.availableSamplers[name + WebGPUShaderProcessor.AutoSamplerSuffix] : null;
+                    const samplerInfo = textureInfo.autoBindSampler ? shaderProcessingContext.availableSamplers[name + Constants.AUTOSAMPLERSUFFIX] : null;
 
                     let sampleType = textureInfo.sampleType;
                     let samplerType = samplerInfo?.type ?? WebGPUConstants.SamplerBindingType.Filtering;
@@ -912,7 +894,7 @@ export abstract class WebGPUCacheRenderPipeline {
                         sampleType = WebGPUConstants.TextureSampleType.UnfilterableFloat;
                     }
 
-                    entry.texture!.sampleType = sampleType;
+                    entry.texture.sampleType = sampleType;
 
                     if (samplerInfo) {
                         const binding = shaderProcessingContext.bindGroupLayoutEntryInfo[samplerInfo.binding.groupIndex][samplerInfo.binding.bindingIndex].index;
@@ -986,41 +968,6 @@ export abstract class WebGPUCacheRenderPipeline {
         return descriptors;
     }
 
-    private _processNonFloatVertexBuffers(webgpuPipelineContext: WebGPUPipelineContext, effect: Effect) {
-        const webgpuShaderProcessor = webgpuPipelineContext.engine._getShaderProcessor(webgpuPipelineContext.shaderProcessingContext.shaderLanguage) as WebGPUShaderProcessor;
-
-        let reprocessShaders = false;
-
-        for (const kind in this._vertexBuffers) {
-            const currentVertexBuffer = this._vertexBuffers[kind];
-
-            if (!currentVertexBuffer || !vertexBufferKindForNonFloatProcessing[kind]) {
-                continue;
-            }
-
-            const currentVertexBufferType = currentVertexBuffer.normalized ? VertexBuffer.FLOAT : currentVertexBuffer.type;
-            const vertexBufferType = webgpuPipelineContext.vertexBufferKindToType[kind];
-
-            if (
-                (currentVertexBufferType !== VertexBuffer.FLOAT && vertexBufferType === undefined) ||
-                (vertexBufferType !== undefined && vertexBufferType !== currentVertexBufferType)
-            ) {
-                reprocessShaders = true;
-                webgpuPipelineContext.vertexBufferKindToType[kind] = currentVertexBufferType;
-                if (currentVertexBufferType !== VertexBuffer.FLOAT) {
-                    webgpuShaderProcessor.vertexBufferKindToNumberOfComponents[kind] = VertexBuffer.DeduceStride(kind);
-                    if (WebGPUCacheRenderPipeline._IsSignedType(currentVertexBufferType)) {
-                        webgpuShaderProcessor.vertexBufferKindToNumberOfComponents[kind] *= -1;
-                    }
-                }
-            }
-        }
-
-        if (reprocessShaders) {
-            effect._processShaderCode(webgpuShaderProcessor, true);
-        }
-    }
-
     private _createRenderPipeline(effect: Effect, topology: GPUPrimitiveTopology, sampleCount: number): GPURenderPipeline {
         const webgpuPipelineContext = effect._pipelineContext as WebGPUPipelineContext;
         const inputStateDescriptor = this._getVertexInputDescriptor(effect);
@@ -1030,7 +977,9 @@ export abstract class WebGPUCacheRenderPipeline {
         const alphaBlend = this._getAphaBlendState();
         const colorBlend = this._getColorBlendState();
 
-        this._processNonFloatVertexBuffers(webgpuPipelineContext, effect);
+        if (this._vertexBuffers) {
+            checkNonFloatVertexBuffers(this._vertexBuffers, effect);
+        }
 
         if (this._mrtAttachments1 > 0) {
             for (let i = 0; i < this._mrtFormats.length; ++i) {
@@ -1075,6 +1024,8 @@ export abstract class WebGPUCacheRenderPipeline {
             failOp: WebGPUCacheRenderPipeline._GetStencilOpFunction(this._stencilEnabled ? this._stencilFrontFailOp : 1 /* KEEP */),
             passOp: WebGPUCacheRenderPipeline._GetStencilOpFunction(this._stencilEnabled ? this._stencilFrontPassOp : 1 /* KEEP */),
         };
+
+        const topologyIsTriangle = topology === WebGPUConstants.PrimitiveTopology.TriangleList || topology === WebGPUConstants.PrimitiveTopology.TriangleStrip;
 
         let stripIndexFormat: GPUIndexFormat | undefined = undefined;
         if (topology === WebGPUConstants.PrimitiveTopology.LineStrip || topology === WebGPUConstants.PrimitiveTopology.TriangleStrip) {
@@ -1122,8 +1073,8 @@ export abstract class WebGPUCacheRenderPipeline {
                           stencilReadMask: this._stencilEnabled && depthStencilFormatHasStencil ? this._stencilReadMask : undefined,
                           stencilWriteMask: this._stencilEnabled && depthStencilFormatHasStencil ? this._stencilWriteMask : undefined,
                           depthBias: this._depthBias,
-                          depthBiasClamp: this._depthBiasClamp,
-                          depthBiasSlopeScale: this._depthBiasSlopeScale,
+                          depthBiasClamp: topologyIsTriangle ? this._depthBiasClamp : 0,
+                          depthBiasSlopeScale: topologyIsTriangle ? this._depthBiasSlopeScale : 0,
                       },
         });
     }

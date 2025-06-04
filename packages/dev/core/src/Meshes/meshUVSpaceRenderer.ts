@@ -12,16 +12,10 @@ import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture
 import { Color4 } from "core/Maths/math.color";
 import { PostProcess } from "core/PostProcesses/postProcess";
 
-import "../Shaders/meshUVSpaceRenderer.vertex";
-import "../Shaders/meshUVSpaceRenderer.fragment";
-
-import "../Shaders/meshUVSpaceRendererMasker.vertex";
-import "../Shaders/meshUVSpaceRendererMasker.fragment";
-
-import "../Shaders/meshUVSpaceRendererFinaliser.fragment";
-import "../Shaders/meshUVSpaceRendererFinaliser.vertex";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface Scene {
         /** @internal */
         _meshUVSpaceRendererShader: Nullable<ShaderMaterial>;
@@ -74,8 +68,10 @@ export class MeshUVSpaceRenderer {
     private _configureUserCreatedTexture = true;
     private _maskTexture: Nullable<RenderTargetTexture> = null;
     private _finalPostProcess: Nullable<PostProcess> = null;
+    private _shadersLoaded = false;
+    private _isDisposed = false;
 
-    private static _GetShader(scene: Scene): ShaderMaterial {
+    private static _GetShader(scene: Scene, shaderLanguage: ShaderLanguage): ShaderMaterial {
         if (!scene._meshUVSpaceRendererShader) {
             const shader = new ShaderMaterial(
                 "meshUVSpaceRendererShader",
@@ -89,6 +85,7 @@ export class MeshUVSpaceRenderer {
                     uniforms: ["world", "projMatrix"],
                     samplers: ["textureSampler"],
                     needAlphaBlending: true,
+                    shaderLanguage: shaderLanguage,
                 }
             );
             shader.backFaceCulling = false;
@@ -105,7 +102,7 @@ export class MeshUVSpaceRenderer {
         return scene._meshUVSpaceRendererShader;
     }
 
-    private static _GetMaskShader(scene: Scene): ShaderMaterial {
+    private static _GetMaskShader(scene: Scene, shaderLanguage: ShaderLanguage): ShaderMaterial {
         if (!scene._meshUVSpaceRendererMaskShader) {
             const shader = new ShaderMaterial(
                 "meshUVSpaceRendererMaskShader",
@@ -117,6 +114,7 @@ export class MeshUVSpaceRenderer {
                 {
                     attributes: ["position", "uv"],
                     uniforms: ["worldViewProjection"],
+                    shaderLanguage: shaderLanguage,
                 }
             );
             shader.backFaceCulling = false;
@@ -146,7 +144,17 @@ export class MeshUVSpaceRenderer {
      * If you don't set the property, a RenderTargetTexture will be created internally given the options provided to the constructor.
      * If you provide a RenderTargetTexture, it will be used directly.
      */
-    public texture: Texture;
+    public texture: Nullable<Texture> = null;
+
+    /** Shader language used by the material */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in this material.
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
 
     /**
      * Creates a new MeshUVSpaceRenderer
@@ -166,6 +174,40 @@ export class MeshUVSpaceRenderer {
             uvEdgeBlending: false,
             ...options,
         };
+
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this._initShaderSourceAsync();
+    }
+
+    private async _initShaderSourceAsync() {
+        const engine = this._scene.getEngine();
+
+        if (engine.isWebGPU) {
+            this._shaderLanguage = ShaderLanguage.WGSL;
+            await Promise.all([
+                import("../ShadersWGSL/meshUVSpaceRenderer.vertex"),
+                import("../ShadersWGSL/meshUVSpaceRenderer.fragment"),
+                import("../ShadersWGSL/meshUVSpaceRendererMasker.vertex"),
+                import("../ShadersWGSL/meshUVSpaceRendererMasker.fragment"),
+                import("../ShadersWGSL/meshUVSpaceRendererFinaliser.vertex"),
+                import("../ShadersWGSL/meshUVSpaceRendererFinaliser.fragment"),
+            ]);
+        } else {
+            await Promise.all([
+                import("../Shaders/meshUVSpaceRenderer.vertex"),
+                import("../Shaders/meshUVSpaceRenderer.fragment"),
+                import("../Shaders/meshUVSpaceRendererMasker.vertex"),
+                import("../Shaders/meshUVSpaceRendererMasker.fragment"),
+                import("../Shaders/meshUVSpaceRendererFinaliser.vertex"),
+                import("../Shaders/meshUVSpaceRendererFinaliser.fragment"),
+            ]);
+        }
+
+        if (this._isDisposed) {
+            return;
+        }
+
+        this._shadersLoaded = true;
     }
 
     /**
@@ -173,11 +215,18 @@ export class MeshUVSpaceRenderer {
      * @returns true if the texture is ready to be used
      */
     public isReady(): boolean {
-        if (!this.texture) {
-            this._createDiffuseRTT();
+        if (!this._shadersLoaded) {
+            return false;
         }
 
-        const textureIsReady = MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture) ? this.texture.isReadyForRendering() : this.texture.isReady();
+        if (!this.texture) {
+            this._createDiffuseRTT();
+        } else if (this._configureUserCreatedTexture) {
+            this._configureUserCreatedRTT();
+        }
+
+        // this.texture is guaranteed to be non-null here as it is created in _createDiffuseRTT above
+        const textureIsReady = MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture!) ? this.texture.isReadyForRendering() : this.texture!.isReady();
         const maskIsReady = this._maskTexture?.isReadyForRendering() ?? true;
         const postProcessIsReady = this._finalPostProcess?.isReady() ?? true;
 
@@ -190,23 +239,36 @@ export class MeshUVSpaceRenderer {
      * @param position The position of the center of projection (world space coordinates)
      * @param normal The direction of the projection (world space coordinates)
      * @param size The size of the projection
-     * @param angle The rotation angle around the direction of the projection
+     * @param angle The rotation angle around the direction of the projection (default: 0)
+     * @param checkIsReady If true, it will check if the texture is ready before rendering (default: true). If the texture is not ready, a new attempt will be scheduled in 16ms
      */
-    public renderTexture(texture: BaseTexture, position: Vector3, normal: Vector3, size: Vector3, angle = 0): void {
+    public renderTexture(texture: BaseTexture, position: Vector3, normal: Vector3, size: Vector3, angle = 0, checkIsReady = true): void {
+        if (checkIsReady && !this.isReady()) {
+            setTimeout(() => {
+                this.renderTexture(texture, position, normal, size, angle, checkIsReady);
+            }, 16);
+            return;
+        }
+
         if (!this.texture) {
             this._createDiffuseRTT();
         } else if (this._configureUserCreatedTexture) {
             this._configureUserCreatedRTT();
         }
 
-        if (MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture)) {
+        // this.texture is guaranteed to be non-null here as it is created in _createDiffuseRTT above
+        if (MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture!)) {
             const matrix = this._createProjectionMatrix(position, normal, size, angle);
-            const shader = MeshUVSpaceRenderer._GetShader(this._scene);
+            const shader = MeshUVSpaceRenderer._GetShader(this._scene, this._shaderLanguage);
 
             shader.setTexture("textureSampler", texture);
             shader.setMatrix("projMatrix", matrix);
 
             this.texture.render();
+
+            // We needed the texture only once for the render() call above, so we can remove it from the shader.
+            // It's important to do that, because this texture could be disposed by the user, meaning that shader.isReady() would return false as part of the this.texture.isReadyForRendering() call of isReady()
+            shader.removeTexture("textureSampler");
         }
     }
 
@@ -214,7 +276,7 @@ export class MeshUVSpaceRenderer {
      * Clears the texture map
      */
     public clear(): void {
-        if (MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture) && this.texture.renderTarget) {
+        if (this.texture && MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture) && this.texture.renderTarget) {
             const engine = this._scene.getEngine();
 
             engine.bindFramebuffer(this.texture.renderTarget);
@@ -235,7 +297,7 @@ export class MeshUVSpaceRenderer {
      */
     public dispose() {
         if (this._textureCreatedInternally) {
-            this.texture.dispose();
+            this.texture?.dispose();
             this._textureCreatedInternally = false;
         }
         this._configureUserCreatedTexture = true;
@@ -243,12 +305,13 @@ export class MeshUVSpaceRenderer {
         this._maskTexture = null;
         this._finalPostProcess?.dispose();
         this._finalPostProcess = null;
+        this._isDisposed = true;
     }
 
     private _configureUserCreatedRTT(): void {
         this._configureUserCreatedTexture = false;
-        if (MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture)) {
-            this.texture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetShader(this._scene));
+        if (this.texture && MeshUVSpaceRenderer._IsRenderTargetTexture(this.texture)) {
+            this.texture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetShader(this._scene, this._shaderLanguage));
             this.texture.onClearObservable.add(() => {});
             this.texture.renderList = [this._mesh];
             if (this._options.uvEdgeBlending) {
@@ -264,7 +327,7 @@ export class MeshUVSpaceRenderer {
 
         const texture = this._createRenderTargetTexture(this._options.width, this._options.height);
 
-        texture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetShader(this._scene));
+        texture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetShader(this._scene, this._shaderLanguage));
 
         this.texture = texture;
         this._configureUserCreatedTexture = false;
@@ -299,7 +362,7 @@ export class MeshUVSpaceRenderer {
 
         // Render the mesh with the mask material to the mask texture
         this._maskTexture.renderList!.push(this._mesh);
-        this._maskTexture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetMaskShader(this._scene));
+        this._maskTexture.setMaterialForRendering(this._mesh, MeshUVSpaceRenderer._GetMaskShader(this._scene, this._shaderLanguage));
 
         // Ensure the mask texture is updated
         this._maskTexture.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
@@ -322,7 +385,12 @@ export class MeshUVSpaceRenderer {
             this._scene.getEngine(),
             false,
             null,
-            this._options.textureType
+            this._options.textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._shaderLanguage
         );
 
         this._finalPostProcess.onApplyObservable.add((effect) => {

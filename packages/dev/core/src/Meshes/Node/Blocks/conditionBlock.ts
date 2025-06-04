@@ -4,8 +4,9 @@ import { RegisterClass } from "../../../Misc/typeStore";
 import { NodeGeometryBlockConnectionPointTypes } from "../Enums/nodeGeometryConnectionPointTypes";
 import type { NodeGeometryBuildState } from "../nodeGeometryBuildState";
 import { PropertyTypeForEdition, editableInPropertyPage } from "../../../Decorators/nodeDecorator";
-import { Scalar } from "../../../Maths/math.scalar";
-import { Epsilon } from "../../../Maths/math.constants";
+import { WithinEpsilon } from "../../../Maths/math.scalar.functions";
+import { GeometryInputBlock } from "./geometryInputBlock";
+import type { NodeGeometry } from "../nodeGeometry";
 
 /**
  * Conditions supported by the condition block
@@ -40,6 +41,7 @@ export class ConditionBlock extends NodeGeometryBlock {
      */
     @editableInPropertyPage("Test", PropertyTypeForEdition.List, "ADVANCED", {
         notifiers: { rebuild: true },
+        embedded: true,
         options: [
             { label: "Equal", value: ConditionBlockTests.Equal },
             { label: "NotEqual", value: ConditionBlockTests.NotEqual },
@@ -53,6 +55,12 @@ export class ConditionBlock extends NodeGeometryBlock {
         ],
     })
     public test = ConditionBlockTests.Equal;
+
+    /**
+     * Gets or sets the epsilon value used for comparison
+     */
+    @editableInPropertyPage("Epsilon", PropertyTypeForEdition.Float, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
+    public epsilon = 0;
 
     /**
      * Create a new ConditionBlock
@@ -79,7 +87,7 @@ export class ConditionBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "ConditionBlock";
     }
 
@@ -118,7 +126,25 @@ export class ConditionBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
+    public override autoConfigure(nodeGeometry: NodeGeometry) {
+        if (!this.ifTrue.isConnected) {
+            const minInput =
+                (nodeGeometry.getBlockByPredicate((b) => b.isInput && (b as GeometryInputBlock).value === 1 && b.name === "True") as GeometryInputBlock) ||
+                new GeometryInputBlock("True");
+            minInput.value = 1;
+            minInput.output.connectTo(this.ifTrue);
+        }
+
+        if (!this.ifFalse.isConnected) {
+            const maxInput =
+                (nodeGeometry.getBlockByPredicate((b) => b.isInput && (b as GeometryInputBlock).value === 0 && b.name === "False") as GeometryInputBlock) ||
+                new GeometryInputBlock("False");
+            maxInput.value = 0;
+            maxInput.output.connectTo(this.ifFalse);
+        }
+    }
+
+    protected override _buildBlock() {
         if (!this.left.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
@@ -132,22 +158,22 @@ export class ConditionBlock extends NodeGeometryBlock {
 
             switch (this.test) {
                 case ConditionBlockTests.Equal:
-                    condition = Scalar.WithinEpsilon(left, right, Epsilon);
+                    condition = WithinEpsilon(left, right, this.epsilon);
                     break;
                 case ConditionBlockTests.NotEqual:
-                    condition = left !== right;
+                    condition = !WithinEpsilon(left, right, this.epsilon);
                     break;
                 case ConditionBlockTests.LessThan:
-                    condition = left < right;
+                    condition = left < right + this.epsilon;
                     break;
                 case ConditionBlockTests.GreaterThan:
-                    condition = left > right;
+                    condition = left > right - this.epsilon;
                     break;
                 case ConditionBlockTests.LessOrEqual:
-                    condition = left <= right;
+                    condition = left <= right + this.epsilon;
                     break;
                 case ConditionBlockTests.GreaterOrEqual:
-                    condition = left >= right;
+                    condition = left >= right - this.epsilon;
                     break;
                 case ConditionBlockTests.Xor:
                     condition = (!!left && !right) || (!left && !!right);
@@ -171,8 +197,9 @@ export class ConditionBlock extends NodeGeometryBlock {
         };
     }
 
-    protected _dumpPropertiesCode() {
-        const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.test = BABYLON.ConditionBlockTests.${ConditionBlockTests[this.test]};\n`;
+    protected override _dumpPropertiesCode() {
+        let codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.test = BABYLON.ConditionBlockTests.${ConditionBlockTests[this.test]};\n`;
+        codeString += `${this._codeVariableName}.epsilon = ${this.epsilon};\n`;
         return codeString;
     }
 
@@ -180,18 +207,22 @@ export class ConditionBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.test = this.test;
+        serializationObject.epsilon = this.epsilon;
 
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.test = serializationObject.test;
+        if (serializationObject.epsilon !== undefined) {
+            this.epsilon = serializationObject.epsilon;
+        }
     }
 }
 

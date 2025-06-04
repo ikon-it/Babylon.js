@@ -3,13 +3,12 @@ import type { Effect } from "../Materials/effect";
 import { PostProcess } from "./postProcess";
 import { Constants } from "../Engines/constants";
 
-import "../Shaders/tonemap.fragment";
 import type { Nullable } from "../types";
 
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 
 /** Defines operator used for tonemapping */
-export enum TonemappingOperator {
+export const enum TonemappingOperator {
     /** Hable */
     Hable = 0,
     /** Reinhard */
@@ -28,7 +27,7 @@ export class TonemapPostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "TonemapPostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "TonemapPostProcess";
     }
 
@@ -40,7 +39,7 @@ export class TonemapPostProcess extends PostProcess {
      * @param camera defines the camera to use (can be null)
      * @param samplingMode defines the required sampling mode (BABYLON.Texture.BILINEAR_SAMPLINGMODE by default)
      * @param engine defines the hosting engine (can be ignore if camera is set)
-     * @param textureFormat defines the texture format to use (BABYLON.Engine.TEXTURETYPE_UNSIGNED_INT by default)
+     * @param textureFormat defines the texture format to use (BABYLON.Engine.TEXTURETYPE_UNSIGNED_BYTE by default)
      * @param reusable If the post process can be reused on the same frame. (default: false)
      */
     constructor(
@@ -50,8 +49,8 @@ export class TonemapPostProcess extends PostProcess {
         public exposureAdjustment: number,
         camera: Nullable<Camera>,
         samplingMode: number = Constants.TEXTURE_BILINEAR_SAMPLINGMODE,
-        engine?: Engine,
-        textureFormat = Constants.TEXTURETYPE_UNSIGNED_INT,
+        engine?: AbstractEngine,
+        textureFormat = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         reusable?: boolean
     ) {
         super(name, "tonemap", ["_ExposureAdjustment"], null, 1.0, camera, samplingMode, engine, reusable, null, textureFormat);
@@ -74,5 +73,16 @@ export class TonemapPostProcess extends PostProcess {
         this.onApply = (effect: Effect) => {
             effect.setFloat("_ExposureAdjustment", this.exposureAdjustment);
         };
+    }
+
+    protected override _gatherImports(useWebGPU: boolean, list: Promise<any>[]) {
+        if (useWebGPU) {
+            this._webGPUReady = true;
+            list.push(Promise.all([import("../ShadersWGSL/tonemap.fragment")]));
+        } else {
+            list.push(Promise.all([import("../Shaders/tonemap.fragment")]));
+        }
+
+        super._gatherImports(useWebGPU, list);
     }
 }

@@ -14,6 +14,7 @@ import { BaseTexture } from "../../Materials/Textures/baseTexture";
 import { SphericalHarmonics, SphericalPolynomial } from "../../Maths/sphericalPolynomial";
 import { LightConstants } from "../../Lights/lightConstants";
 import { HDRFiltering } from "core/Materials/Textures/Filtering/hdrFiltering";
+import type { ThinEngine } from "core/Engines";
 
 /**
  * Options for Light Estimation feature
@@ -159,7 +160,7 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
             this.directionalLight.falloffType = LightConstants.FALLOFF_GLTF;
         }
 
-        this._hdrFilter = new HDRFiltering(this._xrSessionManager.scene.getEngine());
+        this._hdrFilter = new HDRFiltering(this._xrSessionManager.scene.getEngine() as ThinEngine);
 
         // https://immersive-web.github.io/lighting-estimation/
         Tools.Warn("light-estimation is an experimental and unstable feature.");
@@ -191,7 +192,7 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
 
     private _getCanvasContext(): WebGLRenderingContext | WebGL2RenderingContext {
         if (this._canvasContext === null) {
-            this._canvasContext = this._xrSessionManager.scene.getEngine()._gl;
+            this._canvasContext = (this._xrSessionManager.scene.getEngine() as ThinEngine)._gl;
         }
         return this._canvasContext;
     }
@@ -242,7 +243,8 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
             }
             this._reflectionCubeMap._texture.isReady = true;
             if (!this.options.disablePreFiltering) {
-                this._xrLightProbe!.removeEventListener("reflectionchange", this._updateReflectionCubeMap);
+                this._xrLightProbe.removeEventListener("reflectionchange", this._updateReflectionCubeMap);
+                // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
                 this._hdrFilter.prefilter(this._reflectionCubeMap).then(() => {
                     this._xrSessionManager.scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag);
                     this.onReflectionCubeMapUpdatedObservable.notifyObservers(this._reflectionCubeMap!);
@@ -262,17 +264,19 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public attach(): boolean {
+    public override attach(): boolean {
         if (!super.attach()) {
             return false;
         }
 
         const reflectionFormat = this.options.reflectionFormat ?? (this._xrSessionManager.session.preferredReflectionFormat || "srgba8");
         this.options.reflectionFormat = reflectionFormat;
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
         this._xrSessionManager.session
             .requestLightProbe({
                 reflectionFormat,
             })
+            // eslint-disable-next-line github/no-then
             .then((xrLightProbe: XRLightProbe) => {
                 this._xrLightProbe = xrLightProbe;
                 if (!this.options.disableCubeMapReflection) {
@@ -297,7 +301,7 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public detach(): boolean {
+    public override detach(): boolean {
         const detached = super.detach();
 
         if (this._xrLightProbe !== null && !this.options.disableCubeMapReflection) {
@@ -316,7 +320,7 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
     /**
      * Dispose this feature and all of the resources attached
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
 
         this.onReflectionCubeMapUpdatedObservable.clear();

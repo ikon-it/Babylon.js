@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/naming-convention
 import type * as KTX2 from "core/Materials/Textures/ktx2decoderTypes";
 
 import { Transcoder } from "../transcoder";
@@ -9,24 +10,26 @@ import type { KTX2FileReader, IKTX2_ImageDesc } from "../ktx2FileReader";
  */
 export class LiteTranscoder extends Transcoder {
     private _modulePath: string;
+    private _wasmBinary: ArrayBuffer | null = null;
     private _modulePromise: Promise<{ module: any }>;
     private _memoryManager: WASMMemoryManager;
     protected _transcodeInPlace: boolean;
 
-    protected _loadModule(): Promise<{ module: any }> {
-        if (this._modulePromise) {
-            return this._modulePromise;
-        }
-
-        this._modulePromise = WASMMemoryManager.LoadWASM(this._modulePath).then((wasmBinary) => {
-            return new Promise((resolve) => {
-                WebAssembly.instantiate(wasmBinary as ArrayBuffer, { env: { memory: this._memoryManager.wasmMemory } }).then((moduleWrapper) => {
-                    resolve({ module: moduleWrapper.instance.exports });
-                });
-            });
+    private async _instantiateWebAssemblyAsync(wasmBinary: ArrayBuffer): Promise<{ module: any }> {
+        // eslint-disable-next-line github/no-then
+        return await WebAssembly.instantiate(wasmBinary, { env: { memory: this._memoryManager.wasmMemory } }).then((moduleWrapper) => {
+            return { module: moduleWrapper.instance.exports };
         });
+    }
 
-        return this._modulePromise;
+    protected async _loadModuleAsync(wasmBinary: ArrayBuffer | null = this._wasmBinary): Promise<{ module: any }> {
+        this._modulePromise =
+            this._modulePromise ||
+            // eslint-disable-next-line github/no-then
+            (wasmBinary ? Promise.resolve(wasmBinary) : WASMMemoryManager.LoadWASM(this._modulePath)).then(async (wasmBinary) => {
+                return await this._instantiateWebAssemblyAsync(wasmBinary);
+            });
+        return await this._modulePromise;
     }
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -35,23 +38,25 @@ export class LiteTranscoder extends Transcoder {
     }
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    protected setModulePath(modulePath: string): void {
+    protected setModulePath(modulePath: string, wasmBinary: ArrayBuffer | null): void {
         this._modulePath = Transcoder.GetWasmUrl(modulePath);
+        this._wasmBinary = wasmBinary;
     }
 
-    public initialize(): void {
+    public override initialize(): void {
         this._transcodeInPlace = true;
     }
 
-    public needMemoryManager(): boolean {
+    public override needMemoryManager(): boolean {
         return true;
     }
 
-    public setMemoryManager(memoryMgr: WASMMemoryManager): void {
+    public override setMemoryManager(memoryMgr: WASMMemoryManager): void {
         this._memoryManager = memoryMgr;
     }
 
-    public transcode(
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public override async transcode(
         src: KTX2.SourceTextureFormat,
         dst: KTX2.TranscodeTarget,
         level: number,
@@ -62,7 +67,8 @@ export class LiteTranscoder extends Transcoder {
         imageDesc: IKTX2_ImageDesc | null,
         encodedData: Uint8Array
     ): Promise<Uint8Array | null> {
-        return this._loadModule().then((moduleWrapper: any) => {
+        // eslint-disable-next-line github/no-then
+        return await this._loadModuleAsync().then((moduleWrapper: any) => {
             const transcoder: any = moduleWrapper.module;
             const [textureView, uncompressedTextureView, nBlocks] = this._prepareTranscoding(width, height, uncompressedByteLength, encodedData);
 

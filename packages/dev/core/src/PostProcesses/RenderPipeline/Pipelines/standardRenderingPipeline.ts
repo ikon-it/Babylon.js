@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "../../../types";
-import { serialize, serializeAsTexture, SerializationHelper } from "../../../Misc/decorators";
+import { serialize, serializeAsTexture } from "../../../Misc/decorators";
+import { SerializationHelper } from "../../../Misc/decorators.serialization";
 import type { IAnimatable } from "../../../Animations/animatable.interface";
 import { Logger } from "../../../Misc/logger";
 import { Vector2, Vector3, Matrix, Vector4 } from "../../../Maths/math.vector";
-import { Scalar } from "../../../Maths/math.scalar";
+import { Clamp } from "../../../Maths/math.scalar.functions";
 import type { Camera } from "../../../Cameras/camera";
 import type { Effect } from "../../../Materials/effect";
 import { Texture } from "../../../Materials/Textures/texture";
@@ -680,7 +681,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 scene.getEngine(),
                 false,
                 "#define PASS_POST_PROCESS",
-                Constants.TEXTURETYPE_UNSIGNED_INT
+                Constants.TEXTURETYPE_UNSIGNED_BYTE
             );
             this.addEffect(
                 new PostProcessRenderEffect(
@@ -710,7 +711,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 scene.getEngine(),
                 false,
                 "#define PASS_POST_PROCESS",
-                Constants.TEXTURETYPE_UNSIGNED_INT
+                Constants.TEXTURETYPE_UNSIGNED_BYTE
             );
             this.addEffect(
                 new PostProcessRenderEffect(
@@ -740,7 +741,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 scene.getEngine(),
                 false,
                 "#define PASS_POST_PROCESS",
-                Constants.TEXTURETYPE_UNSIGNED_INT
+                Constants.TEXTURETYPE_UNSIGNED_BYTE
             );
             this.addEffect(
                 new PostProcessRenderEffect(
@@ -773,7 +774,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 scene.getEngine(),
                 false,
                 "#define PASS_POST_PROCESS",
-                Constants.TEXTURETYPE_UNSIGNED_INT
+                Constants.TEXTURETYPE_UNSIGNED_BYTE
             );
             this.addEffect(
                 new PostProcessRenderEffect(
@@ -802,7 +803,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
 
         if (this._fxaaEnabled) {
             // Create fxaa post-process
-            this.fxaaPostProcess = new FxaaPostProcess("fxaa", 1.0, null, Texture.BILINEAR_SAMPLINGMODE, scene.getEngine(), false, Constants.TEXTURETYPE_UNSIGNED_INT);
+            this.fxaaPostProcess = new FxaaPostProcess("fxaa", 1.0, null, Texture.BILINEAR_SAMPLINGMODE, scene.getEngine(), false, Constants.TEXTURETYPE_UNSIGNED_BYTE);
             this.addEffect(
                 new PostProcessRenderEffect(
                     scene.getEngine(),
@@ -1181,7 +1182,8 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
         // Create callbacks and add effects
         let lastLuminance: Nullable<PostProcess> = this.luminancePostProcess;
 
-        this.luminanceDownSamplePostProcesses.forEach((pp, index) => {
+        for (let index = 0; index < this.luminanceDownSamplePostProcesses.length; index++) {
+            const pp = this.luminanceDownSamplePostProcesses[index];
             const downSampleOffsets = new Array<number>(18);
 
             pp.onApply = (effect: Effect) => {
@@ -1212,6 +1214,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 pp.onAfterRender = () => {
                     const pixel = scene.getEngine().readPixels(0, 0, 1, 1);
                     const bit_shift = new Vector4(1.0 / (255.0 * 255.0 * 255.0), 1.0 / (255.0 * 255.0), 1.0 / 255.0, 1.0);
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
                     pixel.then((pixel) => {
                         const data = new Uint8Array(pixel.buffer);
                         this._hdrCurrentLuminance = (data[0] * bit_shift.x + data[1] * bit_shift.y + data[2] * bit_shift.z + data[3] * bit_shift.w) / 100.0;
@@ -1229,7 +1232,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                     true
                 )
             );
-        });
+        }
     }
 
     // Create HDR post-process
@@ -1249,7 +1252,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
             scene.getEngine(),
             false,
             defines.join("\n"),
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
 
         let outputLiminance = 1;
@@ -1278,7 +1281,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
             if (this.hdrAutoExposure) {
                 this._currentExposure = this._fixedExposure / outputLiminance;
             } else {
-                outputLiminance = Scalar.Clamp(outputLiminance, this.hdrMinimumLuminance, 1e20);
+                outputLiminance = Clamp(outputLiminance, this.hdrMinimumLuminance, 1e20);
                 effect.setFloat("averageLuminance", outputLiminance);
             }
 
@@ -1312,7 +1315,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
             scene.getEngine(),
             false,
             "#define LENS_FLARE",
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
         this.addEffect(
             new PostProcessRenderEffect(
@@ -1338,7 +1341,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
             scene.getEngine(),
             false,
             "#define LENS_FLARE_COMPOSE",
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
         this.addEffect(
             new PostProcessRenderEffect(
@@ -1430,7 +1433,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
             scene.getEngine(),
             false,
             "#define DEPTH_OF_FIELD",
-            Constants.TEXTURETYPE_UNSIGNED_INT
+            Constants.TEXTURETYPE_UNSIGNED_BYTE
         );
         this.depthOfFieldPostProcess.onApply = (effect: Effect) => {
             effect.setTextureFromPostProcess("otherSampler", this._currentDepthOfFieldSource);
@@ -1455,7 +1458,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
     // Create motion blur post-process
     private _createMotionBlurPostProcess(scene: Scene, ratio: number): void {
         if (this._isObjectBasedMotionBlur) {
-            const mb = new MotionBlurPostProcess("HDRMotionBlur", scene, ratio, null, Texture.BILINEAR_SAMPLINGMODE, scene.getEngine(), false, Constants.TEXTURETYPE_UNSIGNED_INT);
+            const mb = new MotionBlurPostProcess("HDRMotionBlur", scene, ratio, null, Texture.BILINEAR_SAMPLINGMODE, scene.getEngine(), false, Constants.TEXTURETYPE_UNSIGNED_BYTE);
             mb.motionStrength = this.motionStrength;
             mb.motionBlurSamples = this.motionBlurSamples;
             this.motionBlurPostProcess = mb;
@@ -1471,7 +1474,7 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
                 scene.getEngine(),
                 false,
                 "#define MOTION_BLUR\n#define MAX_MOTION_SAMPLES " + this.motionBlurSamples.toFixed(1),
-                Constants.TEXTURETYPE_UNSIGNED_INT
+                Constants.TEXTURETYPE_UNSIGNED_BYTE
             );
 
             let motionScale: number = 0;
@@ -1629,10 +1632,12 @@ export class StandardRenderingPipeline extends PostProcessRenderPipeline impleme
     /**
      * Dispose of the pipeline and stop all post processes
      */
-    public dispose(): void {
+    public override dispose(): void {
         this._disposePostProcesses();
 
         this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(this._name, this._cameras);
+
+        this._scene.postProcessRenderPipelineManager.removePipeline(this._name);
 
         super.dispose();
     }

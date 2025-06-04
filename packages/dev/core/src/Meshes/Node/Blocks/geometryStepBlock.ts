@@ -16,7 +16,7 @@ export class GeometryStepBlock extends NodeGeometryBlock {
         super(name);
 
         this.registerInput("value", NodeGeometryBlockConnectionPointTypes.AutoDetect);
-        this.registerInput("edge", NodeGeometryBlockConnectionPointTypes.Float);
+        this.registerInput("edge", NodeGeometryBlockConnectionPointTypes.Float, true, 0);
         this.registerOutput("output", NodeGeometryBlockConnectionPointTypes.BasedOnInput);
 
         this._outputs[0]._typeConnectionSource = this._inputs[0];
@@ -29,7 +29,7 @@ export class GeometryStepBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryStepBlock";
     }
 
@@ -54,8 +54,8 @@ export class GeometryStepBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock() {
-        if (!this.value.isConnected || !this.edge.isConnected) {
+    protected override _buildBlock() {
+        if (!this.value.isConnected) {
             this.output._storedFunction = null;
             this.output._storedValue = null;
             return;
@@ -74,16 +74,16 @@ export class GeometryStepBlock extends NodeGeometryBlock {
             switch (this.value.type) {
                 case NodeGeometryBlockConnectionPointTypes.Int:
                 case NodeGeometryBlockConnectionPointTypes.Float: {
-                    return func!(source, edge);
+                    return func(source, edge);
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector2: {
-                    return new Vector2(func!(source.x, edge), func!(source.y, edge));
+                    return new Vector2(func(source.x, edge), func(source.y, edge));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector3: {
-                    return new Vector3(func!(source.x, edge), func!(source.y, edge), func!(source.z, edge));
+                    return new Vector3(func(source.x, edge), func(source.y, edge), func(source.z, edge));
                 }
                 case NodeGeometryBlockConnectionPointTypes.Vector4: {
-                    return new Vector4(func!(source.x, edge), func!(source.y, edge), func!(source.z, edge), func!(source.w, edge));
+                    return new Vector4(func(source.x, edge), func(source.y, edge), func(source.z, edge), func(source.w, edge));
                 }
             }
 

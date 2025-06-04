@@ -1,6 +1,6 @@
 import type { Skeleton } from "./skeleton";
 import { Vector3, Quaternion, Matrix, TmpVectors } from "../Maths/math.vector";
-import { ArrayTools } from "../Misc/arrayTools";
+import { BuildArray } from "../Misc/arrayTools";
 import type { Nullable } from "../types";
 import type { TransformNode } from "../Meshes/transformNode";
 import { Node } from "../node";
@@ -14,9 +14,9 @@ import type { AnimationPropertiesOverride } from "../Animations/animationPropert
  * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/bonesSkeletons
  */
 export class Bone extends Node {
-    private static _TmpVecs: Vector3[] = ArrayTools.BuildArray(2, Vector3.Zero);
+    private static _TmpVecs: Vector3[] = BuildArray(2, Vector3.Zero);
     private static _TmpQuat = Quaternion.Identity();
-    private static _TmpMats: Matrix[] = ArrayTools.BuildArray(5, Matrix.Identity);
+    private static _TmpMats: Matrix[] = BuildArray(5, Matrix.Identity);
 
     /**
      * Gets the list of child bones
@@ -24,7 +24,7 @@ export class Bone extends Node {
     public children: Bone[] = [];
 
     /** Gets the animations associated with this bone */
-    public animations: Animation[] = [];
+    public override animations: Animation[] = [];
 
     /**
      * Gets or sets bone length
@@ -93,7 +93,7 @@ export class Bone extends Node {
         /**
          * defines the bone name
          */
-        public name: string,
+        public override name: string,
         skeleton: Skeleton,
         parentBone: Nullable<Bone> = null,
         localMatrix: Nullable<Matrix> = null,
@@ -101,7 +101,7 @@ export class Bone extends Node {
         bindMatrix: Nullable<Matrix> = null,
         index: Nullable<number> = null
     ) {
-        super(name, skeleton.getScene());
+        super(name, skeleton.getScene(), false);
         this._skeleton = skeleton;
         this._localMatrix = localMatrix?.clone() ?? Matrix.Identity();
         this._restMatrix = restMatrix ?? this._localMatrix.clone();
@@ -124,7 +124,7 @@ export class Bone extends Node {
      * Gets the current object class name.
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "Bone";
     }
 
@@ -138,7 +138,7 @@ export class Bone extends Node {
         return this._skeleton;
     }
 
-    public get parent(): Bone {
+    public override get parent(): Bone {
         return this._parentNode as Bone;
     }
 
@@ -154,7 +154,7 @@ export class Bone extends Node {
      * Returns an array containing the children of the bone
      * @returns an array containing the children of the bone (can be empty if the bone has no children)
      */
-    public getChildren(): Array<Bone> {
+    public override getChildren(): Array<Bone> {
         return this.children;
     }
 
@@ -166,7 +166,7 @@ export class Bone extends Node {
         return this._index === null ? this.getSkeleton().bones.indexOf(this) : this._index;
     }
 
-    public set parent(newParent: Nullable<Bone>) {
+    public override set parent(newParent: Nullable<Bone>) {
         this.setParent(newParent);
     }
 
@@ -301,7 +301,7 @@ export class Bone extends Node {
      * @deprecated Please use getFinalMatrix instead
      * @returns the final world matrix
      */
-    public getWorldMatrix(): Matrix {
+    public override getWorldMatrix(): Matrix {
         return this.getFinalMatrix();
     }
 
@@ -430,7 +430,7 @@ export class Bone extends Node {
     /**
      * Gets the animation properties override
      */
-    public get animationPropertiesOverride(): Nullable<AnimationPropertiesOverride> {
+    public override get animationPropertiesOverride(): Nullable<AnimationPropertiesOverride> {
         return this._skeleton.animationPropertiesOverride;
     }
 
@@ -513,7 +513,7 @@ export class Bone extends Node {
      * Flag the bone as dirty (Forcing it to update everything)
      * @returns this bone
      */
-    public markAsDirty(): Bone {
+    public override markAsDirty(): Bone {
         this._currentRenderId++;
         this._childUpdateId++;
         this._skeleton._markAsDirty();
@@ -1229,5 +1229,27 @@ export class Bone extends Node {
      */
     public setCurrentPoseAsRest(): void {
         this.setRestMatrix(this.getLocalMatrix());
+    }
+
+    /**
+     * Releases associated resources
+     */
+    public override dispose(): void {
+        this._linkedTransformNode = null;
+
+        const index = this._skeleton.bones.indexOf(this);
+        if (index !== -1) {
+            this._skeleton.bones.splice(index, 1);
+        }
+
+        if (this._parentNode && (this._parentNode as Bone).children) {
+            const children = (this._parentNode as Bone).children;
+            const index = children.indexOf(this);
+            if (index !== -1) {
+                children.splice(index, 1);
+            }
+        }
+
+        super.dispose();
     }
 }

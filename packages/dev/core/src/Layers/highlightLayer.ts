@@ -1,18 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { serialize, SerializationHelper } from "../Misc/decorators";
-import type { Observer } from "../Misc/observable";
+import { serialize } from "../Misc/decorators";
 import { Observable } from "../Misc/observable";
 import type { Nullable } from "../types";
 import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
+import { Scene } from "../scene";
 import { Vector2 } from "../Maths/math.vector";
-import { Engine } from "../Engines/engine";
-import { VertexBuffer } from "../Buffers/buffer";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { SubMesh } from "../Meshes/subMesh";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import type { Mesh } from "../Meshes/mesh";
 import type { Effect } from "../Materials/effect";
-import { Material } from "../Materials/material";
+import type { Material } from "../Materials/material";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import type { PostProcessOptions } from "../PostProcesses/postProcess";
@@ -20,19 +18,23 @@ import { PostProcess } from "../PostProcesses/postProcess";
 import { PassPostProcess } from "../PostProcesses/passPostProcess";
 import { BlurPostProcess } from "../PostProcesses/blurPostProcess";
 import { EffectLayer } from "./effectLayer";
-import { AbstractScene } from "../abstractScene";
 import { Constants } from "../Engines/constants";
 import { Logger } from "../Misc/logger";
 import { RegisterClass } from "../Misc/typeStore";
-import { Color4, Color3 } from "../Maths/math.color";
+import type { Color4 } from "../Maths/math.color";
+import { Color3 } from "../Maths/math.color";
 
-import "../Shaders/glowMapMerge.fragment";
-import "../Shaders/glowMapMerge.vertex";
-import "../Shaders/glowBlurPostProcess.fragment";
-import "../Layers/effectLayerSceneComponent";
+import type { ThinPassPostProcess } from "core/PostProcesses/thinPassPostProcess";
+import type { ThinBlurPostProcess } from "core/PostProcesses/thinBlurPostProcess";
+import type { IThinHighlightLayerOptions } from "./thinHighlightLayer";
+import { SerializationHelper } from "../Misc/decorators.serialization";
+import { GetExponentOfTwo } from "../Misc/tools.functions";
+import { ThinHighlightLayer } from "./thinHighlightLayer";
+import { ThinGlowBlurPostProcess } from "./thinEffectLayer";
 
-declare module "../abstractScene" {
-    export interface AbstractScene {
+declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface Scene {
         /**
          * Return a the first highlight layer of the scene with a given name.
          * @param name The name of the highlight layer to look for.
@@ -42,7 +44,7 @@ declare module "../abstractScene" {
     }
 }
 
-AbstractScene.prototype.getHighlightLayerByName = function (name: string): Nullable<HighlightLayer> {
+Scene.prototype.getHighlightLayerByName = function (name: string): Nullable<HighlightLayer> {
     for (let index = 0; index < this.effectLayers?.length; index++) {
         if (this.effectLayers[index].name === name && this.effectLayers[index].getEffectName() === HighlightLayer.EffectName) {
             return (<any>this.effectLayers[index]) as HighlightLayer;
@@ -52,28 +54,57 @@ AbstractScene.prototype.getHighlightLayerByName = function (name: string): Nulla
     return null;
 };
 
+interface IBlurPostProcess extends PostProcess {
+    kernel: number;
+}
+
 /**
  * Special Glow Blur post process only blurring the alpha channel
  * It enforces keeping the most luminous color in the color channel.
  */
 class GlowBlurPostProcess extends PostProcess {
+    protected override _effectWrapper: ThinGlowBlurPostProcess;
+
     constructor(
         name: string,
         public direction: Vector2,
         public kernel: number,
         options: number | PostProcessOptions,
-        camera: Nullable<Camera>,
+        camera: Nullable<Camera> = null,
         samplingMode: number = Texture.BILINEAR_SAMPLINGMODE,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean
     ) {
-        super(name, "glowBlurPostProcess", ["screenSize", "direction", "blurWidth"], null, options, camera, samplingMode, engine, reusable);
+        const localOptions = {
+            uniforms: ThinGlowBlurPostProcess.Uniforms,
+            size: typeof options === "number" ? options : undefined,
+            camera,
+            samplingMode,
+            engine,
+            reusable,
+            ...(options as PostProcessOptions),
+        };
 
-        this.onApplyObservable.add((effect: Effect) => {
-            effect.setFloat2("screenSize", this.width, this.height);
-            effect.setVector2("direction", this.direction);
-            effect.setFloat("blurWidth", this.kernel);
+        super(name, ThinGlowBlurPostProcess.FragmentUrl, {
+            effectWrapper: typeof options === "number" || !options.effectWrapper ? new ThinGlowBlurPostProcess(name, engine, direction, kernel, localOptions) : undefined,
+            ...localOptions,
         });
+
+        this.onApplyObservable.add(() => {
+            this._effectWrapper.textureWidth = this.width;
+            this._effectWrapper.textureHeight = this.height;
+        });
+    }
+
+    protected override _gatherImports(useWebGPU: boolean, list: Promise<any>[]) {
+        if (useWebGPU) {
+            this._webGPUReady = true;
+            list.push(import("../ShadersWGSL/glowBlurPostProcess.fragment"));
+        } else {
+            list.push(import("../Shaders/glowBlurPostProcess.fragment"));
+        }
+
+        super._gatherImports(useWebGPU, list);
     }
 }
 
@@ -81,108 +112,7 @@ class GlowBlurPostProcess extends PostProcess {
  * Highlight layer options. This helps customizing the behaviour
  * of the highlight layer.
  */
-export interface IHighlightLayerOptions {
-    /**
-     * Multiplication factor apply to the canvas size to compute the render target size
-     * used to generated the glowing objects (the smaller the faster). Default: 0.5
-     */
-    mainTextureRatio: number;
-
-    /**
-     * Enforces a fixed size texture to ensure resize independent blur. Default: undefined
-     */
-    mainTextureFixedSize?: number;
-
-    /**
-     * Multiplication factor apply to the main texture size in the first step of the blur to reduce the size
-     * of the picture to blur (the smaller the faster). Default: 0.5
-     */
-    blurTextureSizeRatio: number;
-
-    /**
-     * How big in texel of the blur texture is the vertical blur. Default: 1
-     */
-    blurVerticalSize: number;
-
-    /**
-     * How big in texel of the blur texture is the horizontal blur. Default: 1
-     */
-    blurHorizontalSize: number;
-
-    /**
-     * Alpha blending mode used to apply the blur.  Default: ALPHA_COMBINE
-     */
-    alphaBlendingMode: number;
-
-    /**
-     * The camera attached to the layer. Default: null
-     */
-    camera: Nullable<Camera>;
-
-    /**
-     * Should we display highlight as a solid stroke? Default: false
-     */
-    isStroke?: boolean;
-
-    /**
-     * The rendering group to draw the layer in. Default: -1
-     */
-    renderingGroupId: number;
-
-    /**
-     * The type of the main texture. Default: TEXTURETYPE_UNSIGNED_INT
-     */
-    mainTextureType: number;
-}
-
-/**
- * Storage interface grouping all the information required for glowing a mesh.
- */
-interface IHighlightLayerMesh {
-    /**
-     * The glowy mesh
-     */
-    mesh: Mesh;
-    /**
-     * The color of the glow
-     */
-    color: Color3;
-    /**
-     * The mesh render callback use to insert stencil information
-     */
-    observerHighlight: Nullable<Observer<Mesh>>;
-    /**
-     * The mesh render callback use to come to the default behavior
-     */
-    observerDefault: Nullable<Observer<Mesh>>;
-    /**
-     * If it exists, the emissive color of the material will be used to generate the glow.
-     * Else it falls back to the current color.
-     */
-    glowEmissiveOnly: boolean;
-}
-
-/**
- * Storage interface grouping all the information required for an excluded mesh.
- */
-interface IHighlightLayerExcludedMesh {
-    /**
-     * The glowy mesh
-     */
-    mesh: Mesh;
-    /**
-     * The mesh render callback use to prevent stencil use
-     */
-    beforeBind: Nullable<Observer<Mesh>>;
-    /**
-     * The mesh render callback use to restore previous stencil use
-     */
-    afterRender: Nullable<Observer<Mesh>>;
-    /**
-     * Current stencil state of the engine
-     */
-    stencilState: boolean;
-}
+export interface IHighlightLayerOptions extends IThinHighlightLayerOptions {}
 
 /**
  * The highlight layer Helps adding a glow effect around a mesh.
@@ -202,44 +132,50 @@ export class HighlightLayer extends EffectLayer {
      * The neutral color used during the preparation of the glow effect.
      * This is black by default as the blend operation is a blend operation.
      */
-    public static NeutralColor: Color4 = new Color4(0, 0, 0, 0);
+    public static get NeutralColor() {
+        return ThinHighlightLayer.NeutralColor;
+    }
 
-    /**
-     * Stencil value used for glowing meshes.
-     */
-    public static GlowingMeshStencilReference = 0x02;
-
-    /**
-     * Stencil value used for the other meshes in the scene.
-     */
-    public static NormalMeshStencilReference = 0x01;
+    public static set NeutralColor(value: Color4) {
+        ThinHighlightLayer.NeutralColor = value;
+    }
 
     /**
      * Specifies whether or not the inner glow is ACTIVE in the layer.
      */
     @serialize()
-    public innerGlow: boolean = true;
+    public get innerGlow() {
+        return this._thinEffectLayer.innerGlow;
+    }
+
+    public set innerGlow(value: boolean) {
+        this._thinEffectLayer.innerGlow = value;
+    }
 
     /**
      * Specifies whether or not the outer glow is ACTIVE in the layer.
      */
     @serialize()
-    public outerGlow: boolean = true;
+    public get outerGlow() {
+        return this._thinEffectLayer.outerGlow;
+    }
+
+    public set outerGlow(value: boolean) {
+        this._thinEffectLayer.outerGlow = value;
+    }
 
     /**
      * Specifies the horizontal size of the blur.
      */
     public set blurHorizontalSize(value: number) {
-        this._horizontalBlurPostprocess.kernel = value;
-        this._options.blurHorizontalSize = value;
+        this._thinEffectLayer.blurHorizontalSize = value;
     }
 
     /**
      * Specifies the vertical size of the blur.
      */
     public set blurVerticalSize(value: number) {
-        this._verticalBlurPostprocess.kernel = value;
-        this._options.blurVerticalSize = value;
+        this._thinEffectLayer.blurVerticalSize = value;
     }
 
     /**
@@ -247,7 +183,7 @@ export class HighlightLayer extends EffectLayer {
      */
     @serialize()
     public get blurHorizontalSize(): number {
-        return this._horizontalBlurPostprocess.kernel;
+        return this._thinEffectLayer.blurHorizontalSize;
     }
 
     /**
@@ -255,7 +191,7 @@ export class HighlightLayer extends EffectLayer {
      */
     @serialize()
     public get blurVerticalSize(): number {
-        return this._verticalBlurPostprocess.kernel;
+        return this._thinEffectLayer.blurVerticalSize;
     }
 
     /**
@@ -268,17 +204,14 @@ export class HighlightLayer extends EffectLayer {
      */
     public onAfterBlurObservable = new Observable<HighlightLayer>();
 
-    private _instanceGlowingMeshStencilReference = HighlightLayer.GlowingMeshStencilReference++;
-
     @serialize("options")
-    private _options: IHighlightLayerOptions;
-    private _downSamplePostprocess: PassPostProcess;
-    private _horizontalBlurPostprocess: GlowBlurPostProcess;
-    private _verticalBlurPostprocess: GlowBlurPostProcess;
-    private _blurTexture: RenderTargetTexture;
+    private _options: Required<IHighlightLayerOptions>;
 
-    private _meshes: Nullable<{ [id: string]: Nullable<IHighlightLayerMesh> }> = {};
-    private _excludedMeshes: Nullable<{ [id: string]: Nullable<IHighlightLayerExcludedMesh> }> = {};
+    protected override readonly _thinEffectLayer: ThinHighlightLayer;
+    private _downSamplePostprocess: PassPostProcess;
+    private _horizontalBlurPostprocess: IBlurPostProcess;
+    private _verticalBlurPostprocess: IBlurPostProcess;
+    private _blurTexture: RenderTargetTexture;
 
     /**
      * Instantiates a new highlight Layer and references it to the scene..
@@ -286,13 +219,8 @@ export class HighlightLayer extends EffectLayer {
      * @param scene The scene to use the layer in
      * @param options Sets of none mandatory options to use with the layer (see IHighlightLayerOptions for more information)
      */
-    constructor(
-        public name: string,
-        scene?: Scene,
-        options?: Partial<IHighlightLayerOptions>
-    ) {
-        super(name, scene);
-        this.neutralColor = HighlightLayer.NeutralColor;
+    constructor(name: string, scene?: Scene, options?: Partial<IHighlightLayerOptions>) {
+        super(name, scene, options !== undefined ? !!options.forceGLSL : false, new ThinHighlightLayer(name, scene, options));
 
         // Warn on stencil
         if (!this._engine.isStencilEnable) {
@@ -303,24 +231,20 @@ export class HighlightLayer extends EffectLayer {
         this._options = {
             mainTextureRatio: 0.5,
             blurTextureSizeRatio: 0.5,
+            mainTextureFixedSize: 0,
             blurHorizontalSize: 1.0,
             blurVerticalSize: 1.0,
             alphaBlendingMode: Constants.ALPHA_COMBINE,
             camera: null,
             renderingGroupId: -1,
-            mainTextureType: Constants.TEXTURETYPE_UNSIGNED_INT,
+            mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
+            forceGLSL: false,
+            isStroke: false,
             ...options,
         };
 
         // Initialize the layer
-        this._init({
-            alphaBlendingMode: this._options.alphaBlendingMode,
-            camera: this._options.camera,
-            mainTextureFixedSize: this._options.mainTextureFixedSize,
-            mainTextureRatio: this._options.mainTextureRatio,
-            renderingGroupId: this._options.renderingGroupId,
-            mainTextureType: this._options.mainTextureType,
-        });
+        this._init(this._options);
 
         // Do not render as long as no meshes have been added
         this._shouldRender = false;
@@ -334,7 +258,7 @@ export class HighlightLayer extends EffectLayer {
         return HighlightLayer.EffectName;
     }
 
-    protected _numInternalDraws(): number {
+    protected override _numInternalDraws(): number {
         return 2; // we need two rendering, one for the inner glow and the other for the outer glow
     }
 
@@ -344,8 +268,7 @@ export class HighlightLayer extends EffectLayer {
      * @returns The effect created
      */
     protected _createMergeEffect(): Effect {
-        // Effect
-        return this._engine.createEffect("glowMapMerge", [VertexBuffer.PositionKind], ["offset"], ["textureSampler"], this._options.isStroke ? "#define STROKE \n" : undefined);
+        return this._thinEffectLayer._createMergeEffect();
     }
 
     /**
@@ -354,14 +277,14 @@ export class HighlightLayer extends EffectLayer {
     protected _createTextureAndPostProcesses(): void {
         let blurTextureWidth = this._mainTextureDesiredSize.width * this._options.blurTextureSizeRatio;
         let blurTextureHeight = this._mainTextureDesiredSize.height * this._options.blurTextureSizeRatio;
-        blurTextureWidth = this._engine.needPOTTextures ? Engine.GetExponentOfTwo(blurTextureWidth, this._maxSize) : blurTextureWidth;
-        blurTextureHeight = this._engine.needPOTTextures ? Engine.GetExponentOfTwo(blurTextureHeight, this._maxSize) : blurTextureHeight;
+        blurTextureWidth = this._engine.needPOTTextures ? GetExponentOfTwo(blurTextureWidth, this._maxSize) : blurTextureWidth;
+        blurTextureHeight = this._engine.needPOTTextures ? GetExponentOfTwo(blurTextureHeight, this._maxSize) : blurTextureHeight;
 
         let textureType = 0;
         if (this._engine.getCaps().textureHalfFloatRender) {
             textureType = Constants.TEXTURETYPE_HALF_FLOAT;
         } else {
-            textureType = Constants.TEXTURETYPE_UNSIGNED_INT;
+            textureType = Constants.TEXTURETYPE_UNSIGNED_BYTE;
         }
 
         this._blurTexture = new RenderTargetTexture(
@@ -384,61 +307,54 @@ export class HighlightLayer extends EffectLayer {
 
         this._textures = [this._blurTexture];
 
+        this._thinEffectLayer.bindTexturesForCompose = (effect: Effect) => {
+            effect.setTexture("textureSampler", this._blurTexture);
+        };
+
+        this._thinEffectLayer._createTextureAndPostProcesses();
+
         if (this._options.alphaBlendingMode === Constants.ALPHA_COMBINE) {
-            this._downSamplePostprocess = new PassPostProcess(
-                "HighlightLayerPPP",
-                this._options.blurTextureSizeRatio,
-                null,
-                Texture.BILINEAR_SAMPLINGMODE,
-                this._scene.getEngine()
-            );
+            this._downSamplePostprocess = new PassPostProcess("HighlightLayerPPP", {
+                size: this._options.blurTextureSizeRatio,
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this._scene.getEngine(),
+                effectWrapper: this._thinEffectLayer._postProcesses[0] as ThinPassPostProcess,
+            });
             this._downSamplePostprocess.externalTextureSamplerBinding = true;
             this._downSamplePostprocess.onApplyObservable.add((effect) => {
                 effect.setTexture("textureSampler", this._mainTexture);
             });
 
-            this._horizontalBlurPostprocess = new GlowBlurPostProcess(
-                "HighlightLayerHBP",
-                new Vector2(1.0, 0),
-                this._options.blurHorizontalSize,
-                1,
-                null,
-                Texture.BILINEAR_SAMPLINGMODE,
-                this._scene.getEngine()
-            );
+            this._horizontalBlurPostprocess = new GlowBlurPostProcess("HighlightLayerHBP", new Vector2(1.0, 0), this._options.blurHorizontalSize, {
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this._scene.getEngine(),
+                effectWrapper: this._thinEffectLayer._postProcesses[1] as ThinGlowBlurPostProcess,
+            });
             this._horizontalBlurPostprocess.onApplyObservable.add((effect) => {
                 effect.setFloat2("screenSize", blurTextureWidth, blurTextureHeight);
             });
 
-            this._verticalBlurPostprocess = new GlowBlurPostProcess(
-                "HighlightLayerVBP",
-                new Vector2(0, 1.0),
-                this._options.blurVerticalSize,
-                1,
-                null,
-                Texture.BILINEAR_SAMPLINGMODE,
-                this._scene.getEngine()
-            );
+            this._verticalBlurPostprocess = new GlowBlurPostProcess("HighlightLayerVBP", new Vector2(0, 1.0), this._options.blurVerticalSize, {
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this._scene.getEngine(),
+                effectWrapper: this._thinEffectLayer._postProcesses[2] as ThinGlowBlurPostProcess,
+            });
             this._verticalBlurPostprocess.onApplyObservable.add((effect) => {
                 effect.setFloat2("screenSize", blurTextureWidth, blurTextureHeight);
             });
 
             this._postProcesses = [this._downSamplePostprocess, this._horizontalBlurPostprocess, this._verticalBlurPostprocess];
         } else {
-            this._horizontalBlurPostprocess = new BlurPostProcess(
-                "HighlightLayerHBP",
-                new Vector2(1.0, 0),
-                this._options.blurHorizontalSize / 2,
-                {
+            this._horizontalBlurPostprocess = new BlurPostProcess("HighlightLayerHBP", new Vector2(1.0, 0), this._options.blurHorizontalSize / 2, {
+                size: {
                     width: blurTextureWidth,
                     height: blurTextureHeight,
                 },
-                null,
-                Texture.BILINEAR_SAMPLINGMODE,
-                this._scene.getEngine(),
-                false,
-                textureType
-            );
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this._scene.getEngine(),
+                textureType,
+                effectWrapper: this._thinEffectLayer._postProcesses[0] as ThinBlurPostProcess,
+            });
             this._horizontalBlurPostprocess.width = blurTextureWidth;
             this._horizontalBlurPostprocess.height = blurTextureHeight;
             this._horizontalBlurPostprocess.externalTextureSamplerBinding = true;
@@ -446,20 +362,15 @@ export class HighlightLayer extends EffectLayer {
                 effect.setTexture("textureSampler", this._mainTexture);
             });
 
-            this._verticalBlurPostprocess = new BlurPostProcess(
-                "HighlightLayerVBP",
-                new Vector2(0, 1.0),
-                this._options.blurVerticalSize / 2,
-                {
+            this._verticalBlurPostprocess = new BlurPostProcess("HighlightLayerVBP", new Vector2(0, 1.0), this._options.blurVerticalSize / 2, {
+                size: {
                     width: blurTextureWidth,
                     height: blurTextureHeight,
                 },
-                null,
-                Texture.BILINEAR_SAMPLINGMODE,
-                this._scene.getEngine(),
-                false,
-                textureType
-            );
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this._scene.getEngine(),
+                textureType,
+            });
 
             this._postProcesses = [this._horizontalBlurPostprocess, this._verticalBlurPostprocess];
         }
@@ -486,7 +397,7 @@ export class HighlightLayer extends EffectLayer {
      * @returns whether or not the layer needs stencil enabled during the mesh rendering.
      */
     public needStencil(): boolean {
-        return true;
+        return this._thinEffectLayer.needStencil();
     }
 
     /**
@@ -496,20 +407,7 @@ export class HighlightLayer extends EffectLayer {
      * @returns true if ready otherwise, false
      */
     public isReady(subMesh: SubMesh, useInstances: boolean): boolean {
-        const material = subMesh.getMaterial();
-        const mesh = subMesh.getRenderingMesh();
-
-        if (!material || !mesh || !this._meshes) {
-            return false;
-        }
-
-        let emissiveTexture: Nullable<Texture> = null;
-        const highlightLayerMesh = this._meshes[mesh.uniqueId];
-
-        if (highlightLayerMesh && highlightLayerMesh.glowEmissiveOnly && material) {
-            emissiveTexture = (<any>material).emissiveTexture;
-        }
-        return super._isReady(subMesh, useInstances, emissiveTexture);
+        return this._thinEffectLayer.isReady(subMesh, useInstances);
     }
 
     /**
@@ -518,50 +416,14 @@ export class HighlightLayer extends EffectLayer {
      * @param renderIndex
      */
     protected _internalRender(effect: Effect, renderIndex: number): void {
-        // Texture
-        effect.setTexture("textureSampler", this._blurTexture);
-
-        // Cache
-        const engine = this._engine;
-        engine.cacheStencilState();
-
-        // Stencil operations
-        engine.setStencilOperationPass(Constants.REPLACE);
-        engine.setStencilOperationFail(Constants.KEEP);
-        engine.setStencilOperationDepthFail(Constants.KEEP);
-
-        // Draw order
-        engine.setStencilMask(0x00);
-        engine.setStencilBuffer(true);
-        engine.setStencilFunctionReference(this._instanceGlowingMeshStencilReference);
-
-        // 2 passes inner outer
-        if (this.outerGlow && renderIndex === 0) {
-            // the outer glow is rendered the first time _internalRender is called, so when renderIndex == 0 (and only if outerGlow is enabled)
-            effect.setFloat("offset", 0);
-            engine.setStencilFunction(Constants.NOTEQUAL);
-            engine.drawElementsType(Material.TriangleFillMode, 0, 6);
-        }
-        if (this.innerGlow && renderIndex === 1) {
-            // the inner glow is rendered the second time _internalRender is called, so when renderIndex == 1 (and only if innerGlow is enabled)
-            effect.setFloat("offset", 1);
-            engine.setStencilFunction(Constants.EQUAL);
-            engine.drawElementsType(Material.TriangleFillMode, 0, 6);
-        }
-
-        // Restore Cache
-        engine.restoreStencilState();
+        this._thinEffectLayer._internalCompose(effect, renderIndex);
     }
 
     /**
      * @returns true if the layer contains information to display, otherwise false.
      */
-    public shouldRender(): boolean {
-        if (super.shouldRender()) {
-            return this._meshes ? true : false;
-        }
-
-        return false;
+    public override shouldRender(): boolean {
+        return this._thinEffectLayer.shouldRender();
     }
 
     /**
@@ -569,17 +431,8 @@ export class HighlightLayer extends EffectLayer {
      * @param mesh The mesh to render
      * @returns true if it should render otherwise false
      */
-    protected _shouldRenderMesh(mesh: Mesh): boolean {
-        // Excluded Mesh
-        if (this._excludedMeshes && this._excludedMeshes[mesh.uniqueId]) {
-            return false;
-        }
-
-        if (!super.hasMesh(mesh)) {
-            return false;
-        }
-
-        return true;
+    protected override _shouldRenderMesh(mesh: Mesh): boolean {
+        return this._thinEffectLayer._shouldRenderMesh(mesh);
     }
 
     /**
@@ -588,17 +441,16 @@ export class HighlightLayer extends EffectLayer {
      * @param material The material used on the mesh
      * @returns true if it can be rendered otherwise false
      */
-    protected _canRenderMesh(mesh: AbstractMesh, material: Material): boolean {
-        // all meshes can be rendered in the highlight layer, even transparent ones
-        return true;
+    protected override _canRenderMesh(mesh: AbstractMesh, material: Material): boolean {
+        return this._thinEffectLayer._canRenderMesh(mesh, material);
     }
 
     /**
      * Adds specific effects defines.
      * @param defines The defines to add specifics to.
      */
-    protected _addCustomEffectDefines(defines: string[]): void {
-        defines.push("#define HIGHLIGHT");
+    protected override _addCustomEffectDefines(defines: string[]): void {
+        this._thinEffectLayer._addCustomEffectDefines(defines);
     }
 
     /**
@@ -608,19 +460,7 @@ export class HighlightLayer extends EffectLayer {
      * @param material
      */
     protected _setEmissiveTextureAndColor(mesh: Mesh, subMesh: SubMesh, material: Material): void {
-        const highlightLayerMesh = this._meshes![mesh.uniqueId];
-        if (highlightLayerMesh) {
-            this._emissiveTextureAndColor.color.set(highlightLayerMesh.color.r, highlightLayerMesh.color.g, highlightLayerMesh.color.b, 1.0);
-        } else {
-            this._emissiveTextureAndColor.color.set(this.neutralColor.r, this.neutralColor.g, this.neutralColor.b, this.neutralColor.a);
-        }
-
-        if (highlightLayerMesh && highlightLayerMesh.glowEmissiveOnly && material) {
-            this._emissiveTextureAndColor.texture = (<any>material).emissiveTexture;
-            this._emissiveTextureAndColor.color.set(1.0, 1.0, 1.0, 1.0);
-        } else {
-            this._emissiveTextureAndColor.texture = null;
-        }
+        this._thinEffectLayer._setEmissiveTextureAndColor(mesh, subMesh, material);
     }
 
     /**
@@ -628,30 +468,7 @@ export class HighlightLayer extends EffectLayer {
      * @param mesh The mesh to exclude from the highlight layer
      */
     public addExcludedMesh(mesh: Mesh) {
-        if (!this._excludedMeshes) {
-            return;
-        }
-
-        const meshExcluded = this._excludedMeshes[mesh.uniqueId];
-        if (!meshExcluded) {
-            const obj: IHighlightLayerExcludedMesh = {
-                mesh: mesh,
-                beforeBind: null,
-                afterRender: null,
-                stencilState: false,
-            };
-
-            obj.beforeBind = mesh.onBeforeBindObservable.add((mesh: Mesh) => {
-                obj.stencilState = mesh.getEngine().getStencilBuffer();
-                mesh.getEngine().setStencilBuffer(false);
-            });
-
-            obj.afterRender = mesh.onAfterRenderObservable.add((mesh: Mesh) => {
-                mesh.getEngine().setStencilBuffer(obj.stencilState);
-            });
-
-            this._excludedMeshes[mesh.uniqueId] = obj;
-        }
+        this._thinEffectLayer.addExcludedMesh(mesh);
     }
 
     /**
@@ -659,22 +476,7 @@ export class HighlightLayer extends EffectLayer {
      * @param mesh The mesh to highlight
      */
     public removeExcludedMesh(mesh: Mesh) {
-        if (!this._excludedMeshes) {
-            return;
-        }
-
-        const meshExcluded = this._excludedMeshes[mesh.uniqueId];
-        if (meshExcluded) {
-            if (meshExcluded.beforeBind) {
-                mesh.onBeforeBindObservable.remove(meshExcluded.beforeBind);
-            }
-
-            if (meshExcluded.afterRender) {
-                mesh.onAfterRenderObservable.remove(meshExcluded.afterRender);
-            }
-        }
-
-        this._excludedMeshes[mesh.uniqueId] = null;
+        this._thinEffectLayer.removeExcludedMesh(mesh);
     }
 
     /**
@@ -682,16 +484,8 @@ export class HighlightLayer extends EffectLayer {
      * @param mesh mesh to test
      * @returns true if the mesh will be highlighted by the current HighlightLayer
      */
-    public hasMesh(mesh: AbstractMesh): boolean {
-        if (!this._meshes) {
-            return false;
-        }
-
-        if (!super.hasMesh(mesh)) {
-            return false;
-        }
-
-        return this._meshes[mesh.uniqueId] !== undefined && this._meshes[mesh.uniqueId] !== null;
+    public override hasMesh(mesh: AbstractMesh): boolean {
+        return this._thinEffectLayer.hasMesh(mesh);
     }
 
     /**
@@ -701,41 +495,7 @@ export class HighlightLayer extends EffectLayer {
      * @param glowEmissiveOnly Extract the glow from the emissive texture
      */
     public addMesh(mesh: Mesh, color: Color3, glowEmissiveOnly = false) {
-        if (!this._meshes) {
-            return;
-        }
-
-        const meshHighlight = this._meshes[mesh.uniqueId];
-        if (meshHighlight) {
-            meshHighlight.color = color;
-        } else {
-            this._meshes[mesh.uniqueId] = {
-                mesh: mesh,
-                color: color,
-                // Lambda required for capture due to Observable this context
-                observerHighlight: mesh.onBeforeBindObservable.add((mesh: Mesh) => {
-                    if (this.isEnabled) {
-                        if (this._excludedMeshes && this._excludedMeshes[mesh.uniqueId]) {
-                            this._defaultStencilReference(mesh);
-                        } else {
-                            mesh.getScene().getEngine().setStencilFunctionReference(this._instanceGlowingMeshStencilReference);
-                        }
-                    }
-                }),
-                observerDefault: mesh.onAfterRenderObservable.add((mesh: Mesh) => {
-                    if (this.isEnabled) {
-                        this._defaultStencilReference(mesh);
-                    }
-                }),
-                glowEmissiveOnly: glowEmissiveOnly,
-            };
-
-            mesh.onDisposeObservable.add(() => {
-                this._disposeMesh(mesh);
-            });
-        }
-
-        this._shouldRender = true;
+        this._thinEffectLayer.addMesh(mesh, color, glowEmissiveOnly);
     }
 
     /**
@@ -743,55 +503,14 @@ export class HighlightLayer extends EffectLayer {
      * @param mesh The mesh to highlight
      */
     public removeMesh(mesh: Mesh) {
-        if (!this._meshes) {
-            return;
-        }
-
-        const meshHighlight = this._meshes[mesh.uniqueId];
-        if (meshHighlight) {
-            if (meshHighlight.observerHighlight) {
-                mesh.onBeforeBindObservable.remove(meshHighlight.observerHighlight);
-            }
-
-            if (meshHighlight.observerDefault) {
-                mesh.onAfterRenderObservable.remove(meshHighlight.observerDefault);
-            }
-            delete this._meshes[mesh.uniqueId];
-        }
-
-        this._shouldRender = false;
-        for (const meshHighlightToCheck in this._meshes) {
-            if (this._meshes[meshHighlightToCheck]) {
-                this._shouldRender = true;
-                break;
-            }
-        }
+        this._thinEffectLayer.removeMesh(mesh);
     }
 
     /**
      * Remove all the meshes currently referenced in the highlight layer
      */
     public removeAllMeshes(): void {
-        if (!this._meshes) {
-            return;
-        }
-
-        for (const uniqueId in this._meshes) {
-            if (Object.prototype.hasOwnProperty.call(this._meshes, uniqueId)) {
-                const mesh = this._meshes[uniqueId];
-                if (mesh) {
-                    this.removeMesh(mesh.mesh);
-                }
-            }
-        }
-    }
-
-    /**
-     * Force the stencil to the normal expected value for none glowing parts
-     * @param mesh
-     */
-    private _defaultStencilReference(mesh: Mesh) {
-        mesh.getScene().getEngine().setStencilFunctionReference(HighlightLayer.NormalMeshStencilReference);
+        this._thinEffectLayer.removeAllMeshes();
     }
 
     /**
@@ -801,55 +520,14 @@ export class HighlightLayer extends EffectLayer {
      * @internal
      */
     public _disposeMesh(mesh: Mesh): void {
-        this.removeMesh(mesh);
-        this.removeExcludedMesh(mesh);
-    }
-
-    /**
-     * Dispose the highlight layer and free resources.
-     */
-    public dispose(): void {
-        if (this._meshes) {
-            // Clean mesh references
-            for (const id in this._meshes) {
-                const meshHighlight = this._meshes[id];
-                if (meshHighlight && meshHighlight.mesh) {
-                    if (meshHighlight.observerHighlight) {
-                        meshHighlight.mesh.onBeforeBindObservable.remove(meshHighlight.observerHighlight);
-                    }
-
-                    if (meshHighlight.observerDefault) {
-                        meshHighlight.mesh.onAfterRenderObservable.remove(meshHighlight.observerDefault);
-                    }
-                }
-            }
-            this._meshes = null;
-        }
-
-        if (this._excludedMeshes) {
-            for (const id in this._excludedMeshes) {
-                const meshHighlight = this._excludedMeshes[id];
-                if (meshHighlight) {
-                    if (meshHighlight.beforeBind) {
-                        meshHighlight.mesh.onBeforeBindObservable.remove(meshHighlight.beforeBind);
-                    }
-
-                    if (meshHighlight.afterRender) {
-                        meshHighlight.mesh.onAfterRenderObservable.remove(meshHighlight.afterRender);
-                    }
-                }
-            }
-            this._excludedMeshes = null;
-        }
-
-        super.dispose();
+        this._thinEffectLayer._disposeMesh(mesh);
     }
 
     /**
      * Gets the class name of the effect layer
      * @returns the string with the class name of the effect layer
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "HighlightLayer";
     }
 
@@ -864,9 +542,10 @@ export class HighlightLayer extends EffectLayer {
         // Highlighted meshes
         serializationObject.meshes = [];
 
-        if (this._meshes) {
-            for (const m in this._meshes) {
-                const mesh = this._meshes[m];
+        const meshes = this._thinEffectLayer._meshes;
+        if (meshes) {
+            for (const m in meshes) {
+                const mesh = meshes[m];
 
                 if (mesh) {
                     serializationObject.meshes.push({
@@ -881,9 +560,10 @@ export class HighlightLayer extends EffectLayer {
         // Excluded meshes
         serializationObject.excludedMeshes = [];
 
-        if (this._excludedMeshes) {
-            for (const e in this._excludedMeshes) {
-                const excludedMesh = this._excludedMeshes[e];
+        const excludedMeshes = this._thinEffectLayer._excludedMeshes;
+        if (excludedMeshes) {
+            for (const e in excludedMeshes) {
+                const excludedMesh = excludedMeshes[e];
 
                 if (excludedMesh) {
                     serializationObject.excludedMeshes.push(excludedMesh.mesh.id);
@@ -901,7 +581,7 @@ export class HighlightLayer extends EffectLayer {
      * @param rootUrl defines the root URL containing the Highlight layer information
      * @returns a parsed Highlight layer
      */
-    public static Parse(parsedHightlightLayer: any, scene: Scene, rootUrl: string): HighlightLayer {
+    public static override Parse(parsedHightlightLayer: any, scene: Scene, rootUrl: string): HighlightLayer {
         const hl = SerializationHelper.Parse(() => new HighlightLayer(parsedHightlightLayer.name, scene, parsedHightlightLayer.options), parsedHightlightLayer, scene, rootUrl);
         let index;
 

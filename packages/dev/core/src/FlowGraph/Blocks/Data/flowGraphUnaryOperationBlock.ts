@@ -5,7 +5,7 @@ import type { FlowGraphContext } from "../../flowGraphContext";
 import { FlowGraphCachedOperationBlock } from "./flowGraphCachedOperationBlock";
 
 /**
- * @experimental
+ * @internal
  * The base block for all unary operation blocks. Receives an input of type InputT, and outputs a value of type ResultT.
  */
 export class FlowGraphUnaryOperationBlock<InputT, ResultT> extends FlowGraphCachedOperationBlock<ResultT> {
@@ -38,7 +38,7 @@ export class FlowGraphUnaryOperationBlock<InputT, ResultT> extends FlowGraphCach
      * Gets the class name of this block
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return this._className;
     }
 }

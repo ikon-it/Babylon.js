@@ -18,12 +18,13 @@ export class MaterialTreeItemComponent extends React.Component<IMaterialTreeItem
         super(props);
     }
 
-    render() {
+    override render() {
         const nmeIcon =
             this.props.material.getClassName() === "NodeMaterial" ? (
                 <div
                     className="icon"
                     onClick={() => {
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
                         (this.props.material as NodeMaterial).edit({ nodeEditorConfig: { backgroundColor: this.props.material.getScene().clearColor } });
                     }}
                     title="Node Material Editor"

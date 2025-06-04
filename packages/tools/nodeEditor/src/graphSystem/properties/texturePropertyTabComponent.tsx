@@ -1,8 +1,8 @@
 import * as React from "react";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import { FileButtonLineComponent } from "../../sharedComponents/fileButtonLineComponent";
+import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { Tools } from "core/Misc/tools";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { CheckBoxLineComponent } from "../../sharedComponents/checkBoxLineComponent";
 import { Texture } from "core/Materials/Textures/texture";
 import { CubeTexture } from "core/Materials/Textures/cubeTexture";
@@ -19,7 +19,7 @@ import type { GlobalState } from "../../globalState";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
 import type { IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
-import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
+import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
 import type { TriPlanarBlock } from "core/Materials/Node/Blocks/triPlanarBlock";
@@ -42,7 +42,7 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
     }
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    UNSAFE_componentWillUpdate(nextProps: IPropertyComponentProps, nextState: { isEmbedded: boolean; loadAsCubeTexture: boolean }) {
+    override UNSAFE_componentWillUpdate(nextProps: IPropertyComponentProps, nextState: { isEmbedded: boolean; loadAsCubeTexture: boolean }) {
         if (nextProps.nodeData.data !== this.props.nodeData.data) {
             const texture = (nextProps.nodeData.data as AnyTexture).texture as BaseTexture;
 
@@ -94,7 +94,8 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                     this.textureBlock instanceof ReflectionTextureBlock ||
                         this.textureBlock instanceof ReflectionBlock ||
                         this.textureBlock instanceof RefractionBlock ||
-                        globalState.mode === NodeMaterialModes.PostProcess
+                        globalState.mode === NodeMaterialModes.PostProcess ||
+                        globalState.mode === NodeMaterialModes.SFE
                 );
                 texture = this.textureBlock.texture;
                 texture.coordinatesMode = Texture.EQUIRECTANGULAR_MODE;
@@ -163,7 +164,7 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
         }
     }
 
-    render() {
+    override render() {
         let url = "";
         const block = this.props.nodeData.data as NodeMaterialBlock;
 
@@ -291,26 +292,26 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                         />
                     }
                     {texture && texture.updateSamplingMode && (
-                        <OptionsLineComponent
+                        <OptionsLine
                             label="Sampling"
                             options={samplingMode}
                             target={texture}
                             noDirectUpdate={true}
                             propertyName="samplingMode"
                             onSelect={(value) => {
-                                texture!.updateSamplingMode(value as number);
+                                texture.updateSamplingMode(value as number);
                                 this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
                             }}
                         />
                     )}
                     {texture && isInReflectionMode && (
-                        <OptionsLineComponent
+                        <OptionsLine
                             label="Reflection mode"
                             options={reflectionModeOptions}
                             target={texture}
                             propertyName="coordinatesMode"
                             onSelect={(value: any) => {
-                                texture!.coordinatesMode = value;
+                                texture.coordinatesMode = value;
                                 this.forceUpdate();
                                 this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
                             }}
@@ -319,9 +320,9 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                     {texture && !isInReflectionMode && !isFrozenTexture && (
                         <CheckBoxLineComponent
                             label="Clamp U"
-                            isSelected={() => texture!.wrapU === Texture.CLAMP_ADDRESSMODE}
+                            isSelected={() => texture.wrapU === Texture.CLAMP_ADDRESSMODE}
                             onSelect={(value) => {
-                                texture!.wrapU = value ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
+                                texture.wrapU = value ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
                                 this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
                                 this.props.stateManager.onRebuildRequiredObservable.notifyObservers();
                             }}
@@ -330,9 +331,9 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                     {texture && !isInReflectionMode && !isFrozenTexture && (
                         <CheckBoxLineComponent
                             label="Clamp V"
-                            isSelected={() => texture!.wrapV === Texture.CLAMP_ADDRESSMODE}
+                            isSelected={() => texture.wrapV === Texture.CLAMP_ADDRESSMODE}
                             onSelect={(value) => {
-                                texture!.wrapV = value ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
+                                texture.wrapV = value ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
                                 this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
                                 this.props.stateManager.onRebuildRequiredObservable.notifyObservers();
                             }}
@@ -453,7 +454,7 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                                 onSelect={(value) => this.setState({ textureIsPrefiltered: value })}
                             />
                         )}
-                        {this.state.isEmbedded && <FileButtonLineComponent label="Upload" onClick={(file) => this.replaceTexture(file)} accept=".jpg, .png, .tga, .dds, .env" />}
+                        {this.state.isEmbedded && <FileButtonLine label="Upload" onClick={(file) => this.replaceTexture(file)} accept=".jpg, .png, .tga, .dds, .env, .exr" />}
                         {!this.state.isEmbedded && (
                             <TextInputLineComponent
                                 lockObject={this.props.stateManager.lockObject}

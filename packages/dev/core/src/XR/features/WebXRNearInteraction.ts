@@ -25,6 +25,7 @@ import { Animation } from "../../Animations/animation";
 import { QuadraticEase, EasingFunction } from "../../Animations/easing";
 // side effects
 import "../../Meshes/subMesh.project";
+import { Logger } from "core/Misc/logger";
 
 type ControllerData = {
     xrController?: WebXRInputSource;
@@ -46,6 +47,7 @@ type ControllerData = {
     nearInteraction: boolean;
     hoverInteraction: boolean;
     grabInteraction: boolean;
+    downTriggered: boolean;
     // event support
     eventListeners?: { [event in XREventType]?: (event: XRInputSourceEvent) => void };
     pickedPointVisualCue: AbstractMesh;
@@ -71,7 +73,7 @@ enum ControllerOrbAnimationState {
 /**
  * Where should the near interaction mesh be attached to when using a motion controller for near interaction
  */
-export enum WebXRNearControllerMode {
+export const enum WebXRNearControllerMode {
     /**
      * Motion controllers will not support near interaction
      */
@@ -131,7 +133,16 @@ export interface IWebXRNearInteractionOptions {
      * Optional material for the motion controller orb, if enabled
      */
     motionControllerOrbMaterial?: Material;
+
+    /**
+     * If provided, this URL will be used by Node Material to generate the material for the motion controller orb
+     * If not provided, a snippet will be downloaded from the Babylon.js snippet server CDN.
+     * The NME JSON file can be found here - https://github.com/BabylonJS/Assets/blob/master/nme/nearInteractionTouchMaterial.json
+     */
+    motionControllerTouchMaterialSnippetUrl?: string;
 }
+
+const LocalTempVectors = [new Vector3(), new Vector3(), new Vector3(), new Vector3()];
 
 /**
  * A module that will enable near interaction near interaction for hands and motion controllers of XR Input Sources
@@ -164,6 +175,7 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
             hoverInteraction: false,
             nearInteraction: false,
             grabInteraction: false,
+            downTriggered: false,
             id: WebXRNearInteraction._IdCounter++,
             pickedPointVisualCue: selectionMesh,
         };
@@ -236,6 +248,11 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
     public selectionMeshPickedColor: Color3 = new Color3(0.3, 0.3, 1.0);
 
     /**
+     * If set to true, the selection mesh will always be hidden. Otherwise it will be shown only when needed
+     */
+    public alwaysHideSelectionMesh: boolean = false;
+
+    /**
      * constructs a new background remover module
      * @param _xrSessionManager the session manager for this module
      * @param _options read-only options to be used in this module
@@ -261,12 +278,14 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public attach(): boolean {
+    public override attach(): boolean {
         if (!super.attach()) {
             return false;
         }
 
-        this._options.xrInput.controllers.forEach(this._attachController);
+        for (const controller of this._options.xrInput.controllers) {
+            this._attachController(controller);
+        }
         this._addNewAttachObserver(this._options.xrInput.onControllerAddedObservable, this._attachController);
         this._addNewAttachObserver(this._options.xrInput.onControllerRemovedObservable, (controller) => {
             // REMOVE the controller
@@ -283,14 +302,15 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
      *
      * @returns true if successful.
      */
-    public detach(): boolean {
+    public override detach(): boolean {
         if (!super.detach()) {
             return false;
         }
 
-        Object.keys(this._controllers).forEach((controllerId) => {
+        const keys = Object.keys(this._controllers);
+        for (const controllerId of keys) {
             this._detachController(controllerId);
-        });
+        }
 
         return true;
     }
@@ -447,7 +467,8 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
     }
 
     protected _onXRFrame(_xrFrame: XRFrame) {
-        Object.keys(this._controllers).forEach((id) => {
+        const keys = Object.keys(this._controllers);
+        for (const id of keys) {
             // only do this for the selected pointer
             const controllerData = this._controllers[id];
             const handData = controllerData.xrController?.inputSource.hand;
@@ -580,7 +601,7 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                 if (controllerData.pick && controllerData.pick.pickedPoint && controllerData.pick.hit) {
                     controllerData.meshUnderPointer = controllerData.pick.pickedMesh;
                     controllerData.pickedPointVisualCue.position.copyFrom(controllerData.pick.pickedPoint);
-                    controllerData.pickedPointVisualCue.isVisible = true;
+                    controllerData.pickedPointVisualCue.isVisible = !this.alwaysHideSelectionMesh;
 
                     if (this._farInteractionFeature && this._farInteractionFeature.attached) {
                         this._farInteractionFeature._setPointerSelectionDisabledByPointerId(controllerData.id, true);
@@ -603,7 +624,7 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                 state = ControllerOrbAnimationState.HOVER;
             }
             this._handleTransitionAnimation(controllerData, state);
-        });
+        }
     }
 
     private get _utilityLayerScene() {
@@ -667,9 +688,11 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                 if (!controllerData.nearInteractionTargetMesh) {
                     this._scene.simulatePointerDown(controllerData.pick, pointerEventInit);
                     controllerData.nearInteractionTargetMesh = controllerData.meshUnderPointer;
+                    controllerData.downTriggered = true;
                 }
             } else if (controllerData.nearInteractionTargetMesh && controllerData.stalePick) {
                 this._scene.simulatePointerUp(controllerData.stalePick, pointerEventInit);
+                controllerData.downTriggered = false;
                 controllerData.nearInteractionTargetMesh = null;
             }
         });
@@ -686,10 +709,12 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                     controllerData.grabInteraction = true;
                     controllerData.pickedPointVisualCue.isVisible = false;
                     this._scene.simulatePointerDown(controllerData.pick, pointerEventInit);
+                    controllerData.downTriggered = true;
                 } else if (!pressed && controllerData.pick && controllerData.grabInteraction) {
                     this._scene.simulatePointerUp(controllerData.pick, pointerEventInit);
+                    controllerData.downTriggered = false;
                     controllerData.grabInteraction = false;
-                    controllerData.pickedPointVisualCue.isVisible = true;
+                    controllerData.pickedPointVisualCue.isVisible = !this.alwaysHideSelectionMesh;
                 }
             } else {
                 if (pressed && !this._options.enableNearInteractionOnAllControllers && !this._options.disableSwitchOnClick) {
@@ -737,6 +762,7 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                     controllerData.grabInteraction = true;
                     controllerData.pickedPointVisualCue.isVisible = false;
                     this._scene.simulatePointerDown(controllerData.pick, pointerEventInit);
+                    controllerData.downTriggered = true;
                 }
             };
 
@@ -749,7 +775,8 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                 ) {
                     this._scene.simulatePointerUp(controllerData.pick, pointerEventInit);
                     controllerData.grabInteraction = false;
-                    controllerData.pickedPointVisualCue.isVisible = true;
+                    controllerData.pickedPointVisualCue.isVisible = !this.alwaysHideSelectionMesh;
+                    controllerData.downTriggered = false;
                 }
             };
 
@@ -782,18 +809,22 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
             this._xrSessionManager.onXRFrameObservable.remove(controllerData.onFrameObserver);
         }
         if (controllerData.eventListeners) {
-            Object.keys(controllerData.eventListeners).forEach((eventName: string) => {
+            const keys = Object.keys(controllerData.eventListeners);
+            for (const eventName of keys) {
                 const func = controllerData.eventListeners && controllerData.eventListeners[eventName as XREventType];
                 if (func) {
                     this._xrSessionManager.session.removeEventListener(eventName as XREventType, func as any);
                 }
-            });
+            }
         }
         controllerData.touchCollisionMesh.dispose();
         controllerData.pickedPointVisualCue.dispose();
 
         this._xrSessionManager.runInXRFrame(() => {
-            // Fire a pointerup
+            if (!controllerData.downTriggered) {
+                return;
+            }
+            // Fire a pointerup in case controller was detached before a pointerup event was fired
             const pointerEventInit: PointerEventInit = {
                 pointerId: controllerData.id,
                 pointerType: "xr-near",
@@ -831,9 +862,21 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
         if (this._options.motionControllerOrbMaterial) {
             touchCollisionMesh.material = this._options.motionControllerOrbMaterial;
         } else {
-            NodeMaterial.ParseFromSnippetAsync("8RUNKL#3", meshCreationScene).then((nodeMaterial) => {
-                touchCollisionMesh.material = nodeMaterial;
-            });
+            let parsePromise: Promise<NodeMaterial>;
+            if (this._options.motionControllerTouchMaterialSnippetUrl) {
+                parsePromise = NodeMaterial.ParseFromFileAsync("motionControllerTouchMaterial", this._options.motionControllerTouchMaterialSnippetUrl, meshCreationScene);
+            } else {
+                parsePromise = NodeMaterial.ParseFromSnippetAsync("8RUNKL#3", meshCreationScene);
+            }
+            parsePromise
+                // eslint-disable-next-line github/no-then
+                .then((mat) => {
+                    touchCollisionMesh.material = mat;
+                })
+                // eslint-disable-next-line github/no-then
+                .catch((err) => {
+                    Logger.Warn(`Error creating touch material in WebXRNearInteraction: ${err}`);
+                });
         }
 
         const easingFunction = new QuadraticEase();
@@ -931,6 +974,10 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
                     pickingInfo.gripTransform = controllerData.xrController.grip || null;
                     pickingInfo.originMesh = controllerData.touchCollisionMesh;
                     pickingInfo.distance = result.distance;
+                    pickingInfo.bu = result.bu;
+                    pickingInfo.bv = result.bv;
+                    pickingInfo.faceId = result.faceId;
+                    pickingInfo.subMeshId = result.subMeshId;
                 }
             }
         }
@@ -961,11 +1008,15 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
             return pi;
         }
 
-        const result = TmpVectors.Vector3[0];
-        const tmpVec = TmpVectors.Vector3[1];
+        const result = LocalTempVectors[0];
+        const tmpVec = LocalTempVectors[1];
+        LocalTempVectors[2].setAll(0);
+        LocalTempVectors[3].setAll(0);
+
+        const tmpRay = new Ray(LocalTempVectors[2], LocalTempVectors[3], 1);
 
         let distance = +Infinity;
-        let tmp, tmpDistanceSphereToCenter, tmpDistanceSurfaceToCenter;
+        let tmp, tmpDistanceSphereToCenter, tmpDistanceSurfaceToCenter, intersectionInfo;
         const center = TmpVectors.Vector3[2];
         const worldToMesh = TmpVectors.Matrix[0];
         worldToMesh.copyFrom(mesh.getWorldMatrix());
@@ -981,8 +1032,8 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
             tmp = Vector3.Distance(tmpVec, sphere.center);
 
             // Check for finger inside of mesh
-            tmpDistanceSurfaceToCenter = Vector3.Distance(tmpVec, mesh.getAbsolutePosition());
-            tmpDistanceSphereToCenter = Vector3.Distance(sphere.center, mesh.getAbsolutePosition());
+            tmpDistanceSurfaceToCenter = Vector3.DistanceSquared(tmpVec, mesh.getAbsolutePosition());
+            tmpDistanceSphereToCenter = Vector3.DistanceSquared(sphere.center, mesh.getAbsolutePosition());
             if (tmpDistanceSphereToCenter !== -1 && tmpDistanceSurfaceToCenter !== -1 && tmpDistanceSurfaceToCenter > tmpDistanceSphereToCenter) {
                 tmp = 0;
                 tmpVec.copyFrom(sphere.center);
@@ -990,6 +1041,12 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
 
             if (tmp !== -1 && tmp < distance) {
                 distance = tmp;
+
+                // ray between the sphere center and the point on the mesh
+                Ray.CreateFromToToRef(sphere.center, tmpVec, tmpRay);
+                tmpRay.length = distance * 2;
+                intersectionInfo = tmpRay.intersectsMesh(mesh);
+
                 result.copyFrom(tmpVec);
             }
         }
@@ -999,6 +1056,12 @@ export class WebXRNearInteraction extends WebXRAbstractFeature {
             pi.distance = distance;
             pi.pickedMesh = mesh;
             pi.pickedPoint = result.clone();
+            if (intersectionInfo && intersectionInfo.bu !== null && intersectionInfo.bv !== null) {
+                pi.faceId = intersectionInfo.faceId;
+                pi.subMeshId = intersectionInfo.subMeshId;
+                pi.bu = intersectionInfo.bu;
+                pi.bv = intersectionInfo.bv;
+            }
         }
 
         return pi;

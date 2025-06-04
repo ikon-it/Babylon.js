@@ -5,7 +5,7 @@ import { VertexBuffer } from "../Buffers/buffer";
 import { Constants } from "../Engines/constants";
 import type { DataBuffer } from "../Buffers/dataBuffer";
 import type { RenderTargetWrapper } from "../Engines/renderTargetWrapper";
-
+import { Observable } from "../Misc/observable";
 import type { Scene } from "../scene";
 
 /**
@@ -55,6 +55,8 @@ export class PostProcessManager {
 
         this._indexBuffer = this._scene.getEngine().createIndexBuffer(indices);
     }
+
+    public onBeforeRenderObservable = new Observable<PostProcessManager>();
 
     /**
      * Rebuilds the vertex buffers of the manager.
@@ -118,7 +120,7 @@ export class PostProcessManager {
 
         for (let index = 0; index < postProcesses.length; index++) {
             if (index < postProcesses.length - 1) {
-                postProcesses[index + 1].activate(this._scene.activeCamera, targetTexture?.texture);
+                postProcesses[index + 1].activate(this._scene.activeCamera || this._scene, targetTexture?.texture);
             } else {
                 if (targetTexture) {
                     engine.bindFramebuffer(targetTexture, faceIndex, undefined, undefined, forceFullscreenViewport, lodLevel);
@@ -172,7 +174,11 @@ export class PostProcessManager {
             return;
         }
 
-        postProcesses = postProcesses || <Array<PostProcess>>camera._postProcesses.filter((pp) => {
+        this.onBeforeRenderObservable.notifyObservers(this);
+
+        postProcesses =
+            postProcesses ||
+            camera._postProcesses.filter((pp) => {
                 return pp != null;
             });
         if (postProcesses.length === 0 || !this._scene.postProcessesEnabled) {

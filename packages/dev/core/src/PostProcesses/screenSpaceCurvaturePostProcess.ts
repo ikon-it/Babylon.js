@@ -11,9 +11,10 @@ import "../Rendering/geometryBufferRendererSceneComponent";
 import "../Shaders/screenSpaceCurvature.fragment";
 import { EngineStore } from "../Engines/engineStore";
 import { RegisterClass } from "../Misc/typeStore";
-import { serialize, SerializationHelper } from "../Misc/decorators";
+import { serialize } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Scene } from "../scene";
 
 /**
@@ -38,7 +39,7 @@ export class ScreenSpaceCurvaturePostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "ScreenSpaceCurvaturePostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "ScreenSpaceCurvaturePostProcess";
     }
 
@@ -60,9 +61,9 @@ export class ScreenSpaceCurvaturePostProcess extends PostProcess {
         options: number | PostProcessOptions,
         camera: Nullable<Camera>,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT,
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         blockCompilation = false
     ) {
         super(
@@ -118,7 +119,7 @@ export class ScreenSpaceCurvaturePostProcess extends PostProcess {
     /**
      * @internal
      */
-    public static _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
+    public static override _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string) {
         return SerializationHelper.Parse(
             () => {
                 return new ScreenSpaceCurvaturePostProcess(

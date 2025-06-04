@@ -1,3 +1,7 @@
+#define PBR_VERTEX_SHADER
+
+#define CUSTOM_VERTEX_EXTENSION
+
 precision highp float;
 
 #include<__decl__pbrVertex>
@@ -22,6 +26,7 @@ attribute vec4 color;
 #endif
 
 #include<helperFunctions>
+#include<pbrBRDFFunctions>
 #include<bonesDeclaration>
 #include<bakedVertexAnimationDeclaration>
 
@@ -29,6 +34,8 @@ attribute vec4 color;
 #include<prePassVertexDeclaration>
 
 #include<samplerVertexDeclaration>(_DEFINENAME_,ALBEDO,_VARYINGNAME_,Albedo)
+#include<samplerVertexDeclaration>(_DEFINENAME_,BASE_WEIGHT,_VARYINGNAME_,BaseWeight)
+#include<samplerVertexDeclaration>(_DEFINENAME_,BASE_DIFFUSE_ROUGHNESS,_VARYINGNAME_,BaseDiffuseRoughness)
 #include<samplerVertexDeclaration>(_DEFINENAME_,DETAIL,_VARYINGNAME_,Detail)
 #include<samplerVertexDeclaration>(_DEFINENAME_,AMBIENT,_VARYINGNAME_,Ambient)
 #include<samplerVertexDeclaration>(_DEFINENAME_,OPACITY,_VARYINGNAME_,Opacity)
@@ -66,6 +73,7 @@ attribute vec4 color;
     #include<samplerVertexDeclaration>(_DEFINENAME_,SS_THICKNESSANDMASK_TEXTURE,_VARYINGNAME_,Thickness)
     #include<samplerVertexDeclaration>(_DEFINENAME_,SS_REFRACTIONINTENSITY_TEXTURE,_VARYINGNAME_,RefractionIntensity)
     #include<samplerVertexDeclaration>(_DEFINENAME_,SS_TRANSLUCENCYINTENSITY_TEXTURE,_VARYINGNAME_,TranslucencyIntensity)
+    #include<samplerVertexDeclaration>(_DEFINENAME_,SS_TRANSLUCENCYCOLOR_TEXTURE,_VARYINGNAME_,TranslucencyColor)
 #endif
 
 // Output
@@ -73,6 +81,7 @@ varying vec3 vPositionW;
 #if DEBUGMODE > 0
     varying vec4 vClipSpacePosition;
 #endif
+
 #ifdef NORMAL
     varying vec3 vNormalW;
     #if defined(USESPHERICALFROMREFLECTIONMAP) && defined(USESPHERICALINVERTEX)
@@ -119,6 +128,12 @@ void main(void) {
 #ifdef UV1
     vec2 uvUpdated = uv;
 #endif
+#ifdef UV2
+    vec2 uv2Updated = uv2;
+#endif
+#ifdef VERTEXCOLOR
+    vec4 colorUpdated = color;
+#endif
 
 #include<morphTargetsVertexGlobal>
 #include<morphTargetsVertex>[0..maxSimultaneousMorphTargets]
@@ -133,7 +148,7 @@ void main(void) {
 
 #include<instancesVertex>
 
-#if defined(PREPASS) && defined(PREPASS_VELOCITY) && !defined(BONES_VELOCITY_ENABLED)
+#if defined(PREPASS) && ((defined(PREPASS_VELOCITY) || defined(PREPASS_VELOCITY_LINEAR)) && !defined(BONES_VELOCITY_ENABLED)
     // Compute velocity before bones computation
     vCurrentPosition = viewProjection * finalWorld * vec4(positionUpdated, 1.0);
     vPreviousPosition = previousViewProjection * finalPreviousWorld * vec4(positionUpdated, 1.0);
@@ -145,7 +160,9 @@ void main(void) {
     vec4 worldPos = finalWorld * vec4(positionUpdated, 1.0);
     vPositionW = vec3(worldPos);
 
-#include<prePassVertex>
+#ifdef PREPASS
+    #include<prePassVertex>
+#endif
 
 #ifdef NORMAL
     mat3 normalWorld = mat3(finalWorld);
@@ -162,7 +179,24 @@ void main(void) {
     #endif
 
     #if defined(USESPHERICALFROMREFLECTIONMAP) && defined(USESPHERICALINVERTEX)
-        vec3 reflectionVector = vec3(reflectionMatrix * vec4(vNormalW, 0)).xyz;
+        #if BASE_DIFFUSE_MODEL != BRDF_DIFFUSE_MODEL_LAMBERT && BASE_DIFFUSE_MODEL != BRDF_DIFFUSE_MODEL_LEGACY
+            // Bend the normal towards the viewer based on the diffuse roughness
+            vec3 viewDirectionW = normalize(vEyePosition.xyz - vPositionW);
+
+            #if !defined(NATIVE) && !defined(WEBGPU)
+                // Next two lines fixes a flickering that occurs on some specific circumstances on MacOS/iOS
+                // See https://forum.babylonjs.com/t/needdepthprepass-creates-flickering-in-8-6-2/58421/12
+                // Note that the variable passed to isnan doesn't matter...
+                bool bbb = any(isnan(position));
+                if (bbb) { }
+            #endif
+
+            float NdotV = max(dot(vNormalW, viewDirectionW), 0.0);
+            vec3 roughNormal = mix(vNormalW, viewDirectionW, (0.5 * (1.0 - NdotV)) * baseDiffuseRoughness);
+            vec3 reflectionVector = vec3(reflectionMatrix * vec4(roughNormal, 0)).xyz;
+        #else
+            vec3 reflectionVector = vec3(reflectionMatrix * vec4(vNormalW, 0)).xyz;
+        #endif
         #ifdef REFLECTIONMAP_OPPOSITEZ
             reflectionVector.z *= -1.0;
         #endif
@@ -194,13 +228,21 @@ void main(void) {
 #ifndef UV1
     vec2 uvUpdated = vec2(0., 0.);
 #endif
+#ifndef UV2
+    vec2 uv2Updated = vec2(0., 0.);
+#endif
 #ifdef MAINUV1
     vMainUV1 = uvUpdated;
 #endif
+#ifdef MAINUV2
+    vMainUV2 = uv2Updated;
+#endif
 
-    #include<uvVariableDeclaration>[2..7]
+    #include<uvVariableDeclaration>[3..7]
 
     #include<samplerVertexImplementation>(_DEFINENAME_,ALBEDO,_VARYINGNAME_,Albedo,_MATRIXNAME_,albedo,_INFONAME_,AlbedoInfos.x)
+    #include<samplerVertexImplementation>(_DEFINENAME_,BASE_WEIGHT,_VARYINGNAME_,BaseWeight,_MATRIXNAME_,baseWeight,_INFONAME_,BaseWeightInfos.x)
+    #include<samplerVertexImplementation>(_DEFINENAME_,BASE_DIFFUSE_ROUGHNESS,_VARYINGNAME_,BaseDiffuseRoughness,_MATRIXNAME_,baseDiffuseRoughness,_INFONAME_,BaseDiffuseRoughnessInfos.x)
     #include<samplerVertexImplementation>(_DEFINENAME_,DETAIL,_VARYINGNAME_,Detail,_MATRIXNAME_,detail,_INFONAME_,DetailInfos.x)
     #include<samplerVertexImplementation>(_DEFINENAME_,AMBIENT,_VARYINGNAME_,Ambient,_MATRIXNAME_,ambient,_INFONAME_,AmbientInfos.x)
     #include<samplerVertexImplementation>(_DEFINENAME_,OPACITY,_VARYINGNAME_,Opacity,_MATRIXNAME_,opacity,_INFONAME_,OpacityInfos.x)
@@ -227,7 +269,7 @@ void main(void) {
 
 #ifdef SHEEN
     #include<samplerVertexImplementation>(_DEFINENAME_,SHEEN_TEXTURE,_VARYINGNAME_,Sheen,_MATRIXNAME_,sheen,_INFONAME_,SheenInfos.x)
-    #include<samplerVertexImplementation>(_DEFINENAME_,SHEEN_TEXTURE_ROUGHNESS,_VARYINGNAME_,SheenRoughness,_MATRIXNAME_,sheen,_INFONAME_,SheenInfos.z)
+    #include<samplerVertexImplementation>(_DEFINENAME_,SHEEN_TEXTURE_ROUGHNESS,_VARYINGNAME_,SheenRoughness,_MATRIXNAME_,sheenRoughness,_INFONAME_,SheenInfos.z)
 
 #endif
 
@@ -239,6 +281,7 @@ void main(void) {
     #include<samplerVertexImplementation>(_DEFINENAME_,SS_THICKNESSANDMASK_TEXTURE,_VARYINGNAME_,Thickness,_MATRIXNAME_,thickness,_INFONAME_,ThicknessInfos.x)
     #include<samplerVertexImplementation>(_DEFINENAME_,SS_REFRACTIONINTENSITY_TEXTURE,_VARYINGNAME_,RefractionIntensity,_MATRIXNAME_,refractionIntensity,_INFONAME_,RefractionIntensityInfos.x)
     #include<samplerVertexImplementation>(_DEFINENAME_,SS_TRANSLUCENCYINTENSITY_TEXTURE,_VARYINGNAME_,TranslucencyIntensity,_MATRIXNAME_,translucencyIntensity,_INFONAME_,TranslucencyIntensityInfos.x)
+    #include<samplerVertexImplementation>(_DEFINENAME_,SS_TRANSLUCENCYCOLOR_TEXTURE,_VARYINGNAME_,TranslucencyColor,_MATRIXNAME_,translucencyColor,_INFONAME_,TranslucencyColorInfos.x)
 #endif
 
     // TBN

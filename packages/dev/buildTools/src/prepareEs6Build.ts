@@ -1,20 +1,24 @@
 /* eslint-disable no-console */
 import * as path from "path";
-import * as glob from "glob";
+import { globSync } from "glob";
 import * as fs from "fs-extra";
 import { checkArgs } from "./utils.js";
 
+// eslint-disable-next-line @typescript-eslint/naming-convention, no-restricted-syntax
 export const prepareES6Build = async () => {
     const baseDir = path.resolve(".");
     const constFile = checkArgs(["--constFile", "-cf"], false, true);
     try {
         if (constFile) {
-            const constantsContent = fs.readFileSync(path.resolve(baseDir, constFile as string), "utf8").replace("export class Constants", "const Constants = ");
+            const constFilePath = path.resolve(baseDir, constFile as string);
+            const constantsContent = fs.readFileSync(constFilePath, "utf8").replace("export class Constants", "const Constants = ");
             // eslint-disable-next-line @typescript-eslint/naming-convention
             const Constants = eval(constantsContent + "\nConstants;");
-            const allSourceFiles = glob.sync(path.resolve(baseDir, "**", "*.js"));
+            const allSourceFiles = globSync(path.resolve(baseDir, "**", "*.js"), {
+                windowsPathsNoEscape: true,
+            });
             allSourceFiles.forEach((file) => {
-                if (file.endsWith(constFile as string)) {
+                if (path.resolve(file) === constFilePath) {
                     return;
                 }
                 const fileContent = fs.readFileSync(file, "utf8");

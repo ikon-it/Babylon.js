@@ -1,6 +1,6 @@
 import type { Camera } from "core/Cameras/camera";
 import { Constants } from "core/Engines/constants";
-import type { Engine } from "core/Engines/engine";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import type { InternalTexture } from "core/Materials/Textures/internalTexture";
 import type { ThinTexture } from "core/Materials/Textures/thinTexture";
@@ -13,11 +13,13 @@ import type { Nullable } from "core/types";
 
 import type { FluidRenderingObject } from "./fluidRenderingObject";
 import { FluidRenderingTextures } from "./fluidRenderingTextures";
+import type { WebGPUEngine } from "core/Engines/webgpuEngine";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Textures that can be displayed as a debugging tool
  */
-export enum FluidRenderingDebug {
+export const enum FluidRenderingDebug {
     DepthTexture,
     DepthBlurredTexture,
     ThicknessTexture,
@@ -33,7 +35,7 @@ export enum FluidRenderingDebug {
 export class FluidRenderingTargetRenderer {
     protected _scene: Scene;
     protected _camera: Nullable<Camera>;
-    protected _engine: Engine;
+    protected _engine: AbstractEngine;
 
     protected _invProjectionMatrix: Matrix;
     protected _depthClearColor: Color4;
@@ -458,6 +460,25 @@ export class FluidRenderingTargetRenderer {
         this._needInitialization = true;
     }
 
+    private _compositeMode = false;
+
+    /**
+     * If compositeMode is true (default: false), when the alpha value of the background (the scene rendered without the fluid objects) is 0, the final alpha value of the pixel will be set to the thickness value.
+     * This way, it is possible to composite the fluid rendering on top of the HTML background.
+     */
+    public get compositeMode() {
+        return this._compositeMode;
+    }
+
+    public set compositeMode(value: boolean) {
+        if (this._compositeMode === value) {
+            return;
+        }
+
+        this._compositeMode = value;
+        this._needInitialization = true;
+    }
+
     /**
      * Gets the camera used for the rendering
      */
@@ -477,12 +498,23 @@ export class FluidRenderingTargetRenderer {
     /** @internal */
     public _thicknessRenderTarget: Nullable<FluidRenderingTextures>;
 
+    /** Shader language used by the renderer */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in this renderer
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
+
     /**
      * Creates an instance of the class
      * @param scene Scene used to render the fluid object into
      * @param camera Camera used to render the fluid object. If not provided, use the active camera of the scene instead
+     * @param shaderLanguage The shader language to use
      */
-    constructor(scene: Scene, camera?: Camera) {
+    constructor(scene: Scene, camera?: Camera, shaderLanguage?: ShaderLanguage) {
         this._scene = scene;
         this._engine = scene.getEngine();
         this._camera = camera ?? scene.activeCamera;
@@ -498,6 +530,8 @@ export class FluidRenderingTargetRenderer {
         this._thicknessRenderTarget = null;
 
         this._renderPostProcess = null;
+
+        this._shaderLanguage = shaderLanguage ?? (this._engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL);
     }
 
     /** @internal */
@@ -524,7 +558,8 @@ export class FluidRenderingTargetRenderer {
             false,
             this._camera,
             true,
-            this._samples
+            this._samples,
+            this._shaderLanguage
         );
 
         this._initializeRenderTarget(this._depthRenderTarget);
@@ -550,7 +585,8 @@ export class FluidRenderingTargetRenderer {
                 true,
                 this._camera,
                 true,
-                this._samples
+                this._samples,
+                this._shaderLanguage
             );
 
             this._initializeRenderTarget(this._diffuseRenderTarget);
@@ -577,7 +613,8 @@ export class FluidRenderingTargetRenderer {
                 true,
                 this._camera,
                 false,
-                this._samples
+                this._samples,
+                this._shaderLanguage
             );
 
             this._initializeRenderTarget(this._thicknessRenderTarget);
@@ -684,6 +721,10 @@ export class FluidRenderingTargetRenderer {
             samplerNames.push("thicknessSampler");
         }
 
+        if (this._compositeMode) {
+            defines.push("#define FLUIDRENDERING_COMPOSITE_MODE");
+        }
+
         if (this._debug) {
             defines.push("#define FLUIDRENDERING_DEBUG");
             if (this._debugFeature === FluidRenderingDebug.Normals) {
@@ -714,40 +755,51 @@ export class FluidRenderingTargetRenderer {
             undefined,
             undefined,
             true,
-            undefined
+            undefined,
+            this._shaderLanguage,
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises
+            async () => {
+                if (this._shaderLanguage === ShaderLanguage.WGSL) {
+                    await import("../../ShadersWGSL/fluidRenderingRender.fragment");
+                } else {
+                    await import("../../Shaders/fluidRenderingRender.fragment");
+                }
+            }
         );
         this._renderPostProcess.updateEffect(defines.join("\n"));
 
         this._renderPostProcess.samples = this._samples;
+        const engineWebGPU = engine as WebGPUEngine;
+        const setTextureSampler = engineWebGPU.setTextureSampler;
         this._renderPostProcess.onApplyObservable.add((effect) => {
             this._invProjectionMatrix.copyFrom(this._scene.getProjectionMatrix());
             this._invProjectionMatrix.invert();
 
-            if (engine.isWebGPU) {
-                effect.setTextureSampler("textureSamplerSampler", this._renderPostProcess!.inputTexture.texture);
+            if (setTextureSampler) {
+                setTextureSampler.call(engineWebGPU, "textureSamplerSampler", this._renderPostProcess!.inputTexture.texture);
             }
 
             if (!this._depthRenderTarget!.enableBlur) {
                 effect.setTexture("depthSampler", this._depthRenderTarget!.texture);
-                if (engine.isWebGPU) {
-                    effect.setTextureSampler("depthSamplerSampler", this._depthRenderTarget!.texture?.getInternalTexture() ?? null);
+                if (setTextureSampler) {
+                    setTextureSampler.call(engineWebGPU, "depthSamplerSampler", this._depthRenderTarget!.texture?.getInternalTexture() ?? null);
                 }
             } else {
                 effect.setTexture("depthSampler", this._depthRenderTarget!.textureBlur);
-                if (engine.isWebGPU) {
-                    effect.setTextureSampler("depthSamplerSampler", this._depthRenderTarget!.textureBlur?.getInternalTexture() ?? null);
+                if (setTextureSampler) {
+                    setTextureSampler.call(engineWebGPU, "depthSamplerSampler", this._depthRenderTarget!.textureBlur?.getInternalTexture() ?? null);
                 }
             }
             if (this._diffuseRenderTarget) {
                 if (!this._diffuseRenderTarget.enableBlur) {
                     effect.setTexture("diffuseSampler", this._diffuseRenderTarget.texture);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("diffuseSamplerSampler", this._diffuseRenderTarget.texture?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "diffuseSamplerSampler", this._diffuseRenderTarget.texture?.getInternalTexture() ?? null);
                     }
                 } else {
                     effect.setTexture("diffuseSampler", this._diffuseRenderTarget.textureBlur);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("diffuseSamplerSampler", this._diffuseRenderTarget.textureBlur?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "diffuseSamplerSampler", this._diffuseRenderTarget.textureBlur?.getInternalTexture() ?? null);
                     }
                 }
             } else {
@@ -756,19 +808,19 @@ export class FluidRenderingTargetRenderer {
             if (this._useFixedThickness) {
                 effect.setFloat("thickness", this.minimumThickness);
                 effect._bindTexture("bgDepthSampler", this._bgDepthTexture);
-                if (engine.isWebGPU) {
-                    effect.setTextureSampler("bgDepthSamplerSampler", this._bgDepthTexture ?? null);
+                if (setTextureSampler) {
+                    setTextureSampler.call(engineWebGPU, "bgDepthSamplerSampler", this._bgDepthTexture ?? null);
                 }
             } else {
                 if (!this._thicknessRenderTarget!.enableBlur) {
                     effect.setTexture("thicknessSampler", this._thicknessRenderTarget!.texture);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("thicknessSamplerSampler", this._thicknessRenderTarget!.texture?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "thicknessSamplerSampler", this._thicknessRenderTarget!.texture?.getInternalTexture() ?? null);
                     }
                 } else {
                     effect.setTexture("thicknessSampler", this._thicknessRenderTarget!.textureBlur);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("thicknessSamplerSampler", this._thicknessRenderTarget!.textureBlur?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "thicknessSamplerSampler", this._thicknessRenderTarget!.textureBlur?.getInternalTexture() ?? null);
                     }
                 }
                 effect.setFloat("minimumThickness", this.minimumThickness);
@@ -778,8 +830,8 @@ export class FluidRenderingTargetRenderer {
                 const envMap = this._environmentMap ?? this._scene.environmentTexture;
                 if (envMap) {
                     effect.setTexture("reflectionSampler", envMap);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("reflectionSamplerSampler", envMap?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "reflectionSamplerSampler", envMap?.getInternalTexture() ?? null);
                     }
                 }
             }
@@ -810,7 +862,7 @@ export class FluidRenderingTargetRenderer {
                         texture = this._thicknessRenderTarget?.texture ?? null;
                         break;
                     case FluidRenderingDebug.ThicknessBlurredTexture:
-                        texture = this._thicknessRenderTarget?.enableBlur ? this._thicknessRenderTarget?.textureBlur ?? null : this._thicknessRenderTarget?.texture ?? null;
+                        texture = this._thicknessRenderTarget?.enableBlur ? (this._thicknessRenderTarget?.textureBlur ?? null) : (this._thicknessRenderTarget?.texture ?? null);
                         break;
                     case FluidRenderingDebug.DiffuseTexture:
                         if (this._diffuseRenderTarget) {
@@ -820,8 +872,8 @@ export class FluidRenderingTargetRenderer {
                 }
                 if (this._debugFeature !== FluidRenderingDebug.Normals) {
                     effect.setTexture("debugSampler", texture);
-                    if (engine.isWebGPU) {
-                        effect.setTextureSampler("debugSamplerSampler", texture?.getInternalTexture() ?? null);
+                    if (setTextureSampler) {
+                        setTextureSampler.call(engineWebGPU, "debugSamplerSampler", texture?.getInternalTexture() ?? null);
                     }
                 }
             }
@@ -904,8 +956,8 @@ export class FluidRenderingTargetRenderer {
     }
 
     /**
-     * Releases all the ressources used by the class
-     * @param onlyPostProcesses If true, releases only the ressources used by the render post processes
+     * Releases all the resources used by the class
+     * @param onlyPostProcesses If true, releases only the resources used by the render post processes
      */
     public dispose(onlyPostProcesses = false): void {
         if (!onlyPostProcesses) {
@@ -924,6 +976,8 @@ export class FluidRenderingTargetRenderer {
         }
         this._renderPostProcess?.dispose();
         this._renderPostProcess = null;
+
+        this._onUseVelocityChanged.clear();
 
         this._needInitialization = false;
     }

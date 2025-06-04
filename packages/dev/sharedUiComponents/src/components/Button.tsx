@@ -1,4 +1,5 @@
-import styles from "./Button.modules.scss";
+import type { PropsWithChildren } from "react";
+import * as styles from "./Button.module.scss";
 import { ClassNames } from "./classNames";
 
 export type ButtonProps = {
@@ -11,7 +12,7 @@ export type ButtonProps = {
     backgroundColor?: string;
 };
 
-export const Button: React.FC<ButtonProps> = ({ disabled, active, onClick, children, color, size, title, backgroundColor }) => {
+export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({ disabled, active, onClick, children, color, size, title, backgroundColor }) => {
     return (
         <button
             className={ClassNames(

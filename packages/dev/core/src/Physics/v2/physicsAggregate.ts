@@ -5,7 +5,7 @@ import { Logger } from "../../Misc/logger";
 import type { Scene } from "../../scene";
 import type { TransformNode } from "../../Meshes/transformNode";
 import { Quaternion, TmpVectors, Vector3 } from "../../Maths/math.vector";
-import { Scalar } from "../../Maths/math.scalar";
+import { WithinEpsilon } from "../../Maths/math.scalar.functions";
 import { PhysicsMotionType, PhysicsShapeType } from "./IPhysicsEnginePlugin";
 import type { Mesh } from "../../Meshes/mesh";
 import type { Observer } from "../../Misc/observable";
@@ -17,6 +17,7 @@ import { BoundingBox } from "../../Culling/boundingBox";
 /**
  * The interface for the physics aggregate parameters
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface PhysicsAggregateParameters {
     /**
      * The mass of the physics aggregate
@@ -81,8 +82,8 @@ export interface PhysicsAggregateParameters {
 /**
  * Helper class to create and interact with a PhysicsAggregate.
  * This is a transition object that works like Physics Plugin V1 Impostors.
- * This helper instanciate all mandatory physics objects to get a body/shape and material.
- * It's less efficient that handling body and shapes independently but for prototyping or
+ * This helper instantiates all mandatory physics objects to get a body/shape and material.
+ * It's less efficient than handling body and shapes independently but for prototyping or
  * a small numbers of physics objects, it's good enough.
  */
 export class PhysicsAggregate {
@@ -187,7 +188,7 @@ export class PhysicsAggregate {
         const extents = TmpVectors.Vector3[0];
         extents.copyFrom(bb.extendSize);
         extents.scaleInPlace(2);
-        extents.multiplyInPlace(this.transformNode.scaling);
+        extents.multiplyInPlace(this.transformNode.absoluteScaling);
         // In case we had any negative scaling, we need to take the absolute value of the extents.
         extents.x = Math.abs(extents.x);
         extents.y = Math.abs(extents.y);
@@ -195,18 +196,18 @@ export class PhysicsAggregate {
 
         const min = TmpVectors.Vector3[1];
         min.copyFrom(bb.minimum);
-        min.multiplyInPlace(this.transformNode.scaling);
+        min.multiplyInPlace(this.transformNode.absoluteScaling);
 
         if (!this._options.center) {
             const center = new Vector3();
             center.copyFrom(bb.center);
-            center.multiplyInPlace(this.transformNode.scaling);
+            center.multiplyInPlace(this.transformNode.absoluteScaling);
             this._options.center = center;
         }
 
         switch (this.type) {
             case PhysicsShapeType.SPHERE:
-                if (!this._options.radius && Scalar.WithinEpsilon(extents.x, extents.y, 0.0001) && Scalar.WithinEpsilon(extents.x, extents.z, 0.0001)) {
+                if (!this._options.radius && WithinEpsilon(extents.x, extents.y, 0.0001) && WithinEpsilon(extents.x, extents.z, 0.0001)) {
                     this._options.radius = extents.x / 2;
                 } else if (!this._options.radius) {
                     Logger.Warn("Non uniform scaling is unsupported for sphere shapes. Setting the radius to the biggest bounding box extent.");
@@ -231,6 +232,7 @@ export class PhysicsAggregate {
                 break;
             case PhysicsShapeType.MESH:
             case PhysicsShapeType.CONVEX_HULL:
+            case PhysicsShapeType.HEIGHTFIELD:
                 if (!this._options.mesh && this._hasVertices(this.transformNode)) {
                     this._options.mesh = this.transformNode as Mesh;
                 } else if (!this._options.mesh || !this._hasVertices(this._options.mesh)) {

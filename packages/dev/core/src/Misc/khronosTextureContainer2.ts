@@ -1,52 +1,16 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import type { ThinEngine } from "../Engines/thinEngine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
 import { AutoReleaseWorkerPool } from "./workerPool";
 import { Tools } from "./tools";
 import type { Nullable } from "../types";
 import type { ICompressedFormatCapabilities, IDecodedData, IKTX2DecoderOptions } from "core/Materials/Textures/ktx2decoderTypes";
 import { EngineFormat, TranscodeTarget } from "core/Materials/Textures/ktx2decoderTypes";
+import type { AllowedKeys } from "./khronosTextureContainer2Worker";
+import { applyConfig, initializeWebWorker, workerFunction } from "./khronosTextureContainer2Worker";
 
 declare let KTX2DECODER: any;
-
-function applyConfig(urls: typeof KhronosTextureContainer2.URLConfig): void {
-    if (urls.wasmUASTCToASTC) {
-        KTX2DECODER.LiteTranscoder_UASTC_ASTC.WasmModuleURL = urls.wasmUASTCToASTC;
-    }
-
-    if (urls.wasmUASTCToBC7) {
-        KTX2DECODER.LiteTranscoder_UASTC_BC7.WasmModuleURL = urls.wasmUASTCToBC7;
-    }
-
-    if (urls.wasmUASTCToRGBA_UNORM) {
-        KTX2DECODER.LiteTranscoder_UASTC_RGBA_UNORM.WasmModuleURL = urls.wasmUASTCToRGBA_UNORM;
-    }
-
-    if (urls.wasmUASTCToRGBA_SRGB) {
-        KTX2DECODER.LiteTranscoder_UASTC_RGBA_SRGB.WasmModuleURL = urls.wasmUASTCToRGBA_SRGB;
-    }
-
-    if (urls.wasmUASTCToR8_UNORM) {
-        KTX2DECODER.LiteTranscoder_UASTC_R8_UNORM.WasmModuleURL = urls.wasmUASTCToR8_UNORM;
-    }
-
-    if (urls.wasmUASTCToRG8_UNORM) {
-        KTX2DECODER.LiteTranscoder_UASTC_RG8_UNORM.WasmModuleURL = urls.wasmUASTCToRG8_UNORM;
-    }
-
-    if (urls.jsMSCTranscoder) {
-        KTX2DECODER.MSCTranscoder.JSModuleURL = urls.jsMSCTranscoder;
-    }
-
-    if (urls.wasmMSCTranscoder) {
-        KTX2DECODER.MSCTranscoder.WasmModuleURL = urls.wasmMSCTranscoder;
-    }
-
-    if (urls.wasmZSTDDecoder) {
-        KTX2DECODER.ZSTDDecoder.WasmModuleURL = urls.wasmZSTDDecoder;
-    }
-}
 
 /**
  * Class that defines the default KTX2 decoder options.
@@ -206,11 +170,32 @@ export class DefaultKTX2DecoderOptions {
 }
 
 /**
+ * Options for the KTX2 decoder
+ */
+export interface IKhronosTextureContainer2Options {
+    /**
+     * Number of workers to use for async operations. Specify `0` to disable web workers and run synchronously in the current context.
+     */
+    numWorkers?: number;
+    /**
+     * Worker pool to use for async operations. If set, `numWorkers` will be ignored.
+     */
+    workerPool?: AutoReleaseWorkerPool;
+    /**
+     * Optional container for the KTX2 decoder module and its dependencies. If set, the module will be used from this container and the URLs will be ignored.
+     */
+    // No need for | any here
+    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+    binariesAndModulesContainer?: { [key in AllowedKeys]?: ArrayBuffer | any };
+}
+
+/**
  * Class for loading KTX2 files
  */
 export class KhronosTextureContainer2 {
     private static _WorkerPoolPromise?: Promise<AutoReleaseWorkerPool>;
     private static _DecoderModulePromise?: Promise<any>;
+    private static _KTX2DecoderModule?: any;
 
     /**
      * URLs to use when loading the KTX2 decoder module as well as its dependencies
@@ -254,6 +239,13 @@ export class KhronosTextureContainer2 {
     };
 
     /**
+     * If provided, this worker pool will be used instead of creating a new one.
+     * This is useful when loading the WASM and the js modules on your own and
+     * you want to use the ktxTextureLoader and not construct this class directly.
+     */
+    public static WorkerPool?: AutoReleaseWorkerPool;
+
+    /**
      * Default number of workers used to handle data decoding
      */
     public static DefaultNumWorkers = KhronosTextureContainer2.GetDefaultNumWorkers();
@@ -273,7 +265,7 @@ export class KhronosTextureContainer2 {
         return Math.min(Math.floor(navigator.hardwareConcurrency * 0.5), 4);
     }
 
-    private _engine: ThinEngine;
+    private _engine: AbstractEngine;
 
     private static _Initialize(numWorkers: number): void {
         if (KhronosTextureContainer2._WorkerPoolPromise || KhronosTextureContainer2._DecoderModulePromise) {
@@ -295,69 +287,56 @@ export class KhronosTextureContainer2 {
 
         if (numWorkers && typeof Worker === "function" && typeof URL !== "undefined") {
             KhronosTextureContainer2._WorkerPoolPromise = new Promise((resolve) => {
-                const workerContent = `${applyConfig}(${workerFunc})()`;
+                // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+                const workerContent = `${applyConfig}(${workerFunction})()`;
                 const workerBlobUrl = URL.createObjectURL(new Blob([workerContent], { type: "application/javascript" }));
-                resolve(
-                    new AutoReleaseWorkerPool(
-                        numWorkers,
-                        () =>
-                            new Promise((resolve, reject) => {
-                                const worker = new Worker(workerBlobUrl);
-
-                                const onError = (error: ErrorEvent) => {
-                                    worker.removeEventListener("error", onError);
-                                    worker.removeEventListener("message", onMessage);
-                                    reject(error);
-                                };
-
-                                const onMessage = (message: MessageEvent) => {
-                                    if (message.data.action === "init") {
-                                        worker.removeEventListener("error", onError);
-                                        worker.removeEventListener("message", onMessage);
-                                        resolve(worker);
-                                    }
-                                };
-
-                                worker.addEventListener("error", onError);
-                                worker.addEventListener("message", onMessage);
-
-                                worker.postMessage({
-                                    action: "init",
-                                    urls: urls,
-                                });
-                            })
-                    )
-                );
-            });
-        } else if (typeof KTX2DECODER === "undefined") {
-            KhronosTextureContainer2._DecoderModulePromise = Tools.LoadBabylonScriptAsync(urls.jsDecoderModule).then(() => {
-                KTX2DECODER.MSCTranscoder.UseFromWorkerThread = false;
-                KTX2DECODER.WASMMemoryManager.LoadBinariesFromCurrentThread = true;
-                applyConfig(urls);
-                return new KTX2DECODER.KTX2Decoder();
+                resolve(new AutoReleaseWorkerPool(numWorkers, async () => await initializeWebWorker(new Worker(workerBlobUrl), undefined, urls)));
             });
         } else {
-            KTX2DECODER.MSCTranscoder.UseFromWorkerThread = false;
-            KTX2DECODER.WASMMemoryManager.LoadBinariesFromCurrentThread = true;
-            KhronosTextureContainer2._DecoderModulePromise = Promise.resolve(new KTX2DECODER.KTX2Decoder());
+            if (typeof KhronosTextureContainer2._KTX2DecoderModule === "undefined") {
+                // eslint-disable-next-line github/no-then
+                KhronosTextureContainer2._DecoderModulePromise = Tools.LoadBabylonScriptAsync(urls.jsDecoderModule).then(() => {
+                    KhronosTextureContainer2._KTX2DecoderModule = KTX2DECODER;
+                    KhronosTextureContainer2._KTX2DecoderModule.MSCTranscoder.UseFromWorkerThread = false;
+                    KhronosTextureContainer2._KTX2DecoderModule.WASMMemoryManager.LoadBinariesFromCurrentThread = true;
+                    applyConfig(urls, KhronosTextureContainer2._KTX2DecoderModule);
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+                    return new KhronosTextureContainer2._KTX2DecoderModule.KTX2Decoder();
+                });
+            } else {
+                KhronosTextureContainer2._KTX2DecoderModule.MSCTranscoder.UseFromWorkerThread = false;
+                KhronosTextureContainer2._KTX2DecoderModule.WASMMemoryManager.LoadBinariesFromCurrentThread = true;
+                KhronosTextureContainer2._DecoderModulePromise = Promise.resolve(new KhronosTextureContainer2._KTX2DecoderModule.KTX2Decoder());
+            }
         }
     }
 
     /**
      * Constructor
      * @param engine The engine to use
-     * @param numWorkers The number of workers for async operations. Specify `0` to disable web workers and run synchronously in the current context.
+     * @param numWorkersOrOptions The number of workers for async operations. Specify `0` to disable web workers and run synchronously in the current context.
      */
-    public constructor(engine: ThinEngine, numWorkers = KhronosTextureContainer2.DefaultNumWorkers) {
+    public constructor(engine: AbstractEngine, numWorkersOrOptions: number | IKhronosTextureContainer2Options = KhronosTextureContainer2.DefaultNumWorkers) {
         this._engine = engine;
-
-        KhronosTextureContainer2._Initialize(numWorkers);
+        const workerPoolOption = (typeof numWorkersOrOptions === "object" && numWorkersOrOptions.workerPool) || KhronosTextureContainer2.WorkerPool;
+        if (workerPoolOption) {
+            KhronosTextureContainer2._WorkerPoolPromise = Promise.resolve(workerPoolOption);
+        } else {
+            // set the KTX2 decoder module
+            if (typeof numWorkersOrOptions === "object") {
+                KhronosTextureContainer2._KTX2DecoderModule = numWorkersOrOptions?.binariesAndModulesContainer?.jsDecoderModule;
+            } else if (typeof KTX2DECODER !== "undefined") {
+                KhronosTextureContainer2._KTX2DecoderModule = KTX2DECODER;
+            }
+            const numberOfWorkers = typeof numWorkersOrOptions === "number" ? numWorkersOrOptions : (numWorkersOrOptions.numWorkers ?? KhronosTextureContainer2.DefaultNumWorkers);
+            KhronosTextureContainer2._Initialize(numberOfWorkers);
+        }
     }
 
     /**
      * @internal
      */
-    public uploadAsync(data: ArrayBufferView, internalTexture: InternalTexture, options?: IKTX2DecoderOptions & IDecodedData): Promise<void> {
+    public async _uploadAsync(data: ArrayBufferView, internalTexture: InternalTexture, options?: IKTX2DecoderOptions & IDecodedData): Promise<void> {
         const caps = this._engine.getCaps();
 
         const compressedTexturesCaps: ICompressedFormatCapabilities = {
@@ -370,61 +349,65 @@ export class KhronosTextureContainer2 {
         };
 
         if (KhronosTextureContainer2._WorkerPoolPromise) {
-            return KhronosTextureContainer2._WorkerPoolPromise.then((workerPool) => {
-                return new Promise((resolve, reject) => {
-                    workerPool.push((worker, onComplete) => {
-                        const onError = (error: ErrorEvent) => {
+            const workerPool = await KhronosTextureContainer2._WorkerPoolPromise;
+            return await new Promise((resolve, reject) => {
+                workerPool.push((worker, onComplete) => {
+                    const onError = (error: ErrorEvent) => {
+                        worker.removeEventListener("error", onError);
+                        worker.removeEventListener("message", onMessage);
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                        reject(error);
+                        onComplete();
+                    };
+
+                    const onMessage = (message: MessageEvent) => {
+                        if (message.data.action === "decoded") {
                             worker.removeEventListener("error", onError);
                             worker.removeEventListener("message", onMessage);
-                            reject(error);
-                            onComplete();
-                        };
-
-                        const onMessage = (message: MessageEvent) => {
-                            if (message.data.action === "decoded") {
-                                worker.removeEventListener("error", onError);
-                                worker.removeEventListener("message", onMessage);
-                                if (!message.data.success) {
-                                    reject({ message: message.data.msg });
-                                } else {
-                                    try {
-                                        this._createTexture(message.data.decodedData, internalTexture, options);
-                                        resolve();
-                                    } catch (err) {
-                                        reject({ message: err });
-                                    }
+                            if (!message.data.success) {
+                                // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                                reject({ message: message.data.msg });
+                            } else {
+                                try {
+                                    this._createTexture(message.data.decodedData, internalTexture, options);
+                                    resolve();
+                                } catch (err) {
+                                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                                    reject({ message: err });
                                 }
-                                onComplete();
                             }
-                        };
+                            onComplete();
+                        }
+                    };
 
-                        worker.addEventListener("error", onError);
-                        worker.addEventListener("message", onMessage);
-                        worker.postMessage({ action: "setDefaultDecoderOptions", options: KhronosTextureContainer2.DefaultDecoderOptions._getKTX2DecoderOptions() });
+                    worker.addEventListener("error", onError);
+                    worker.addEventListener("message", onMessage);
+                    worker.postMessage({ action: "setDefaultDecoderOptions", options: KhronosTextureContainer2.DefaultDecoderOptions._getKTX2DecoderOptions() });
 
-                        const dataCopy = new Uint8Array(data.byteLength);
-                        dataCopy.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+                    const dataCopy = new Uint8Array(data.byteLength);
+                    dataCopy.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
 
-                        worker.postMessage({ action: "decode", data: dataCopy, caps: compressedTexturesCaps, options }, [dataCopy.buffer]);
-                    });
+                    worker.postMessage({ action: "decode", data: dataCopy, caps: compressedTexturesCaps, options }, [dataCopy.buffer]);
                 });
             });
         } else if (KhronosTextureContainer2._DecoderModulePromise) {
-            return KhronosTextureContainer2._DecoderModulePromise.then((decoder) => {
-                if (KhronosTextureContainer2.DefaultDecoderOptions.isDirty) {
-                    KTX2DECODER.KTX2Decoder.DefaultDecoderOptions = KhronosTextureContainer2.DefaultDecoderOptions._getKTX2DecoderOptions();
-                }
-                return new Promise((resolve, reject) => {
-                    decoder
-                        .decode(data, caps)
-                        .then((data: IDecodedData) => {
-                            this._createTexture(data, internalTexture);
-                            resolve();
-                        })
-                        .catch((reason: any) => {
-                            reject({ message: reason });
-                        });
-                });
+            const decoder = await KhronosTextureContainer2._DecoderModulePromise;
+            if (KhronosTextureContainer2.DefaultDecoderOptions.isDirty) {
+                KhronosTextureContainer2._KTX2DecoderModule.KTX2Decoder.DefaultDecoderOptions = KhronosTextureContainer2.DefaultDecoderOptions._getKTX2DecoderOptions();
+            }
+            return await new Promise((resolve, reject) => {
+                decoder
+                    .decode(data, caps)
+                    // eslint-disable-next-line github/no-then
+                    .then((data: IDecodedData) => {
+                        this._createTexture(data, internalTexture);
+                        resolve();
+                    })
+                    // eslint-disable-next-line github/no-then
+                    .catch((reason: any) => {
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                        reject({ message: reason });
+                    });
             });
         }
 
@@ -527,48 +510,4 @@ export class KhronosTextureContainer2 {
 
         return false;
     }
-}
-
-declare function importScripts(...urls: string[]): void;
-declare function postMessage(message: any, transfer?: any[]): void;
-
-function workerFunc(): void {
-    let ktx2Decoder: any;
-
-    onmessage = (event) => {
-        if (!event.data) {
-            return;
-        }
-        switch (event.data.action) {
-            case "init": {
-                const urls = event.data.urls;
-                importScripts(urls.jsDecoderModule);
-                applyConfig(urls);
-                ktx2Decoder = new KTX2DECODER.KTX2Decoder();
-                postMessage({ action: "init" });
-                break;
-            }
-            case "setDefaultDecoderOptions": {
-                KTX2DECODER.KTX2Decoder.DefaultDecoderOptions = event.data.options;
-                break;
-            }
-            case "decode":
-                ktx2Decoder
-                    .decode(event.data.data, event.data.caps, event.data.options)
-                    .then((data: IDecodedData) => {
-                        const buffers = [];
-                        for (let mip = 0; mip < data.mipmaps.length; ++mip) {
-                            const mipmap = data.mipmaps[mip];
-                            if (mipmap && mipmap.data) {
-                                buffers.push(mipmap.data.buffer);
-                            }
-                        }
-                        postMessage({ action: "decoded", success: true, decodedData: data }, buffers);
-                    })
-                    .catch((reason: any) => {
-                        postMessage({ action: "decoded", success: false, msg: reason });
-                    });
-                break;
-        }
-    };
 }

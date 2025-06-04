@@ -2,7 +2,7 @@ import * as React from "react";
 import { FileButtonLineComponent } from "../lines/FileButtonLineComponent";
 import { JoinClassNames } from "../classNames";
 
-import style from "./CommandDropdown.modules.scss";
+import * as style from "./CommandDropdown.module.scss";
 
 interface ICommandDropdownComponentProps {
     icon?: string;
@@ -29,7 +29,7 @@ export class CommandDropdownComponent extends React.Component<ICommandDropdownCo
         this.state = { isExpanded: false, activeState: "" };
     }
 
-    public render() {
+    public override render() {
         return (
             <>
                 {this.state.isExpanded && (

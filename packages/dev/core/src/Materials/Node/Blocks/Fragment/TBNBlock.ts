@@ -10,10 +10,12 @@ import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
 import { NodeMaterialSystemValues } from "../../Enums/nodeMaterialSystemValues";
 import { InputBlock } from "../Input/inputBlock";
 import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
+import { ShaderLanguage } from "../../../../Materials/shaderLanguage";
 
 /**
  * Block used to implement TBN matrix
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export class TBNBlock extends NodeMaterialBlock {
     /**
      * Create a new TBNBlock
@@ -45,7 +47,7 @@ export class TBNBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "TBNBlock";
     }
 
@@ -53,7 +55,7 @@ export class TBNBlock extends NodeMaterialBlock {
      * Initialize the block and prepare the context for build
      * @param state defines the state that will be used for the build
      */
-    public initialize(state: NodeMaterialBuildState) {
+    public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("tbnNormal");
         state._excludeVariableName("tbnTangent");
         state._excludeVariableName("tbnBitangent");
@@ -110,13 +112,13 @@ export class TBNBlock extends NodeMaterialBlock {
         return this._outputs[3];
     }
 
-    public get target() {
+    public override get target() {
         return NodeMaterialBlockTargets.Fragment;
     }
 
-    public set target(value: NodeMaterialBlockTargets) {}
+    public override set target(value: NodeMaterialBlockTargets) {}
 
-    public autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
+    public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.world.isConnected) {
             let worldInput = material.getInputBlockByPredicate((b) => b.isSystemValue && b.systemValue === NodeMaterialSystemValues.World && additionalFilteringInfo(b));
 
@@ -150,7 +152,7 @@ export class TBNBlock extends NodeMaterialBlock {
         }
     }
 
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         const normal = this.normal;
         const tangent = this.tangent;
 
@@ -169,38 +171,44 @@ export class TBNBlock extends NodeMaterialBlock {
         defines.setValue("TBNBLOCK", useTBNBlock, true);
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         const normal = this.normal;
         const tangent = this.tangent;
         const world = this.world;
-        const TBN = this.TBN;
+        const tbn = this.TBN;
         const row0 = this.row0;
         const row1 = this.row1;
         const row2 = this.row2;
+        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
+        const mat3 = isWebGPU ? "mat3x3f" : "mat3";
+        const fSuffix = isWebGPU ? "f" : "";
 
         // Fragment
         if (state.target === NodeMaterialBlockTargets.Fragment) {
             state.compilationString += `
                 // ${this.name}
-                vec3 tbnNormal = normalize(${normal.associatedVariableName}).xyz;
-                vec3 tbnTangent = normalize(${tangent.associatedVariableName}.xyz);
-                vec3 tbnBitangent = cross(tbnNormal, tbnTangent) * ${tangent.associatedVariableName}.w;
-                mat3 ${TBN.associatedVariableName} = mat3(${world.associatedVariableName}) * mat3(tbnTangent, tbnBitangent, tbnNormal);
+                ${state._declareLocalVar("tbnNormal", NodeMaterialBlockConnectionPointTypes.Vector3)} = normalize(${normal.associatedVariableName}).xyz;
+                ${state._declareLocalVar("tbnTangent", NodeMaterialBlockConnectionPointTypes.Vector3)} = normalize(${tangent.associatedVariableName}.xyz);
+                ${state._declareLocalVar("tbnBitangent", NodeMaterialBlockConnectionPointTypes.Vector3)} = cross(tbnNormal, tbnTangent) * ${tangent.associatedVariableName}.w;
+                ${isWebGPU ? "var" : "mat3"} ${tbn.associatedVariableName} = ${mat3}(${world.associatedVariableName}[0].xyz, ${world.associatedVariableName}[1].xyz, ${world.associatedVariableName}[2].xyz) * ${mat3}(tbnTangent, tbnBitangent, tbnNormal);
             `;
 
             if (row0.hasEndpoints) {
                 state.compilationString +=
-                    this._declareOutput(row0, state) + ` = vec3(${TBN.associatedVariableName}[0][0], ${TBN.associatedVariableName}[0][1], ${TBN.associatedVariableName}[0][2]);\n`;
+                    state._declareOutput(row0) +
+                    ` = vec3${fSuffix}(${tbn.associatedVariableName}[0][0], ${tbn.associatedVariableName}[0][1], ${tbn.associatedVariableName}[0][2]);\n`;
             }
             if (row1.hasEndpoints) {
                 state.compilationString +=
-                    this._declareOutput(row1, state) + ` = vec3(${TBN.associatedVariableName}[1[0], ${TBN.associatedVariableName}[1][1], ${TBN.associatedVariableName}[1][2]);\n`;
+                    state._declareOutput(row1) +
+                    ` = vec3${fSuffix}(${tbn.associatedVariableName}[1[0], ${tbn.associatedVariableName}[1][1], ${tbn.associatedVariableName}[1][2]);\n`;
             }
             if (row2.hasEndpoints) {
                 state.compilationString +=
-                    this._declareOutput(row2, state) + ` = vec3(${TBN.associatedVariableName}[2][0], ${TBN.associatedVariableName}[2][1], ${TBN.associatedVariableName}[2][2]);\n`;
+                    state._declareOutput(row2) +
+                    ` = vec3${fSuffix}(${tbn.associatedVariableName}[2][0], ${tbn.associatedVariableName}[2][1], ${tbn.associatedVariableName}[2][2]);\n`;
             }
 
             state.sharedData.blocksWithDefines.push(this);

@@ -13,8 +13,20 @@ import { KHRLightsPunctual_LightType } from "babylonjs-gltf2interface";
 import type { INode, IKHRLightsPunctual_Light } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader, ArrayItem } from "../glTFLoader";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_lights_punctual";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc, @typescript-eslint/naming-convention
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the KHR_lights_punctual extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["KHR_lights_punctual"]: {};
+    }
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md)
@@ -53,7 +65,7 @@ export class KHR_lights implements IGLTFLoaderExtension {
     public onLoading(): void {
         const extensions = this._loader.gltf.extensions;
         if (extensions && extensions[this.name]) {
-            const extension = extensions[this.name] as any;
+            const extension = extensions[this.name];
             this._lights = extension.lights;
             ArrayItem.Assign(this._lights);
         }
@@ -62,11 +74,12 @@ export class KHR_lights implements IGLTFLoaderExtension {
     /**
      * @internal
      */
+    // eslint-disable-next-line no-restricted-syntax
     public loadNodeAsync(context: string, node: INode, assign: (babylonTransformNode: TransformNode) => void): Nullable<Promise<TransformNode>> {
-        return GLTFLoader.LoadExtensionAsync<IKHRLightsPunctual_LightReference, TransformNode>(context, node, this.name, (extensionContext, extension) => {
+        return GLTFLoader.LoadExtensionAsync<IKHRLightsPunctual_LightReference, TransformNode>(context, node, this.name, async (extensionContext, extension) => {
             this._loader._allMaterialsDirtyRequired = true;
 
-            return this._loader.loadNodeAsync(context, node, (babylonMesh) => {
+            return await this._loader.loadNodeAsync(context, node, (babylonMesh) => {
                 let babylonLight: Light;
 
                 const light = ArrayItem.Get(extensionContext, this._lights, extension.light);
@@ -118,4 +131,5 @@ export class KHR_lights implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new KHR_lights(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new KHR_lights(loader));

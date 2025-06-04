@@ -1,3 +1,8 @@
+/* eslint-disable github/no-then */
+/* eslint-disable @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/prefer-promise-reject-errors */
+/* eslint-disable no-restricted-syntax */
+/* eslint-disable @typescript-eslint/promise-function-async */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/naming-convention */
 import type * as GLTF2 from "babylonjs-gltf2interface";
@@ -9,15 +14,8 @@ import type { Camera } from "core/Cameras/camera";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import type { Material } from "core/Materials/material";
 import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type {
-    ISceneLoaderPluginFactory,
-    ISceneLoaderPlugin,
-    ISceneLoaderPluginAsync,
-    ISceneLoaderProgressEvent,
-    ISceneLoaderPluginExtensions,
-    ISceneLoaderAsyncResult,
-} from "core/Loading/sceneLoader";
-import { SceneLoader } from "core/Loading/sceneLoader";
+import type { ISceneLoaderPluginFactory, ISceneLoaderPluginAsync, ISceneLoaderProgressEvent, ISceneLoaderAsyncResult, SceneLoaderPluginOptions } from "core/Loading/sceneLoader";
+import { RegisterSceneLoaderPlugin } from "core/Loading/sceneLoader";
 import { AssetContainer } from "core/assetContainer";
 import type { Scene, IDisposable } from "core/scene";
 import type { WebRequest } from "core/Misc/webRequest";
@@ -26,11 +24,27 @@ import { Logger } from "core/Misc/logger";
 import type { IDataBuffer } from "core/Misc/dataReader";
 import { DataReader } from "core/Misc/dataReader";
 import { GLTFValidation } from "./glTFValidation";
+import { GLTFFileLoaderMetadata, GLTFMagicBase64Encoded } from "./glTFFileLoader.metadata";
 import type { LoadFileError } from "core/Misc/fileTools";
 import { DecodeBase64UrlToBinary } from "core/Misc/fileTools";
 import { RuntimeError, ErrorCodes } from "core/Misc/error";
 import type { TransformNode } from "core/Meshes/transformNode";
 import type { MorphTargetManager } from "core/Morph/morphTargetManager";
+
+/**
+ * Defines options for glTF loader extensions. This interface is extended by specific extensions.
+ */
+export interface GLTFLoaderExtensionOptions extends Record<string, Record<string, unknown> | undefined> {}
+
+declare module "core/Loading/sceneLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc
+    export interface SceneLoaderPluginOptions {
+        /**
+         * Defines options for the glTF loader.
+         */
+        [GLTFFileLoaderMetadata.name]: Partial<GLTFLoaderOptions>;
+    }
+}
 
 interface IFileRequestInfo extends IFileRequest {
     _lengthComputable?: boolean;
@@ -104,7 +118,7 @@ export interface IGLTFLoaderData {
     /**
      * The object that represents the glTF JSON.
      */
-    json: Object;
+    json: object;
 
     /**
      * The BIN chunk of a binary glTF.
@@ -156,7 +170,7 @@ export enum GLTFLoaderState {
 /** @internal */
 export interface IGLTFLoader extends IDisposable {
     importMeshAsync: (
-        meshesNames: any,
+        meshesNames: string | readonly string[] | null | undefined,
         scene: Scene,
         container: Nullable<AssetContainer>,
         data: IGLTFLoaderData,
@@ -168,14 +182,49 @@ export interface IGLTFLoader extends IDisposable {
 }
 
 /**
- * File loader for loading glTF files into a scene.
+ * Adds default/implicit options to extension specific options.
  */
-export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISceneLoaderPluginFactory {
-    /** @internal */
-    public static _CreateGLTF1Loader: (parent: GLTFFileLoader) => IGLTFLoader;
+type DefaultExtensionOptions<BaseExtensionOptions> = {
+    /**
+     * Defines if the extension is enabled
+     */
+    enabled?: boolean;
+} & BaseExtensionOptions;
 
-    /** @internal */
-    public static _CreateGLTF2Loader: (parent: GLTFFileLoader) => IGLTFLoader;
+abstract class GLTFLoaderOptions {
+    // eslint-disable-next-line babylonjs/available
+    protected copyFrom(options?: Partial<Readonly<GLTFLoaderOptions>>) {
+        if (options) {
+            this.onParsed = options.onParsed;
+            this.coordinateSystemMode = options.coordinateSystemMode ?? this.coordinateSystemMode;
+            this.animationStartMode = options.animationStartMode ?? this.animationStartMode;
+            this.loadNodeAnimations = options.loadNodeAnimations ?? this.loadNodeAnimations;
+            this.loadSkins = options.loadSkins ?? this.loadSkins;
+            this.loadMorphTargets = options.loadMorphTargets ?? this.loadMorphTargets;
+            this.compileMaterials = options.compileMaterials ?? this.compileMaterials;
+            this.useClipPlane = options.useClipPlane ?? this.useClipPlane;
+            this.compileShadowGenerators = options.compileShadowGenerators ?? this.compileShadowGenerators;
+            this.transparencyAsCoverage = options.transparencyAsCoverage ?? this.transparencyAsCoverage;
+            this.useRangeRequests = options.useRangeRequests ?? this.useRangeRequests;
+            this.createInstances = options.createInstances ?? this.createInstances;
+            this.alwaysComputeBoundingBox = options.alwaysComputeBoundingBox ?? this.alwaysComputeBoundingBox;
+            this.loadAllMaterials = options.loadAllMaterials ?? this.loadAllMaterials;
+            this.loadOnlyMaterials = options.loadOnlyMaterials ?? this.loadOnlyMaterials;
+            this.skipMaterials = options.skipMaterials ?? this.skipMaterials;
+            this.useSRGBBuffers = options.useSRGBBuffers ?? this.useSRGBBuffers;
+            this.targetFps = options.targetFps ?? this.targetFps;
+            this.alwaysComputeSkeletonRootNode = options.alwaysComputeSkeletonRootNode ?? this.alwaysComputeSkeletonRootNode;
+            this.useGltfTextureNames = options.useGltfTextureNames ?? this.useGltfTextureNames;
+            this.preprocessUrlAsync = options.preprocessUrlAsync ?? this.preprocessUrlAsync;
+            this.customRootNode = options.customRootNode;
+            this.onMeshLoaded = options.onMeshLoaded;
+            this.onSkinLoaded = options.onSkinLoaded;
+            this.onTextureLoaded = options.onTextureLoaded;
+            this.onMaterialLoaded = options.onMaterialLoaded;
+            this.onCameraLoaded = options.onCameraLoaded;
+            this.extensionOptions = options.extensionOptions ?? this.extensionOptions;
+        }
+    }
 
     // --------------
     // Common options
@@ -184,38 +233,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * Raised when the asset has been parsed
      */
-    public onParsedObservable = new Observable<IGLTFLoaderData>();
-
-    private _onParsedObserver: Nullable<Observer<IGLTFLoaderData>>;
-
-    /**
-     * Raised when the asset has been parsed
-     */
-    public set onParsed(callback: (loaderData: IGLTFLoaderData) => void) {
-        if (this._onParsedObserver) {
-            this.onParsedObservable.remove(this._onParsedObserver);
-        }
-        this._onParsedObserver = this.onParsedObservable.add(callback);
-    }
-
-    // ----------
-    // V1 options
-    // ----------
-
-    /**
-     * Set this property to false to disable incremental loading which delays the loader from calling the success callback until after loading the meshes and shaders.
-     * Textures always loads asynchronously. For example, the success callback can compute the bounding information of the loaded meshes when incremental loading is disabled.
-     * Defaults to true.
-     * @internal
-     */
-    public static IncrementalLoading = true;
-
-    /**
-     * Set this property to true in order to work with homogeneous coordinates, available with some converters and exporters.
-     * Defaults to false. See https://en.wikipedia.org/wiki/Homogeneous_coordinates.
-     * @internal
-     */
-    public static HomogeneousCoordinates = false;
+    public abstract onParsed?: ((loaderData: IGLTFLoaderData) => void) | undefined;
 
     // ----------
     // V2 options
@@ -230,6 +248,22 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
      * The animation start mode. Defaults to FIRST.
      */
     public animationStartMode = GLTFLoaderAnimationStartMode.FIRST;
+
+    /**
+     * Defines if the loader should load node animations. Defaults to true.
+     * NOTE: The animation of this node will still load if the node is also a joint of a skin and `loadSkins` is true.
+     */
+    public loadNodeAnimations = true;
+
+    /**
+     * Defines if the loader should load skins. Defaults to true.
+     */
+    public loadSkins = true;
+
+    /**
+     * Defines if the loader should load morph targets. Defaults to true.
+     */
+    public loadMorphTargets = true;
 
     /**
      * Defines if the loader should compile materials before raising the success callback. Defaults to false.
@@ -302,6 +336,12 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     public alwaysComputeSkeletonRootNode = false;
 
     /**
+     * If true, the loader will derive the name for Babylon textures from the glTF texture name, image name, or image url. Defaults to false.
+     * Note that it is possible for multiple Babylon textures to share the same name when the Babylon textures load from the same glTF texture or image.
+     */
+    public useGltfTextureNames = false;
+
+    /**
      * Function called before loading a url referenced by the asset.
      * @param url url referenced by the asset
      * @returns Async url to load
@@ -315,6 +355,115 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     public customRootNode?: Nullable<TransformNode>;
 
     /**
+     * Callback raised when the loader creates a mesh after parsing the glTF properties of the mesh.
+     * Note that the callback is called as soon as the mesh object is created, meaning some data may not have been setup yet for this mesh (vertex data, morph targets, material, ...)
+     */
+    public abstract onMeshLoaded?: ((mesh: AbstractMesh) => void) | undefined;
+
+    /**
+     * Callback raised when the loader creates a skin after parsing the glTF properties of the skin node.
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/importers/glTF/glTFSkinning#ignoring-the-transform-of-the-skinned-mesh
+     */
+    public abstract onSkinLoaded?: ((node: TransformNode, skinnedNode: TransformNode) => void) | undefined;
+
+    /**
+     * Callback raised when the loader creates a texture after parsing the glTF properties of the texture.
+     */
+    public abstract onTextureLoaded?: ((texture: BaseTexture) => void) | undefined;
+
+    /**
+     * Callback raised when the loader creates a material after parsing the glTF properties of the material.
+     */
+    public abstract onMaterialLoaded?: ((material: Material) => void) | undefined;
+
+    /**
+     * Callback raised when the loader creates a camera after parsing the glTF properties of the camera.
+     */
+    public abstract onCameraLoaded?: ((camera: Camera) => void) | undefined;
+
+    /**
+     * Defines options for glTF extensions.
+     */
+    public extensionOptions: {
+        // NOTE: This type is doing two things:
+        // 1. Adding an implicit 'enabled' property to the options for each extension.
+        // 2. Creating a mapped type of all the options of all the extensions to make it just look like a consolidated plain object in intellisense for the user.
+        [Extension in keyof GLTFLoaderExtensionOptions]?: {
+            [Option in keyof DefaultExtensionOptions<GLTFLoaderExtensionOptions[Extension]>]: DefaultExtensionOptions<GLTFLoaderExtensionOptions[Extension]>[Option];
+        };
+    } = {};
+}
+
+/**
+ * File loader for loading glTF files into a scene.
+ */
+export class GLTFFileLoader extends GLTFLoaderOptions implements IDisposable, ISceneLoaderPluginAsync, ISceneLoaderPluginFactory {
+    /** @internal */
+    public static _CreateGLTF1Loader: (parent: GLTFFileLoader) => IGLTFLoader;
+
+    /** @internal */
+    public static _CreateGLTF2Loader: (parent: GLTFFileLoader) => IGLTFLoader;
+
+    /**
+     * Creates a new glTF file loader.
+     * @param options The options for the loader
+     */
+    public constructor(options?: Partial<Readonly<GLTFLoaderOptions>>) {
+        super();
+        this.copyFrom(options);
+    }
+
+    // --------------------
+    // Begin Common options
+    // --------------------
+
+    /**
+     * Raised when the asset has been parsed
+     */
+    public onParsedObservable = new Observable<IGLTFLoaderData>();
+
+    private _onParsedObserver: Nullable<Observer<IGLTFLoaderData>>;
+
+    /**
+     * Raised when the asset has been parsed
+     */
+    public set onParsed(callback: ((loaderData: IGLTFLoaderData) => void) | undefined) {
+        if (this._onParsedObserver) {
+            this.onParsedObservable.remove(this._onParsedObserver);
+        }
+        if (callback) {
+            this._onParsedObserver = this.onParsedObservable.add(callback);
+        }
+    }
+
+    // ------------------
+    // End Common options
+    // ------------------
+
+    // ----------------
+    // Begin V1 options
+    // ----------------
+
+    /**
+     * Set this property to false to disable incremental loading which delays the loader from calling the success callback until after loading the meshes and shaders.
+     * Textures always loads asynchronously. For example, the success callback can compute the bounding information of the loaded meshes when incremental loading is disabled.
+     * Defaults to true.
+     * @internal
+     */
+    public static IncrementalLoading = true;
+
+    /**
+     * Set this property to true in order to work with homogeneous coordinates, available with some converters and exporters.
+     * Defaults to false. See https://en.wikipedia.org/wiki/Homogeneous_coordinates.
+     * @internal
+     */
+    public static HomogeneousCoordinates = false;
+
+    // --------------
+    // End V1 options
+    // --------------
+
+    /**
      * Observable raised when the loader creates a mesh after parsing the glTF properties of the mesh.
      * Note that the observable is raised as soon as the mesh object is created, meaning some data may not have been setup yet for this mesh (vertex data, morph targets, material, ...)
      */
@@ -326,20 +475,37 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
      * Callback raised when the loader creates a mesh after parsing the glTF properties of the mesh.
      * Note that the callback is called as soon as the mesh object is created, meaning some data may not have been setup yet for this mesh (vertex data, morph targets, material, ...)
      */
-    public set onMeshLoaded(callback: (mesh: AbstractMesh) => void) {
+    public set onMeshLoaded(callback: ((mesh: AbstractMesh) => void) | undefined) {
         if (this._onMeshLoadedObserver) {
             this.onMeshLoadedObservable.remove(this._onMeshLoadedObserver);
         }
-        this._onMeshLoadedObserver = this.onMeshLoadedObservable.add(callback);
+        if (callback) {
+            this._onMeshLoadedObserver = this.onMeshLoadedObservable.add(callback);
+        }
     }
 
     /**
-     * Callback raised when the loader creates a skin after parsing the glTF properties of the skin node.
+     * Observable raised when the loader creates a skin after parsing the glTF properties of the skin node.
      * @see https://doc.babylonjs.com/features/featuresDeepDive/importers/glTF/glTFSkinning#ignoring-the-transform-of-the-skinned-mesh
      * @param node - the transform node that corresponds to the original glTF skin node used for animations
      * @param skinnedNode - the transform node that is the skinned mesh itself or the parent of the skinned meshes
      */
     public readonly onSkinLoadedObservable = new Observable<{ node: TransformNode; skinnedNode: TransformNode }>();
+
+    private _onSkinLoadedObserver: Nullable<Observer<{ node: TransformNode; skinnedNode: TransformNode }>>;
+
+    /**
+     * Callback raised when the loader creates a skin after parsing the glTF properties of the skin node.
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/importers/glTF/glTFSkinning#ignoring-the-transform-of-the-skinned-mesh
+     */
+    public set onSkinLoaded(callback: ((node: TransformNode, skinnedNode: TransformNode) => void) | undefined) {
+        if (this._onSkinLoadedObserver) {
+            this.onSkinLoadedObservable.remove(this._onSkinLoadedObserver);
+        }
+        if (callback) {
+            this._onSkinLoadedObserver = this.onSkinLoadedObservable.add((data) => callback(data.node, data.skinnedNode));
+        }
+    }
 
     /**
      * Observable raised when the loader creates a texture after parsing the glTF properties of the texture.
@@ -351,11 +517,13 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * Callback raised when the loader creates a texture after parsing the glTF properties of the texture.
      */
-    public set onTextureLoaded(callback: (texture: BaseTexture) => void) {
+    public set onTextureLoaded(callback: ((texture: BaseTexture) => void) | undefined) {
         if (this._onTextureLoadedObserver) {
             this.onTextureLoadedObservable.remove(this._onTextureLoadedObserver);
         }
-        this._onTextureLoadedObserver = this.onTextureLoadedObservable.add(callback);
+        if (callback) {
+            this._onTextureLoadedObserver = this.onTextureLoadedObservable.add(callback);
+        }
     }
 
     /**
@@ -368,11 +536,13 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * Callback raised when the loader creates a material after parsing the glTF properties of the material.
      */
-    public set onMaterialLoaded(callback: (material: Material) => void) {
+    public set onMaterialLoaded(callback: ((material: Material) => void) | undefined) {
         if (this._onMaterialLoadedObserver) {
             this.onMaterialLoadedObservable.remove(this._onMaterialLoadedObserver);
         }
-        this._onMaterialLoadedObserver = this.onMaterialLoadedObservable.add(callback);
+        if (callback) {
+            this._onMaterialLoadedObserver = this.onMaterialLoadedObservable.add(callback);
+        }
     }
 
     /**
@@ -385,11 +555,13 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * Callback raised when the loader creates a camera after parsing the glTF properties of the camera.
      */
-    public set onCameraLoaded(callback: (camera: Camera) => void) {
+    public set onCameraLoaded(callback: ((camera: Camera) => void) | undefined) {
         if (this._onCameraLoadedObserver) {
             this.onCameraLoadedObservable.remove(this._onCameraLoadedObserver);
         }
-        this._onCameraLoadedObserver = this.onCameraLoadedObservable.add(callback);
+        if (callback) {
+            this._onCameraLoadedObserver = this.onCameraLoadedObservable.add(callback);
+        }
     }
 
     /**
@@ -536,18 +708,13 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     private _progressCallback?: (event: ISceneLoaderProgressEvent) => void;
     private _requests = new Array<IFileRequestInfo>();
 
-    private static _MagicBase64Encoded = "Z2xURg"; // "glTF" base64 encoded (without the quotes!)
-
     /**
      * Name of the loader ("gltf")
      */
-    public name = "gltf";
+    public readonly name = GLTFFileLoaderMetadata.name;
 
     /** @internal */
-    public extensions: ISceneLoaderPluginExtensions = {
-        ".gltf": { isBinary: false },
-        ".glb": { isBinary: true },
-    };
+    public readonly extensions = GLTFFileLoaderMetadata.extensions;
 
     /**
      * Disposes the loader, releases resources during load, and cancels any outstanding requests.
@@ -587,14 +754,14 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
         scene: Scene,
         fileOrUrl: File | string | ArrayBufferView,
         rootUrl: string,
-        onSuccess: (data: any, responseURL?: string) => void,
+        onSuccess: (data: unknown, responseURL?: string) => void,
         onProgress?: (ev: ISceneLoaderProgressEvent) => void,
         useArrayBuffer?: boolean,
         onError?: (request?: WebRequest, exception?: LoadFileError) => void,
         name?: string
     ): Nullable<IFileRequest> {
         if (ArrayBuffer.isView(fileOrUrl)) {
-            this._loadBinary(scene, fileOrUrl as ArrayBufferView, rootUrl, onSuccess, onError, name);
+            this._loadBinary(scene, fileOrUrl, rootUrl, onSuccess, onError, name);
             return null;
         }
 
@@ -618,7 +785,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
                         return new Promise<ArrayBufferView>((resolve, reject) => {
                             this._loadFile(
                                 scene,
-                                fileOrUrl as File | string,
+                                fileOrUrl,
                                 (data) => {
                                     resolve(new Uint8Array(data as ArrayBuffer));
                                 },
@@ -648,7 +815,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
 
             return this._loadFile(
                 scene,
-                fileOrUrl as File | string,
+                fileOrUrl,
                 (data) => {
                     this._validate(scene, new Uint8Array(data as ArrayBuffer, 0, (data as ArrayBuffer).byteLength), rootUrl, fileName);
                     this._unpackBinaryAsync(
@@ -671,8 +838,14 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
                 scene,
                 fileOrUrl,
                 (data) => {
-                    this._validate(scene, data as string, rootUrl, fileName);
-                    onSuccess({ json: this._parseJson(data as string) });
+                    try {
+                        this._validate(scene, data as string, rootUrl, fileName);
+                        onSuccess({ json: this._parseJson(data as string) });
+                    } catch {
+                        if (onError) {
+                            onError();
+                        }
+                    }
                 },
                 false,
                 onError
@@ -684,7 +857,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
         scene: Scene,
         data: ArrayBufferView,
         rootUrl: string,
-        onSuccess: (data: any, responseURL?: string) => void,
+        onSuccess: (data: unknown, responseURL?: string) => void,
         onError?: (request?: WebRequest, exception?: LoadFileError) => void,
         fileName?: string
     ): void {
@@ -706,9 +879,9 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
      * @internal
      */
     public importMeshAsync(
-        meshesNames: any,
+        meshesNames: string | readonly string[] | null | undefined,
         scene: Scene,
-        data: any,
+        data: IGLTFLoaderData,
         rootUrl: string,
         onProgress?: (event: ISceneLoaderProgressEvent) => void,
         fileName?: string
@@ -726,7 +899,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * @internal
      */
-    public loadAsync(scene: Scene, data: any, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName?: string): Promise<void> {
+    public loadAsync(scene: Scene, data: IGLTFLoaderData, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName?: string): Promise<void> {
         return Promise.resolve().then(() => {
             this.onParsedObservable.notifyObservers(data);
             this.onParsedObservable.clear();
@@ -740,7 +913,13 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     /**
      * @internal
      */
-    public loadAssetContainerAsync(scene: Scene, data: any, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName?: string): Promise<AssetContainer> {
+    public loadAssetContainerAsync(
+        scene: Scene,
+        data: IGLTFLoaderData,
+        rootUrl: string,
+        onProgress?: (event: ISceneLoaderProgressEvent) => void,
+        fileName?: string
+    ): Promise<AssetContainer> {
         return Promise.resolve().then(() => {
             this.onParsedObservable.notifyObservers(data);
             this.onParsedObservable.clear();
@@ -793,24 +972,18 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
      * @internal
      */
     public canDirectLoad(data: string): boolean {
-        return (
-            (data.indexOf("asset") !== -1 && data.indexOf("version") !== -1) ||
-            data.startsWith("data:base64," + GLTFFileLoader._MagicBase64Encoded) || // this is technically incorrect, but will continue to support for backcompat.
-            data.startsWith("data:;base64," + GLTFFileLoader._MagicBase64Encoded) ||
-            data.startsWith("data:application/octet-stream;base64," + GLTFFileLoader._MagicBase64Encoded) ||
-            data.startsWith("data:model/gltf-binary;base64," + GLTFFileLoader._MagicBase64Encoded)
-        );
+        return GLTFFileLoaderMetadata.canDirectLoad(data);
     }
 
     /**
      * @internal
      */
-    public directLoad(scene: Scene, data: string): Promise<any> {
+    public directLoad(scene: Scene, data: string): Promise<object> {
         if (
-            data.startsWith("base64," + GLTFFileLoader._MagicBase64Encoded) || // this is technically incorrect, but will continue to support for backcompat.
-            data.startsWith(";base64," + GLTFFileLoader._MagicBase64Encoded) ||
-            data.startsWith("application/octet-stream;base64," + GLTFFileLoader._MagicBase64Encoded) ||
-            data.startsWith("model/gltf-binary;base64," + GLTFFileLoader._MagicBase64Encoded)
+            data.startsWith("base64," + GLTFMagicBase64Encoded) || // this is technically incorrect, but will continue to support for backcompat.
+            data.startsWith(";base64," + GLTFMagicBase64Encoded) ||
+            data.startsWith("application/octet-stream;base64," + GLTFMagicBase64Encoded) ||
+            data.startsWith("model/gltf-binary;base64," + GLTFMagicBase64Encoded)
         ) {
             const arrayBuffer = DecodeBase64UrlToBinary(data);
 
@@ -836,8 +1009,8 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     public rewriteRootURL?(rootUrl: string, responseURL?: string): string;
 
     /** @internal */
-    public createPlugin(): ISceneLoaderPlugin | ISceneLoaderPluginAsync {
-        return new GLTFFileLoader();
+    public createPlugin(options: SceneLoaderPluginOptions): ISceneLoaderPluginAsync {
+        return new GLTFFileLoader(options[GLTFFileLoaderMetadata.name]);
     }
 
     /**
@@ -902,8 +1075,10 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
             onError,
             onOpened
         ) as IFileRequestInfo;
-        request.onCompleteObservable.add((request) => {
-            this._requests.splice(this._requests.indexOf(request), 1);
+        request.onCompleteObservable.add(() => {
+            // Force the length computable to be true since we can guarantee the data is loaded.
+            request._lengthComputable = true;
+            request._total = request._loaded;
         });
         this._requests.push(request);
         return request;
@@ -1000,7 +1175,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
         return createLoader(this);
     }
 
-    private _parseJson(json: string): Object {
+    private _parseJson(json: string): object {
         this._startPerformanceCounter("Parse JSON");
         this._log(`JSON length: ${json.length}`);
         const parsed = JSON.parse(json);
@@ -1195,7 +1370,7 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     }
 
     private _logEnabled(message: string): void {
-        const spaces = GLTFFileLoader._logSpaces.substr(0, this._logIndentLevel * 2);
+        const spaces = GLTFFileLoader._logSpaces.substring(0, this._logIndentLevel * 2);
         Logger.Log(`${spaces}${message}`);
     }
 
@@ -1222,6 +1397,4 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
     private _endPerformanceCounterDisabled(counterName: string): void {}
 }
 
-if (SceneLoader) {
-    SceneLoader.RegisterPlugin(new GLTFFileLoader());
-}
+RegisterSceneLoaderPlugin(new GLTFFileLoader());

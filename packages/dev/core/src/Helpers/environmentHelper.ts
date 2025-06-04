@@ -16,6 +16,7 @@ import { Constants } from "../Engines/constants";
 import { CreatePlane } from "../Meshes/Builders/planeBuilder";
 import { CreateBox } from "../Meshes/Builders/boxBuilder";
 import { Plane } from "../Maths/math.plane";
+import { Tools } from "core/Misc/tools";
 
 /**
  * Represents the different options available during the creation of
@@ -193,17 +194,17 @@ export class EnvironmentHelper {
     /**
      * Default ground texture URL.
      */
-    private static _GroundTextureCDNUrl = "https://assets.babylonjs.com/environments/backgroundGround.png";
+    private static _GroundTextureCDNUrl = "https://assets.babylonjs.com/core/environments/backgroundGround.png";
 
     /**
      * Default skybox texture URL.
      */
-    private static _SkyboxTextureCDNUrl = "https://assets.babylonjs.com/environments/backgroundSkybox.dds";
+    private static _SkyboxTextureCDNUrl = "https://assets.babylonjs.com/core/environments/backgroundSkybox.dds";
 
     /**
      * Default environment texture URL.
      */
-    private static _EnvironmentTextureCDNUrl = "https://assets.babylonjs.com/environments/environmentSpecular.env";
+    private static _EnvironmentTextureCDNUrl = "https://assets.babylonjs.com/core/environments/environmentSpecular.env";
 
     /**
      * Creates the default options for the helper.
@@ -214,7 +215,7 @@ export class EnvironmentHelper {
         return {
             createGround: true,
             groundSize: 15,
-            groundTexture: this._GroundTextureCDNUrl,
+            groundTexture: Tools.GetAssetUrl(this._GroundTextureCDNUrl),
             groundColor: new Color3(0.2, 0.2, 0.3).toLinearSpace(scene.getEngine().useExactSrgbConversions).scale(3),
             groundOpacity: 0.9,
             enableGroundShadow: true,
@@ -226,13 +227,13 @@ export class EnvironmentHelper {
             groundMirrorAmount: 1,
             groundMirrorFresnelWeight: 1,
             groundMirrorFallOffDistance: 0,
-            groundMirrorTextureType: Constants.TEXTURETYPE_UNSIGNED_INT,
+            groundMirrorTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
 
             groundYBias: 0.00001,
 
             createSkybox: true,
             skyboxSize: 20,
-            skyboxTexture: this._SkyboxTextureCDNUrl,
+            skyboxTexture: Tools.GetAssetUrl(this._SkyboxTextureCDNUrl),
             skyboxColor: new Color3(0.2, 0.2, 0.3).toLinearSpace(scene.getEngine().useExactSrgbConversions).scale(3),
 
             backgroundYRotation: 0,
@@ -240,7 +241,7 @@ export class EnvironmentHelper {
             rootPosition: Vector3.Zero(),
 
             setupImageProcessing: true,
-            environmentTexture: this._EnvironmentTextureCDNUrl,
+            environmentTexture: Tools.GetAssetUrl(this._EnvironmentTextureCDNUrl),
             cameraExposure: 0.8,
             cameraContrast: 1.2,
             toneMappingEnabled: true,
@@ -515,9 +516,9 @@ export class EnvironmentHelper {
                 skyboxSize = groundSize;
             }
 
-            const sceneDiagonalLenght = sceneDiagonal.length();
-            if (sceneDiagonalLenght > groundSize) {
-                groundSize = sceneDiagonalLenght * 2;
+            const sceneDiagonalLength = sceneDiagonal.length();
+            if (sceneDiagonalLength > groundSize) {
+                groundSize = sceneDiagonalLength * 2;
                 skyboxSize = groundSize;
             }
 
@@ -539,6 +540,7 @@ export class EnvironmentHelper {
         if (!this._ground || this._ground.isDisposed()) {
             this._ground = CreatePlane("BackgroundPlane", { size: sceneSize.groundSize }, this._scene);
             this._ground.rotation.x = Math.PI / 2; // Face up by default.
+            this._ground.isPickable = false;
             this._ground.parent = this._rootMesh;
             this._ground.onDisposeObservable.add(() => {
                 this._ground = null;
@@ -646,6 +648,7 @@ export class EnvironmentHelper {
     private _setupSkybox(sceneSize: ISceneSize): void {
         if (!this._skybox || this._skybox.isDisposed()) {
             this._skybox = CreateBox("BackgroundSkybox", { size: sceneSize.skyboxSize, sideOrientation: Mesh.BACKSIDE }, this._scene);
+            this._skybox.isPickable = false;
             this._skybox.onDisposeObservable.add(() => {
                 this._skybox = null;
             });

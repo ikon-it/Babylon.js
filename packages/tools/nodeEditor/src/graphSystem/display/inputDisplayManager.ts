@@ -8,7 +8,7 @@ import type { Color3 } from "core/Maths/math.color";
 import { BlockTools } from "../../blockTools";
 import type { IDisplayManager } from "shared-ui-components/nodeGraphSystem/interfaces/displayManager";
 import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
-import styles from "./inputDisplayManager.modules.scss";
+import * as styles from "./inputDisplayManager.module.scss";
 
 const inputNameToAttributeValue: { [name: string]: string } = {
     position2d: "position",
@@ -16,6 +16,7 @@ const inputNameToAttributeValue: { [name: string]: string } = {
     particle_color: "color",
     particle_texturemask: "textureMask",
     particle_positionw: "positionW",
+    postprocess_uv: "uv",
 };
 
 const inputNameToAttributeName: { [name: string]: string } = {
@@ -24,6 +25,7 @@ const inputNameToAttributeName: { [name: string]: string } = {
     particle_color: "particle",
     particle_texturemask: "particle",
     particle_positionw: "particle",
+    postprocess_uv: "screen",
 };
 
 export class InputDisplayManager implements IDisplayManager {
@@ -145,8 +147,12 @@ export class InputDisplayManager implements IDisplayManager {
                     break;
                 }
                 case NodeMaterialBlockConnectionPointTypes.Vector4: {
-                    const vec4Value = inputBlock.value as Vector4;
-                    value = `(${vec4Value.x.toFixed(2)}, ${vec4Value.y.toFixed(2)}, ${vec4Value.z.toFixed(2)}, ${vec4Value.w.toFixed(2)})`;
+                    if (inputBlock.animationType !== AnimatedInputBlockTypes.None) {
+                        value = AnimatedInputBlockTypes[inputBlock.animationType];
+                    } else {
+                        const vec4Value = inputBlock.value as Vector4;
+                        value = `(${vec4Value.x.toFixed(2)}, ${vec4Value.y.toFixed(2)}, ${vec4Value.z.toFixed(2)}, ${vec4Value.w.toFixed(2)})`;
+                    }
                     break;
                 }
             }

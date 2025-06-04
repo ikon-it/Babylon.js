@@ -106,6 +106,26 @@
             }
         },
         {
+            "label": "Launch visualization test runner (Dev)",
+            "dependsOn": ["CDN Serve and watch (Dev)"],
+            "type": "shell",
+            "command": "npm",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "HEADLESS": "false"
+                }
+            },
+            "args": ["run", "test:visualization:ui"],
+            "presentation": {
+                "group": "test"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Run Dev host (Dev)",
             "dependsOn": ["Build (Dev)"],
             "type": "shell",
@@ -412,6 +432,42 @@
             "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
         },
         {
+            "label": "Node Render Graph Editor Serve for core (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/node-render-graph-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Node Render Graph Editor Serve (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/node-render-graph-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
             "label": "VSM Serve for core (Dev)",
             "type": "shell",
             "command": "npm",
@@ -452,6 +508,64 @@
             "command": "echo ${input:terminate}",
             "type": "shell",
             "problemMatcher": []
+        },
+        {
+            "label": "Watch Viewer",
+            "type": "shell",
+            "command": "npm",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "watch:dev", "-w", "@tools/viewer"],
+            "isBackground": true,
+            "problemMatcher": ["$tsc-watch"]
+        },
+        {
+            "label": "Viewer Test App (Web)",
+            "dependsOn": ["Watch all (Dev)"],
+            "type": "shell",
+            "command": "npm",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/viewer"],
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": "$tsc",
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": {
+                        "regexp": ".*Executing task.*"
+                    },
+                    "endsPattern": {
+                        "regexp": ".*VITE.*ready.*"
+                    }
+                }
+            }
+        },
+        {
+            "label": "Viewer Configurator Serve (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": ["Watch all (Dev)", "Watch Viewer"],
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/viewer-configurator"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
         }
     ],
     "inputs": [

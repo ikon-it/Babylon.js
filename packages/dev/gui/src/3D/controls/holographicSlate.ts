@@ -25,6 +25,7 @@ import { VertexData } from "core/Meshes/mesh.vertexData";
 import type { Observer } from "core/Misc/observable";
 import type { Scene } from "core/scene";
 import type { Nullable } from "core/types";
+import { Tools } from "core/Misc/tools";
 
 /**
  * Class used to create a holographic slate
@@ -34,7 +35,7 @@ export class HolographicSlate extends ContentDisplay3D {
     /**
      * Base Url for the assets.
      */
-    public static ASSETS_BASE_URL: string = "https://assets.babylonjs.com/meshes/MRTK/";
+    public static ASSETS_BASE_URL: string = "https://assets.babylonjs.com/core/MRTK/";
     /**
      * File name for the close icon.
      */
@@ -72,6 +73,11 @@ export class HolographicSlate extends ContentDisplay3D {
     private _contentDragBehavior: PointerDragBehavior;
 
     private _defaultBehavior: DefaultBehavior;
+
+    /**
+     * If true, the content will be scaled to fit the dimensions of the slate
+     */
+    public fitContentToDimensions = false;
     /**
      * Regroups all mesh behaviors for the slate
      */
@@ -89,7 +95,7 @@ export class HolographicSlate extends ContentDisplay3D {
     /** @internal */
     public _followButton: TouchHolographicButton;
     protected _closeButton: TouchHolographicButton;
-    protected _contentScaleRatio = 1;
+    protected override _contentScaleRatio = 1;
 
     /**
      * 2D dimensions of the slate
@@ -185,7 +191,7 @@ export class HolographicSlate extends ContentDisplay3D {
      * This function can be overloaded by child classes
      * @param facadeTexture defines the AdvancedDynamicTexture to use
      */
-    protected _applyFacade(facadeTexture: AdvancedDynamicTexture) {
+    protected override _applyFacade(facadeTexture: AdvancedDynamicTexture) {
         this._contentMaterial.albedoTexture = facadeTexture;
         this._resetContentPositionAndZoom();
         this._applyContentViewport();
@@ -200,7 +206,7 @@ export class HolographicSlate extends ContentDisplay3D {
         }
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "HolographicSlate";
     }
 
@@ -259,7 +265,7 @@ export class HolographicSlate extends ContentDisplay3D {
         if (this._contentPlate?.material && (this._contentPlate.material as FluentMaterial).albedoTexture) {
             const tex = (this._contentPlate.material as FluentMaterial).albedoTexture as Texture;
             tex.uScale = this._contentScaleRatio;
-            tex.vScale = (this._contentScaleRatio / this._contentViewport.width) * this._contentViewport.height;
+            tex.vScale = this.fitContentToDimensions ? this._contentScaleRatio : (this._contentScaleRatio / this._contentViewport.width) * this._contentViewport.height;
             tex.uOffset = this._contentViewport.x;
             tex.vOffset = this._contentViewport.y;
         }
@@ -267,7 +273,7 @@ export class HolographicSlate extends ContentDisplay3D {
 
     private _resetContentPositionAndZoom() {
         this._contentViewport.x = 0;
-        this._contentViewport.y = 1 - this._contentViewport.height / this._contentViewport.width;
+        this._contentViewport.y = 0; // 1 - this._contentViewport.height / this._contentViewport.width;
         this._contentScaleRatio = 1;
     }
 
@@ -294,7 +300,7 @@ export class HolographicSlate extends ContentDisplay3D {
     }
 
     // Mesh association
-    protected _createNode(scene: Scene): TransformNode {
+    protected override _createNode(scene: Scene): TransformNode {
         const node = new Mesh("slate_" + this.name, scene);
 
         this._titleBar = CreateBox("titleBar_" + this.name, { size: 1 }, scene);
@@ -337,9 +343,9 @@ export class HolographicSlate extends ContentDisplay3D {
         closeButton.node!.parent = node;
 
         this._positionElements();
-
-        this._followButton.imageUrl = HolographicSlate.ASSETS_BASE_URL + HolographicSlate.FOLLOW_ICON_FILENAME;
-        this._closeButton.imageUrl = HolographicSlate.ASSETS_BASE_URL + HolographicSlate.CLOSE_ICON_FILENAME;
+        const baseUrl = Tools.GetAssetUrl(HolographicSlate.ASSETS_BASE_URL);
+        this._followButton.imageUrl = baseUrl + HolographicSlate.FOLLOW_ICON_FILENAME;
+        this._closeButton.imageUrl = baseUrl + HolographicSlate.CLOSE_ICON_FILENAME;
 
         this._followButton.isBackplateVisible = false;
         this._closeButton.isBackplateVisible = false;
@@ -398,6 +404,9 @@ export class HolographicSlate extends ContentDisplay3D {
 
         const offset = new Vector3();
         this._contentDragBehavior.onDragObservable.add((event) => {
+            if (this.fitContentToDimensions) {
+                return;
+            }
             offset.copyFrom(event.dragPlanePoint);
             offset.subtractInPlace(origin);
             projectedOffset.copyFromFloats(Vector3.Dot(offset, rightWorld), Vector3.Dot(offset, upWorld));
@@ -409,7 +418,7 @@ export class HolographicSlate extends ContentDisplay3D {
         });
     }
 
-    protected _affectMaterial(mesh: AbstractMesh) {
+    protected override _affectMaterial(mesh: AbstractMesh) {
         // TODO share materials
         this._titleBarMaterial = new FluentBackplateMaterial(`${this.name} plateMaterial`, mesh.getScene());
 
@@ -432,7 +441,7 @@ export class HolographicSlate extends ContentDisplay3D {
     /**
      * @internal
      */
-    public _prepareNode(scene: Scene): void {
+    public override _prepareNode(scene: Scene): void {
         super._prepareNode(scene);
         this._gizmo = new SlateGizmo(this._host.utilityLayer!);
         this._gizmo.attachedSlate = this;
@@ -466,7 +475,10 @@ export class HolographicSlate extends ContentDisplay3D {
             this.origin.setAll(0);
             this._gizmo.updateBoundingBox();
             const pivot = this.node.getAbsolutePivotPoint();
-            this.node.position.copyFrom(camera.position).subtractInPlace(backward).subtractInPlace(pivot);
+            // only if position was not yet set!
+            if (this.node.position.equalsToFloats(0, 0, 0)) {
+                this.node.position.copyFrom(camera.position).subtractInPlace(backward).subtractInPlace(pivot);
+            }
             this.node.rotationQuaternion = Quaternion.FromLookDirectionLH(backward, new Vector3(0, 1, 0));
 
             if (resetAspect) {
@@ -478,7 +490,7 @@ export class HolographicSlate extends ContentDisplay3D {
     /**
      * Releases all associated resources
      */
-    public dispose() {
+    public override dispose() {
         super.dispose();
         this._titleBarMaterial.dispose();
         this._contentMaterial.dispose();

@@ -5,7 +5,8 @@ import { Observable } from "../../Misc/observable";
 import { Constants } from "../../Engines/constants";
 import { WebGLHardwareTexture } from "../../Engines/WebGL/webGLHardwareTexture";
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
-import { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { BaseTexture } from "../../Materials/Textures/baseTexture";
+import type { ThinEngine } from "../../Engines";
 
 /**
  * Options for raw camera access
@@ -84,25 +85,29 @@ export class WebXRRawCameraAccess extends WebXRAbstractFeature {
         this.xrNativeFeatureName = "camera-access";
     }
 
-    public attach(force?: boolean | undefined): boolean {
+    public override attach(force?: boolean): boolean {
         if (!super.attach(force)) {
             return false;
         }
 
-        this._glContext = this._xrSessionManager.scene.getEngine()._gl;
+        this._glContext = (this._xrSessionManager.scene.getEngine() as ThinEngine)._gl;
         this._glBinding = new XRWebGLBinding(this._xrSessionManager.session, this._glContext);
 
         return true;
     }
 
-    public detach(): boolean {
+    public override detach(): boolean {
         if (!super.detach()) {
             return false;
         }
         this._glBinding = undefined;
         if (!this.options.doNotDisposeOnDetach) {
-            this._cachedInternalTextures.forEach((t) => t.dispose());
-            this.texturesData.forEach((t) => t.dispose());
+            for (const t of this._cachedInternalTextures) {
+                t.dispose();
+            }
+            for (const t of this.texturesData) {
+                t.dispose();
+            }
             this._cachedInternalTextures.length = 0;
             this.texturesData.length = 0;
             this.cameraIntrinsics.length = 0;
@@ -113,7 +118,7 @@ export class WebXRRawCameraAccess extends WebXRAbstractFeature {
     /**
      * Dispose this feature and all of the resources attached
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
         this.onTexturesUpdatedObservable.clear();
     }
@@ -164,12 +169,10 @@ export class WebXRRawCameraAccess extends WebXRAbstractFeature {
 
         if (!this._cachedInternalTextures[index]) {
             const internalTexture = new InternalTexture(this._xrSessionManager.scene.getEngine(), InternalTextureSource.Unknown, true);
-            internalTexture.isCube = true;
             internalTexture.invertY = false;
-            // internalTexture._useSRGBBuffer = this.options.reflectionFormat === "srgba8";
             internalTexture.format = Constants.TEXTUREFORMAT_RGBA;
             internalTexture.generateMipMaps = true;
-            internalTexture.type = Constants.TEXTURETYPE_FLOAT;
+            internalTexture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
             internalTexture.samplingMode = Constants.TEXTURE_LINEAR_LINEAR_MIPLINEAR;
             internalTexture.width = view.camera.width;
             internalTexture.height = view.camera.height;
@@ -200,9 +203,10 @@ export class WebXRRawCameraAccess extends WebXRAbstractFeature {
             return;
         }
         let updated = true;
-        pose.views.forEach((view, index) => {
+        for (let index = 0; index < pose.views.length; index++) {
+            const view = pose.views[index];
             updated = updated && this._updateInternalTextures(view, index);
-        });
+        }
         if (updated) {
             this.onTexturesUpdatedObservable.notifyObservers(this.texturesData);
         }

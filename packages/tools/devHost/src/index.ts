@@ -1,33 +1,30 @@
-import type { Scene } from "@dev/core";
-import { Engine } from "@dev/core"; // can also be @lts/core
+import type { Scene } from "core/scene";
+
 import { createScene as createSceneTS } from "./createScene";
-import { createScene as createSceneJS } from "./createSceneJS.js";
+// import { createScene as createSceneJS } from "./createSceneJS.js";
+import { EngineInstance } from "./engine";
 
-const useJavascript = false;
+const CreateScene = createSceneTS;
 
-const createScene = useJavascript ? createSceneJS : createSceneTS;
-
-export const canvas = document.getElementById("babylon-canvas") as HTMLCanvasElement; // Get the canvas element
-export const engine = new Engine(canvas, true); // Generate the BABYLON 3D engine
-
-let scene: Scene;
+let SceneInstance: Scene;
 
 // avoid await on main level
-const createSceneResult = createScene();
-if (createSceneResult instanceof Promise) {
-    createSceneResult.then(function (result) {
-        scene = result;
+const CreateSceneResult = CreateScene();
+if (CreateSceneResult instanceof Promise) {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
+    CreateSceneResult.then(function (result) {
+        SceneInstance = result;
     });
 } else {
-    scene = createSceneResult;
+    SceneInstance = CreateSceneResult;
 }
 
 // Register a render loop to repeatedly render the scene
-engine.runRenderLoop(function () {
-    scene && scene.render();
+EngineInstance.runRenderLoop(function () {
+    SceneInstance && SceneInstance.render();
 });
 
 // Watch for browser/canvas resize events
 window.addEventListener("resize", function () {
-    engine && engine.resize();
+    EngineInstance && EngineInstance.resize();
 });

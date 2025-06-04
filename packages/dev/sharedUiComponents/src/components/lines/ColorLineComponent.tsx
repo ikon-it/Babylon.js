@@ -7,11 +7,11 @@ import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import type { PropertyChangedEvent } from "../../propertyChangedEvent";
 import { ColorPickerLineComponent } from "./ColorPickerLineComponent";
 import type { LockObject } from "../../tabs/propertyGrids/lockObject";
-import style from "./ColorLineComponent.modules.scss";
+import * as style from "./ColorLineComponent.module.scss";
 
 import copyIcon from "../../imgs/copy.svg";
 import { JoinClassNames } from "../classNames";
-const emptyColor = new Color4(0, 0, 0, 0);
+const EmptyColor = new Color4(0, 0, 0, 0);
 
 export interface IColorLineComponentProps {
     label: string;
@@ -41,7 +41,7 @@ export class ColorLineComponent extends React.Component<IColorLineComponentProps
         target._isLinearColor = props.isLinear; // so that replayRecorder can append toLinearSpace() as appropriate
     }
 
-    shouldComponentUpdate(nextProps: IColorLineComponentProps, nextState: IColorLineComponentState) {
+    override shouldComponentUpdate(nextProps: IColorLineComponentProps, nextState: IColorLineComponentState) {
         const stateColor = nextState.color;
         const propsColor = this.getValue(nextProps);
         if (stateColor !== this.state.color) {
@@ -61,7 +61,9 @@ export class ColorLineComponent extends React.Component<IColorLineComponentProps
     getValue(props = this.props): Color4 {
         const target = props.target;
         const property = target[props.propertyName];
-        if (!property) return emptyColor;
+        if (!property) {
+            return EmptyColor;
+        }
         if (typeof property === "string") {
             // if (property === conflictingValuesPlaceholder) {
             //     return emptyColor;
@@ -149,7 +151,7 @@ export class ColorLineComponent extends React.Component<IColorLineComponentProps
 
     private _convertToColor(color: string): Color4 {
         if (color === "" || color === "transparent") {
-            return emptyColor;
+            return EmptyColor;
         }
 
         if (color.substring(0, 1) !== "#" || (color.length !== 7 && color.length !== 9)) {
@@ -181,7 +183,7 @@ export class ColorLineComponent extends React.Component<IColorLineComponentProps
         return new Color3(color.r, color.g, color.b);
     }
 
-    render() {
+    override render() {
         const chevron = this.state.isExpanded ? <FontAwesomeIcon icon={faMinus} /> : <FontAwesomeIcon icon={faPlus} />;
 
         return (
@@ -210,11 +212,35 @@ export class ColorLineComponent extends React.Component<IColorLineComponentProps
                 </div>
                 {this.state.isExpanded && (
                     <div className={style.secondLine}>
-                        <NumericInputComponent lockObject={this.props.lockObject} label="r" value={this.state.color.r} onChange={(value) => this.updateStateR(value)} />
-                        <NumericInputComponent lockObject={this.props.lockObject} label="g" value={this.state.color.g} onChange={(value) => this.updateStateG(value)} />
-                        <NumericInputComponent lockObject={this.props.lockObject} label="b" value={this.state.color.b} onChange={(value) => this.updateStateB(value)} />
+                        <NumericInputComponent
+                            lockObject={this.props.lockObject}
+                            label="r"
+                            labelTooltip="Red"
+                            value={this.state.color.r}
+                            onChange={(value) => this.updateStateR(value)}
+                        />
+                        <NumericInputComponent
+                            lockObject={this.props.lockObject}
+                            label="g"
+                            labelTooltip="Green"
+                            value={this.state.color.g}
+                            onChange={(value) => this.updateStateG(value)}
+                        />
+                        <NumericInputComponent
+                            lockObject={this.props.lockObject}
+                            label="b"
+                            labelTooltip="Blue"
+                            value={this.state.color.b}
+                            onChange={(value) => this.updateStateB(value)}
+                        />
                         {this.props.disableAlpha || (
-                            <NumericInputComponent lockObject={this.props.lockObject} label="a" value={this.state.color.a} onChange={(value) => this.updateStateA(value)} />
+                            <NumericInputComponent
+                                lockObject={this.props.lockObject}
+                                label="a"
+                                labelTooltip="Alpha"
+                                value={this.state.color.a}
+                                onChange={(value) => this.updateStateA(value)}
+                            />
                         )}
                     </div>
                 )}

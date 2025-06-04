@@ -21,6 +21,9 @@ interface IFooterProps {
     globalState: GlobalState;
 }
 
+/**
+ * Footer
+ */
 export class Footer extends React.Component<IFooterProps> {
     private _cameraNames: string[] = [];
 
@@ -30,6 +33,10 @@ export class Footer extends React.Component<IFooterProps> {
             this._updateCameraNames();
             this.forceUpdate();
         });
+        if (props.globalState.currentScene) {
+            this._updateCameraNames();
+            this.forceUpdate();
+        }
     }
 
     showInspector() {
@@ -43,13 +50,13 @@ export class Footer extends React.Component<IFooterProps> {
     }
 
     switchCamera(index: number) {
-        const camera = this.props.globalState.currentScene!.cameras[index];
+        const camera = this.props.globalState.currentScene.cameras[index];
 
         if (camera) {
-            if (this.props.globalState.currentScene!.activeCamera) {
-                this.props.globalState.currentScene!.activeCamera.detachControl();
+            if (this.props.globalState.currentScene.activeCamera) {
+                this.props.globalState.currentScene.activeCamera.detachControl();
             }
-            this.props.globalState.currentScene!.activeCamera = camera;
+            this.props.globalState.currentScene.activeCamera = camera;
             camera.attachControl();
         }
     }
@@ -65,7 +72,7 @@ export class Footer extends React.Component<IFooterProps> {
         return this.props.globalState?.glTFLoaderExtensions["KHR_materials_variants"] as KHR_materials_variants;
     }
 
-    render() {
+    override render() {
         let variantNames: string[] = [];
         let hasVariants = false;
         let activeEntry = () => "";
@@ -86,7 +93,7 @@ export class Footer extends React.Component<IFooterProps> {
                     variantNames = variants;
 
                     activeEntry = () => {
-                        const lastPickedVariant = variantExtension!.getLastSelectedVariant(rootNode) || 0;
+                        const lastPickedVariant = variantExtension.getLastSelectedVariant(rootNode) || 0;
                         if (lastPickedVariant && Object.prototype.toString.call(lastPickedVariant) === "[object String]") {
                             return lastPickedVariant as string;
                         }

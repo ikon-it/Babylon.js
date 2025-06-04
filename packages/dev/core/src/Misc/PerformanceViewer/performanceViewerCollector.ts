@@ -237,7 +237,8 @@ export class PerformanceViewerCollector {
         let hex = "#";
         for (let i = 0; i < NumberOfBitsInHexcode; i += 8) {
             const octet = (hash >> i) & 0xff;
-            hex += (HexPadding + octet.toString(16)).substr(-2);
+            const toStr = HexPadding + octet.toString(16);
+            hex += toStr.substring(toStr.length - 2);
         }
 
         return hex;
@@ -268,7 +269,7 @@ export class PerformanceViewerCollector {
         this.datasets.data.push(numPoints);
 
         // add the values inside the slice.
-        this.datasets.ids.forEach((id: string) => {
+        for (const id of this.datasets.ids) {
             const strategy = this._strategies.get(id);
 
             if (!strategy) {
@@ -276,7 +277,7 @@ export class PerformanceViewerCollector {
             }
 
             this.datasets.data.push(strategy.getData());
-        });
+        }
 
         if (this.datasetObservable.hasObservers()) {
             const slice: number[] = [timestamp, numPoints];
@@ -300,7 +301,7 @@ export class PerformanceViewerCollector {
         const slice: number[] = [timestamp, numPoints];
 
         // add the values inside the slice.
-        this.datasets.ids.forEach((id: string) => {
+        for (const id of this.datasets.ids) {
             const strategy = this._strategies.get(id);
 
             if (!strategy) {
@@ -310,7 +311,7 @@ export class PerformanceViewerCollector {
             if (this.datasetObservable.hasObservers()) {
                 slice.push(strategy.getData());
             }
-        });
+        }
 
         if (this.datasetObservable.hasObservers()) {
             this.datasetObservable.notifyObservers(slice);

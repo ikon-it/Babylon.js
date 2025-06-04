@@ -1,4 +1,4 @@
-import type { Animatable } from "./animatable";
+import type { Animatable } from "./animatable.core";
 import { Animation } from "./animation";
 import type { IMakeAnimationAdditiveOptions } from "./animation";
 import type { IAnimationKey } from "./animationKey";
@@ -8,9 +8,10 @@ import { Observable } from "../Misc/observable";
 import type { Nullable } from "../types";
 import { EngineStore } from "../Engines/engineStore";
 
-import type { AbstractScene } from "../abstractScene";
 import { Tags } from "../Misc/tags";
 import type { AnimationGroupMask } from "./animationGroupMask";
+import "./animatable";
+import type { IAssetContainer } from "core/IAssetContainer";
 
 /**
  * This class defines the direct association between an animation and a target
@@ -80,9 +81,10 @@ export class AnimationGroup implements IDisposable {
     private _enableBlending: Nullable<boolean> = null;
     private _blendingSpeed: Nullable<number> = null;
     private _numActiveAnimatables = 0;
+    private _shouldStart = true;
 
     /** @internal */
-    public _parentContainer: Nullable<AbstractScene> = null;
+    public _parentContainer: Nullable<IAssetContainer> = null;
 
     /**
      * Gets or sets the unique id of the node
@@ -124,18 +126,32 @@ export class AnimationGroup implements IDisposable {
      */
     public metadata: any = null;
 
+    private _mask: Nullable<AnimationGroupMask> = null;
+
     /**
      * Gets or sets the mask associated with this animation group. This mask is used to filter which objects should be animated.
      */
-    public mask?: AnimationGroupMask;
+    public get mask() {
+        return this._mask;
+    }
+
+    public set mask(value: Nullable<AnimationGroupMask>) {
+        if (this._mask === value) {
+            return;
+        }
+
+        this._mask = value;
+
+        this.syncWithMask(true);
+    }
 
     /**
      * Makes sure that the animations are either played or stopped according to the animation group mask.
      * Note however that the call won't have any effect if the animation group has not been started yet.
-     * You should call this function if you modify the mask after the animation group has been started.
+     * @param forceUpdate If true, forces to loop over the animatables even if no mask is defined (used internally, you shouldn't need to use it). Default: false.
      */
-    public syncWithMask() {
-        if (!this.mask) {
+    public syncWithMask(forceUpdate = false) {
+        if (!this.mask && !forceUpdate) {
             this._numActiveAnimatables = this._targetedAnimations.length;
             return;
         }
@@ -145,7 +161,7 @@ export class AnimationGroup implements IDisposable {
         for (let i = 0; i < this._animatables.length; ++i) {
             const animatable = this._animatables[i];
 
-            if (this.mask.disabled || this.mask.retainsTarget(animatable.target.name)) {
+            if (!this.mask || this.mask.disabled || this.mask.retainsTarget(animatable.target.name)) {
                 this._numActiveAnimatables++;
                 if (animatable.paused) {
                     animatable.restart();
@@ -190,17 +206,43 @@ export class AnimationGroup implements IDisposable {
     }
 
     /**
-     * Gets the first frame
+     * Gets or sets the first frame
      */
     public get from(): number {
         return this._from;
     }
 
+    public set from(value: number) {
+        if (this._from === value) {
+            return;
+        }
+
+        this._from = value;
+
+        for (let index = 0; index < this._animatables.length; index++) {
+            const animatable = this._animatables[index];
+            animatable.fromFrame = this._from;
+        }
+    }
+
     /**
-     * Gets the last frame
+     * Gets or sets the last frame
      */
     public get to(): number {
         return this._to;
+    }
+
+    public set to(value: number) {
+        if (this._to === value) {
+            return;
+        }
+
+        this._to = value;
+
+        for (let index = 0; index < this._animatables.length; index++) {
+            const animatable = this._animatables[index];
+            animatable.toFrame = this._to;
+        }
     }
 
     /**
@@ -503,6 +545,7 @@ export class AnimationGroup implements IDisposable {
         }
 
         this._targetedAnimations.push(targetedAnimation);
+        this._shouldStart = true;
 
         return targetedAnimation;
     }
@@ -608,6 +651,7 @@ export class AnimationGroup implements IDisposable {
 
         this._loopAnimation = loop;
 
+        this._shouldStart = false;
         this._animationLoopCount = 0;
         this._animationLoopFlags.length = 0;
 
@@ -677,8 +721,8 @@ export class AnimationGroup implements IDisposable {
      * @returns the animation group
      */
     public play(loop?: boolean): AnimationGroup {
-        // only if all animatables are ready and exist
-        if (this.isStarted && this._animatables.length === this._targetedAnimations.length) {
+        // only if there are animatable available
+        if (this.isStarted && this._animatables.length && !this._shouldStart) {
             if (loop !== undefined) {
                 this.loopAnimation = loop;
             }
@@ -687,8 +731,6 @@ export class AnimationGroup implements IDisposable {
             this.stop();
             this.start(loop, this._speedRatio);
         }
-
-        this._isPaused = false;
 
         return this;
     }
@@ -701,7 +743,7 @@ export class AnimationGroup implements IDisposable {
         if (!this._isStarted) {
             this.play();
             this.goToFrame(0);
-            this.stop();
+            this.stop(true);
             return this;
         }
 
@@ -714,7 +756,7 @@ export class AnimationGroup implements IDisposable {
     }
 
     /**
-     * Restart animations from key 0
+     * Restart animations from after pausing it
      * @returns the animation group
      */
     public restart(): AnimationGroup {
@@ -727,6 +769,10 @@ export class AnimationGroup implements IDisposable {
             animatable.restart();
         }
 
+        this.syncWithMask();
+
+        this._isPaused = false;
+
         this.onAnimationGroupPlayObservable.notifyObservers(this);
 
         return this;
@@ -734,16 +780,17 @@ export class AnimationGroup implements IDisposable {
 
     /**
      * Stop all animations
+     * @param skipOnAnimationEnd defines if the system should not raise onAnimationEnd. Default is false
      * @returns the animation group
      */
-    public stop(): AnimationGroup {
+    public stop(skipOnAnimationEnd = false): AnimationGroup {
         if (!this._isStarted) {
             return this;
         }
 
         const list = this._animatables.slice();
         for (let index = 0; index < list.length; index++) {
-            list[index].stop(undefined, undefined, true);
+            list[index].stop(undefined, undefined, true, skipOnAnimationEnd);
         }
 
         // We will take care of removing all stopped animatables
@@ -752,6 +799,11 @@ export class AnimationGroup implements IDisposable {
             const animatable = this._scene._activeAnimatables[index];
             if (animatable._runtimeAnimations.length > 0) {
                 this._scene._activeAnimatables[curIndex++] = animatable;
+            } else if (skipOnAnimationEnd) {
+                // We normally rely on the onAnimationEnd callback (assigned in the start function) to be notified when an animatable
+                // ends and should be removed from the active animatables array. However, if the animatable is stopped with the skipOnAnimationEnd
+                // flag set to true, then we need to explicitly remove it from the active animatables array.
+                this._checkAnimationGroupEnded(animatable, skipOnAnimationEnd);
             }
         }
         this._scene._activeAnimatables.length = curIndex;
@@ -796,27 +848,39 @@ export class AnimationGroup implements IDisposable {
     }
 
     /**
-     * Goes to a specific frame in this animation group
+     * Goes to a specific frame in this animation group. Note that the animation group must be in playing or paused status
      * @param frame the frame number to go to
+     * @param useWeight defines whether the animation weight should be applied to the image to be jumped to (false by default)
      * @returns the animationGroup
      */
-    public goToFrame(frame: number): AnimationGroup {
+    public goToFrame(frame: number, useWeight = false): AnimationGroup {
         if (!this._isStarted) {
             return this;
         }
 
         for (let index = 0; index < this._animatables.length; index++) {
             const animatable = this._animatables[index];
-            animatable.goToFrame(frame);
+            animatable.goToFrame(frame, useWeight);
         }
 
         return this;
     }
 
     /**
+     * Helper to get the current frame. This will return 0 if the AnimationGroup is not running, and it might return wrong results if multiple animations are running in different frames.
+     * @returns current animation frame.
+     */
+    public getCurrentFrame(): number {
+        return this.animatables[0]?.masterFrame || 0;
+    }
+
+    /**
      * Dispose all associated resources
      */
     public dispose(): void {
+        if (this.isStarted) {
+            this.stop();
+        }
         this._targetedAnimations.length = 0;
         this._animatables.length = 0;
 
@@ -843,7 +907,7 @@ export class AnimationGroup implements IDisposable {
         this.onAnimationGroupLoopObservable.clear();
     }
 
-    private _checkAnimationGroupEnded(animatable: Animatable) {
+    private _checkAnimationGroupEnded(animatable: Animatable, skipOnAnimationEnd = false) {
         // animatable should be taken out of the array
         const idx = this._animatables.indexOf(animatable);
         if (idx > -1) {
@@ -851,9 +915,12 @@ export class AnimationGroup implements IDisposable {
         }
 
         // all animatables were removed? animation group ended!
-        if (this._animatables.length === 0) {
+        if (this._animatables.length === this._targetedAnimations.length - this._numActiveAnimatables) {
             this._isStarted = false;
-            this.onAnimationGroupEndObservable.notifyObservers(this);
+            if (!skipOnAnimationEnd) {
+                this.onAnimationGroupEndObservable.notifyObservers(this);
+            }
+            this._animatables.length = 0;
         }
     }
 

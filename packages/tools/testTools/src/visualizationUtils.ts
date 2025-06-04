@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax */
 /* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/naming-convention */
 declare const BABYLON: typeof window.BABYLON;
@@ -16,6 +17,7 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
     BABYLON.SceneLoader.ForceFullSceneLoadingForIncremental = true;
 
     BABYLON.Tools.ScriptBaseUrl = baseUrl;
+    BABYLON.NodeMaterial.UseNativeShaderLanguageOfEngine = true;
 
     window.forceUseReverseDepthBuffer = useReverseDepthBuffer === 1 || useReverseDepthBuffer === "true";
     window.forceUseNonCompatibilityMode = useNonCompatibilityMode === 1 || useNonCompatibilityMode === "true";
@@ -35,6 +37,7 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
         window.engine = engine;
 
         await engine.initAsync();
+        await engine.prepareGlslangAndTintAsync();
     } else {
         const engine = new BABYLON.Engine(window.canvas, false, {
             useHighPrecisionFloats: true,
@@ -47,7 +50,7 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
         engine.compatibilityMode = !window.forceUseNonCompatibilityMode;
         window.engine = engine;
     }
-    window.engine!.renderEvenInBackground = true;
+    window.engine.renderEvenInBackground = true;
     window.engine.getCaps().parallelShaderCompile = undefined;
     return {
         forceUseReverseDepthBuffer: window.forceUseReverseDepthBuffer,
@@ -113,6 +116,7 @@ export const evaluatePrepareScene = async (
 
             const loadedScene = eval(code + "\r\ncreateScene(engine)");
 
+            // eslint-disable-next-line github/no-then
             if (loadedScene.then) {
                 // Handle if createScene returns a promise
                 window.scene = await loadedScene;
@@ -172,7 +176,7 @@ export const evaluatePrepareScene = async (
 };
 
 export const evaluateRenderSceneForVisualization = async (renderCount: number) => {
-    return new Promise((resolve) => {
+    return await new Promise((resolve) => {
         if (!window.scene || !window.engine) {
             return resolve(false);
         }
@@ -186,7 +190,7 @@ export const evaluateRenderSceneForVisualization = async (renderCount: number) =
             if (window.scene.activeCamera && (window.scene.activeCamera as any).useAutoRotationBehavior) {
                 (window.scene.activeCamera as any).useAutoRotationBehavior = false;
             }
-            const sceneAdts: any[] = window.scene!.textures.filter((t: any) => t.getClassName() === "AdvancedDynamicTexture");
+            const sceneAdts: any[] = window.scene.textures.filter((t: any) => t.getClassName() === "AdvancedDynamicTexture");
             const adtsAreReady = () => {
                 return sceneAdts.every((adt: any) => adt.guiIsReady());
             };
@@ -244,7 +248,7 @@ export const evaluateDisposeSceneForVisualization = async (engineFlags: { forceU
 
 export const evaluateIsGLError = async () => {
     try {
-        const gl = window.engine!._gl,
+        const gl = (window.engine! as any)._gl,
             glError = gl ? gl.getError() : 0;
         if (gl && glError !== 0) {
             return true;

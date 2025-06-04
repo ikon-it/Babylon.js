@@ -34,7 +34,7 @@ export interface ITextInputLineComponentProps {
     disabled?: boolean;
 }
 
-let throttleTimerId = -1;
+let ThrottleTimerId = -1;
 
 export class TextInputLineComponent extends React.Component<ITextInputLineComponentProps, { value: string; dragging: boolean }> {
     private _localChange = false;
@@ -50,13 +50,13 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
         };
     }
 
-    componentWillUnmount() {
+    override componentWillUnmount() {
         if (this.props.lockObject) {
             this.props.lockObject.lock = false;
         }
     }
 
-    shouldComponentUpdate(nextProps: ITextInputLineComponentProps, nextState: { value: string; dragging: boolean }) {
+    override shouldComponentUpdate(nextProps: ITextInputLineComponentProps, nextState: { value: string; dragging: boolean }) {
         if (this._localChange) {
             this._localChange = false;
             return true;
@@ -155,10 +155,10 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
         }
 
         if (this.props.throttlePropertyChangedNotification) {
-            if (throttleTimerId >= 0) {
-                window.clearTimeout(throttleTimerId);
+            if (ThrottleTimerId >= 0) {
+                window.clearTimeout(ThrottleTimerId);
             }
-            throttleTimerId = window.setTimeout(() => {
+            ThrottleTimerId = window.setTimeout(() => {
                 this.raiseOnPropertyChanged(value, store);
             }, this.props.throttlePropertyChangedNotificationDelay ?? 200);
         } else {
@@ -191,7 +191,7 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
         }
     }
 
-    render() {
+    override render() {
         const value = this.state.value === conflictingValuesPlaceholder ? "" : this.state.value;
         const placeholder = this.state.value === conflictingValuesPlaceholder ? conflictingValuesPlaceholder : this.props.placeholder || "";
         const step = this.props.step || (this.props.roundValues ? 1 : 0.01);

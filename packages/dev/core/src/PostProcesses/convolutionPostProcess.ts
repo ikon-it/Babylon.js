@@ -2,13 +2,13 @@ import type { PostProcessOptions } from "./postProcess";
 import { PostProcess } from "./postProcess";
 import type { Nullable } from "../types";
 import type { Camera } from "../Cameras/camera";
-import type { Engine } from "../Engines/engine";
+import type { AbstractEngine } from "../Engines/abstractEngine";
 import type { Effect } from "../Materials/effect";
 import { Constants } from "../Engines/constants";
 
-import "../Shaders/convolution.fragment";
 import { RegisterClass } from "../Misc/typeStore";
-import { serialize, SerializationHelper } from "../Misc/decorators";
+import { serialize } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 
 import type { Scene } from "../scene";
 
@@ -26,7 +26,7 @@ export class ConvolutionPostProcess extends PostProcess {
      * Gets a string identifying the name of the class
      * @returns "ConvolutionPostProcess" string
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "ConvolutionPostProcess";
     }
 
@@ -47,9 +47,9 @@ export class ConvolutionPostProcess extends PostProcess {
         options: number | PostProcessOptions,
         camera: Nullable<Camera>,
         samplingMode?: number,
-        engine?: Engine,
+        engine?: AbstractEngine,
         reusable?: boolean,
-        textureType: number = Constants.TEXTURETYPE_UNSIGNED_INT
+        textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE
     ) {
         super(name, "convolution", ["kernel", "screenSize"], null, options, camera, samplingMode, engine, reusable, null, textureType);
         this.kernel = kernel;
@@ -59,10 +59,21 @@ export class ConvolutionPostProcess extends PostProcess {
         };
     }
 
+    protected override _gatherImports(useWebGPU: boolean, list: Promise<any>[]) {
+        if (useWebGPU) {
+            this._webGPUReady = true;
+            list.push(Promise.all([import("../ShadersWGSL/convolution.fragment")]));
+        } else {
+            list.push(Promise.all([import("../Shaders/convolution.fragment")]));
+        }
+
+        super._gatherImports(useWebGPU, list);
+    }
+
     /**
      * @internal
      */
-    public static _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string): Nullable<ConvolutionPostProcess> {
+    public static override _Parse(parsedPostProcess: any, targetCamera: Camera, scene: Scene, rootUrl: string): Nullable<ConvolutionPostProcess> {
         return SerializationHelper.Parse(
             () => {
                 return new ConvolutionPostProcess(

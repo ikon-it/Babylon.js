@@ -95,11 +95,11 @@ export class ColorPicker extends Control {
      * @see https://doc.babylonjs.com/features/featuresDeepDive/gui/gui#position-and-size
      */
     @serialize()
-    public get width(): string | number {
+    public override get width(): string | number {
         return this._width.toString(this._host);
     }
 
-    public set width(value: string | number) {
+    public override set width(value: string | number) {
         if (this._width.toString(this._host) === value) {
             return;
         }
@@ -119,12 +119,12 @@ export class ColorPicker extends Control {
      * @see https://doc.babylonjs.com/features/featuresDeepDive/gui/gui#position-and-size
      */
     @serialize()
-    public get height(): string | number {
+    public override get height(): string | number {
         return this._height.toString(this._host);
     }
 
     /** Gets or sets control height */
-    public set height(value: string | number) {
+    public override set height(value: string | number) {
         if (this._height.toString(this._host) === value) {
             return;
         }
@@ -153,21 +153,21 @@ export class ColorPicker extends Control {
      * Creates a new ColorPicker
      * @param name defines the control name
      */
-    constructor(public name?: string) {
+    constructor(public override name?: string) {
         super(name);
         this.value = new Color3(0.88, 0.1, 0.1);
         this.size = "200px";
         this.isPointerBlocker = true;
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "ColorPicker";
     }
 
     /**
      * @internal
      */
-    protected _preMeasure(parentMeasure: Measure): void {
+    protected override _preMeasure(parentMeasure: Measure): void {
         if (parentMeasure.width < parentMeasure.height) {
             this._currentMeasure.height = parentMeasure.width;
         } else {
@@ -287,7 +287,7 @@ export class ColorPicker extends Control {
     /**
      * @internal
      */
-    public _draw(context: ICanvasRenderingContext): void {
+    public override _draw(context: ICanvasRenderingContext): void {
         context.save();
 
         this._applyStates(context);
@@ -394,7 +394,7 @@ export class ColorPicker extends Control {
         return false;
     }
 
-    public _onPointerDown(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, pi: PointerInfoBase): boolean {
+    public override _onPointerDown(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, pi: PointerInfoBase): boolean {
         if (!super._onPointerDown(target, coordinates, pointerId, buttonIndex, pi)) {
             return false;
         }
@@ -426,7 +426,7 @@ export class ColorPicker extends Control {
         return true;
     }
 
-    public _onPointerMove(target: Control, coordinates: Vector2, pointerId: number, pi: PointerInfoBase): void {
+    public override _onPointerMove(target: Control, coordinates: Vector2, pointerId: number, pi: PointerInfoBase): void {
         // Only listen to pointer move events coming from the last pointer to click on the element (To support dual vr controller interaction)
         if (pointerId != this._lastPointerDownId) {
             return;
@@ -447,14 +447,14 @@ export class ColorPicker extends Control {
         super._onPointerMove(target, coordinates, pointerId, pi);
     }
 
-    public _onPointerUp(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, notifyClick: boolean, pi: PointerInfoBase): void {
+    public override _onPointerUp(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, notifyClick: boolean, pi: PointerInfoBase): void {
         this._pointerIsDown = false;
 
         delete this._host._capturingControl[pointerId];
         super._onPointerUp(target, coordinates, pointerId, buttonIndex, notifyClick, pi);
     }
 
-    public _onCanvasBlur() {
+    public override _onCanvasBlur() {
         this._forcePointerUp();
         super._onCanvasBlur();
     }
@@ -474,7 +474,7 @@ export class ColorPicker extends Control {
      * @param options.savedColors
      * @returns picked color as a hex string and the saved colors array as hex strings.
      */
-    public static ShowPickerDialogAsync(
+    public static async ShowPickerDialogAsync(
         advancedTexture: AdvancedDynamicTexture,
         options: {
             pickerWidth?: string;
@@ -489,7 +489,7 @@ export class ColorPicker extends Control {
         savedColors?: string[];
         pickedColor: string;
     }> {
-        return new Promise((resolve) => {
+        return await new Promise((resolve) => {
             // Default options
             options.pickerWidth = options.pickerWidth || "640px";
             options.pickerHeight = options.pickerHeight || "400px";
@@ -500,10 +500,10 @@ export class ColorPicker extends Control {
 
             // Window size settings
             const drawerMaxRows: number = options.swatchLimit / options.numSwatchesPerLine;
-            const rawSwatchSize: number = parseFloat(<string>options.pickerWidth) / options.numSwatchesPerLine;
+            const rawSwatchSize: number = parseFloat(options.pickerWidth) / options.numSwatchesPerLine;
             const gutterSize: number = Math.floor(rawSwatchSize * 0.25);
             const colGutters: number = gutterSize * (options.numSwatchesPerLine + 1);
-            const swatchSize: number = Math.floor((parseFloat(<string>options.pickerWidth) - colGutters) / options.numSwatchesPerLine);
+            const swatchSize: number = Math.floor((parseFloat(options.pickerWidth) - colGutters) / options.numSwatchesPerLine);
             const drawerMaxSize: number = swatchSize * drawerMaxRows + gutterSize * (drawerMaxRows + 1);
             const containerSize: string = (parseInt(options.pickerHeight) + drawerMaxSize + Math.floor(swatchSize * 0.25)).toString() + "px";
 
@@ -579,7 +579,7 @@ export class ColorPicker extends Control {
                         swatchDrawer.addRowDefinition(gutterSize, true);
                     }
                 }
-                for (let i = 0; i < options.numSwatchesPerLine! * 2 + 1; i++) {
+                for (let i = 0; i < options.numSwatchesPerLine * 2 + 1; i++) {
                     if (i % 2 != 0) {
                         swatchDrawer.addColumnDefinition(swatchSize, true);
                     } else {
@@ -612,7 +612,7 @@ export class ColorPicker extends Control {
             const headerColor3: Color3 = Color3.FromHexString(header.background);
             const closeIconColor = new Color3(1.0 - headerColor3.r, 1.0 - headerColor3.g, 1.0 - headerColor3.b);
             closeButton.color = closeIconColor.toHexString();
-            closeButton.fontSize = Math.floor(parseInt(options.headerHeight!) * 0.6);
+            closeButton.fontSize = Math.floor(parseInt(options.headerHeight) * 0.6);
             closeButton.textBlock!.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
             closeButton.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
             closeButton.height = closeButton.width = options.headerHeight;
@@ -848,7 +848,7 @@ export class ColorPicker extends Control {
                 butSave.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
                 butSave.thickness = 2;
                 butSave.fontSize = buttonFontSize;
-                if (options.savedColors.length < options.swatchLimit!) {
+                if (options.savedColors.length < options.swatchLimit) {
                     butSave.color = buttonColor;
                     butSave.background = buttonBackgroundColor;
                 } else {

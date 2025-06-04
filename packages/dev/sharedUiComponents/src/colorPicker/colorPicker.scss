@@ -26,7 +26,6 @@
             grid-row: 1;
             grid-column: 1;
 
-            background: -webkit-linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
             background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
         }
 
@@ -34,7 +33,6 @@
             grid-row: 1;
             grid-column: 1;
 
-            background: -webkit-linear-gradient(to top, #000, rgba(0, 0, 0, 0));
             background: linear-gradient(to top, #000, rgba(0, 0, 0, 0));
         }
 
@@ -80,7 +78,6 @@
             cursor: pointer;
 
             background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
-            background: -webkit-linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
 
             .color-picker-hue-cursor {
                 pointer-events: none;
@@ -153,12 +150,18 @@
             opacity: 0.5;
         }
     }
+    .color-picker-hex-row {
+        display: flex; /* Use flexbox to align items in a row */
+        flex-direction: row;
+        gap: 16px; /* Add spacing between the two hex pickers */
+        align-items: center; /* Align items vertically in the center */
+    }
 
     .color-picker-hex {
         grid-row: 4;
         grid-column: 1;
         display: grid;
-        grid-template-columns: 20% 80%;
+        grid-template-columns: 30% 70%;
         grid-template-rows: 100%;
 
         .color-picker-hex-label {

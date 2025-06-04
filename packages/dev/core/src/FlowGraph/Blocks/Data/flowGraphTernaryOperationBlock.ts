@@ -4,7 +4,7 @@ import type { FlowGraphContext } from "../../flowGraphContext";
 import type { IFlowGraphBlockConfiguration } from "../../flowGraphBlock";
 import { FlowGraphCachedOperationBlock } from "./flowGraphCachedOperationBlock";
 /**
- * @experimental
+ * @internal
  * The base block for all ternary operation blocks.
  */
 export class FlowGraphTernaryOperationBlock<T1, T2, T3, ResultT> extends FlowGraphCachedOperationBlock<ResultT> {
@@ -49,7 +49,7 @@ export class FlowGraphTernaryOperationBlock<T1, T2, T3, ResultT> extends FlowGra
      * Gets the class name of this block
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return this._className;
     }
 }

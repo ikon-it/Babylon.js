@@ -31,7 +31,7 @@ export class WebRequest implements IWebRequest {
     /**
      * Add callback functions in this array to update all the requests before they get sent to the network
      */
-    public static CustomRequestModifiers = new Array<(request: XMLHttpRequest, url: string) => void>();
+    public static CustomRequestModifiers = new Array<(request: XMLHttpRequest, url: string) => string | void>();
 
     /**
      * If set to true, requests to Babylon.js CDN requests will not be modified
@@ -47,6 +47,13 @@ export class WebRequest implements IWebRequest {
     }
 
     private _requestURL: string = "";
+
+    /**
+     * Returns the requested URL once open has been called
+     */
+    public get requestURL(): string {
+        return this._requestURL;
+    }
 
     private _injectCustomRequestHeaders(): void {
         if (this._shouldSkipRequestModifications(this._requestURL)) {
@@ -188,7 +195,7 @@ export class WebRequest implements IWebRequest {
             if (this._shouldSkipRequestModifications(url)) {
                 return;
             }
-            update(this._xhr, url);
+            url = update(this._xhr, url) || url;
         }
 
         // Clean url

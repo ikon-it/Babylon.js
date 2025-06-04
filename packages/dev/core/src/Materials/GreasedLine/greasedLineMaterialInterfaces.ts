@@ -115,7 +115,7 @@ export interface IGreasedLineMaterial {
  * Material types for GreasedLine
  * {@link https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/param/greased_line#materialtype}
  */
-export enum GreasedLineMeshMaterialType {
+export const enum GreasedLineMeshMaterialType {
     /**
      * StandardMaterial
      */
@@ -125,7 +125,9 @@ export enum GreasedLineMeshMaterialType {
      */
     MATERIAL_TYPE_PBR = 1,
     /**
-     * Simple and fast shader material not supporting lightning nor textures
+     * Simple and fast shader material without texture, light, fog, instances, ... support.
+     * Just raw colored lines.
+     * Dashing and visibility is supported.
      */
     MATERIAL_TYPE_SIMPLE = 2,
 }
@@ -134,7 +136,7 @@ export enum GreasedLineMeshMaterialType {
  * Color blending mode of the @see GreasedLineMaterial and the base material
  * {@link https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/param/greased_line#colormode}
  */
-export enum GreasedLineMeshColorMode {
+export const enum GreasedLineMeshColorMode {
     /**
      * Color blending mode SET
      */
@@ -154,7 +156,7 @@ export enum GreasedLineMeshColorMode {
  * {@link https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/param/greased_line#colordistributiontype}
  *
  */
-export enum GreasedLineMeshColorDistributionType {
+export const enum GreasedLineMeshColorDistributionType {
     /**
      * Colors distributed between segments of the line
      */
@@ -168,7 +170,13 @@ export enum GreasedLineMeshColorDistributionType {
 /**
  * Options for GreasedLineMaterial
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface GreasedLineMaterialOptions {
+    /**
+     * Force the greased lines to compile to glsl even on WebGPU engines.
+     * False by default. This is mostly meant for backward compatibility.
+     */
+    forceGLSL?: boolean;
     /**
      * Line width. If sizeAttenuation os false scene units will be used for width.
      * Defaults to 0.1 if @see sizeAttenuation is false, or to 1 if it's true.

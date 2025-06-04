@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { Nullable } from "core/types";
-import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3, SerializationHelper } from "core/Misc/decorators";
+import { serializeAsTexture, serialize, expandToProperty, serializeAsColor3 } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Matrix } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
 import type { IAnimatable } from "core/Animations/animatable.interface";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import type { IEffectCreationOptions } from "core/Materials/effect";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import { MaterialHelper } from "core/Materials/materialHelper";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { MaterialFlags } from "core/Materials/materialFlags";
 import { VertexBuffer } from "core/Buffers/buffer";
@@ -20,7 +20,21 @@ import { RegisterClass } from "core/Misc/typeStore";
 import "./normal.fragment";
 import "./normal.vertex";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import { addClipPlaneUniforms, bindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
+import {
+    BindBonesParameters,
+    BindFogParameters,
+    BindLights,
+    BindLogDepth,
+    HandleFallbacksForShadows,
+    PrepareAttributesForBones,
+    PrepareAttributesForInstances,
+    PrepareDefinesForAttributes,
+    PrepareDefinesForFrameBoundValues,
+    PrepareDefinesForLights,
+    PrepareDefinesForMisc,
+    PrepareUniformsAndSamplersList,
+} from "core/Materials/materialHelper.functions";
 
 class NormalMaterialDefines extends MaterialDefines {
     public DIFFUSE = false;
@@ -81,10 +95,13 @@ class NormalMaterialDefines extends MaterialDefines {
     public NUM_BONE_INFLUENCERS = 0;
     public BonesPerMesh = 0;
     public INSTANCES = false;
+    public THIN_INSTANCES = false;
     public LIGHTING = false;
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
     public LOGARITHMICDEPTH = false;
+    public AREALIGHTSUPPORTED = true;
+    public AREALIGHTNOROUGHTNESS = true;
 
     constructor() {
         super();
@@ -115,24 +132,24 @@ export class NormalMaterial extends PushMaterial {
         super(name, scene);
     }
 
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         return this.alpha < 1.0;
     }
 
-    public needAlphaBlendingForMesh(mesh: AbstractMesh): boolean {
+    public override needAlphaBlendingForMesh(mesh: AbstractMesh): boolean {
         return this.needAlphaBlending() || mesh.visibility < 1.0;
     }
 
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         return false;
     }
 
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return null;
     }
 
     // Methods
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         const drawWrapper = subMesh._drawWrapper;
 
         if (this.isFrozen) {
@@ -170,19 +187,19 @@ export class NormalMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
 
         // Lights
         defines._needNormals = true;
-        MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
+        PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
 
         // Values that need to be evaluated on every frame
-        MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
+        PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false, null, subMesh.getRenderingMesh().hasThinInstances);
 
         defines.LIGHTING = !this._disableLighting;
 
         // Attribs
-        MaterialHelper.PrepareDefinesForAttributes(mesh, defines, true, true);
+        PrepareDefinesForAttributes(mesh, defines, true, true);
 
         // Get correct effect
         if (defines.isDirty) {
@@ -196,7 +213,7 @@ export class NormalMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
-            MaterialHelper.HandleFallbacksForShadows(defines, fallbacks);
+            HandleFallbacksForShadows(defines, fallbacks);
 
             if (defines.NUM_BONE_INFLUENCERS > 0) {
                 fallbacks.addCPUSkinningFallback(0, mesh);
@@ -219,8 +236,8 @@ export class NormalMaterial extends PushMaterial {
                 attribs.push(VertexBuffer.UV2Kind);
             }
 
-            MaterialHelper.PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
-            MaterialHelper.PrepareAttributesForInstances(attribs, defines);
+            PrepareAttributesForBones(attribs, mesh, defines, fallbacks);
+            PrepareAttributesForInstances(attribs, defines);
 
             const shaderName = "normal";
             const join = defines.toString();
@@ -240,11 +257,11 @@ export class NormalMaterial extends PushMaterial {
                 "diffuseMatrix",
                 "logarithmicDepthConstant",
             ];
-            const samplers = ["diffuseSampler"];
+            const samplers = ["diffuseSampler", "areaLightsLTC1Sampler", "areaLightsLTC2Sampler"];
             const uniformBuffers: string[] = [];
 
-            addClipPlaneUniforms(uniforms);
-            MaterialHelper.PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
+            AddClipPlaneUniforms(uniforms);
+            PrepareUniformsAndSamplersList(<IEffectCreationOptions>{
                 uniformsNames: uniforms,
                 uniformBuffersNames: uniformBuffers,
                 samplers: samplers,
@@ -272,6 +289,16 @@ export class NormalMaterial extends PushMaterial {
                 this._materialContext
             );
         }
+
+        // Check if Area Lights have LTC texture.
+        if (defines["AREALIGHTUSED"]) {
+            for (let index = 0; index < mesh.lightSources.length; index++) {
+                if (!mesh.lightSources[index]._isReady()) {
+                    return false;
+                }
+            }
+        }
+
         if (!subMesh.effect || !subMesh.effect.isReady()) {
             return false;
         }
@@ -283,7 +310,7 @@ export class NormalMaterial extends PushMaterial {
         return true;
     }
 
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <NormalMaterialDefines>subMesh.materialDefines;
@@ -302,7 +329,7 @@ export class NormalMaterial extends PushMaterial {
         this._activeEffect.setMatrix("viewProjection", scene.getTransformMatrix());
 
         // Bones
-        MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
+        BindBonesParameters(mesh, this._activeEffect);
 
         if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
@@ -313,7 +340,7 @@ export class NormalMaterial extends PushMaterial {
                 this._activeEffect.setMatrix("diffuseMatrix", this.diffuseTexture.getTextureMatrix());
             }
             // Clip plane
-            bindClipPlane(effect, this, scene);
+            BindClipPlane(effect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
@@ -322,7 +349,7 @@ export class NormalMaterial extends PushMaterial {
 
             // Log. depth
             if (this._useLogarithmicDepth) {
-                MaterialHelper.BindLogDepth(defines, effect, scene);
+                BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -332,7 +359,7 @@ export class NormalMaterial extends PushMaterial {
 
         // Lights
         if (scene.lightsEnabled && !this.disableLighting) {
-            MaterialHelper.BindLights(scene, mesh, this._activeEffect, defines);
+            BindLights(scene, mesh, this._activeEffect, defines);
         }
 
         // View
@@ -341,12 +368,12 @@ export class NormalMaterial extends PushMaterial {
         }
 
         // Fog
-        MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
+        BindFogParameters(scene, mesh, this._activeEffect);
 
         this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         const results = [];
 
         if (this.diffuseTexture && this.diffuseTexture.animations && this.diffuseTexture.animations.length > 0) {
@@ -356,7 +383,7 @@ export class NormalMaterial extends PushMaterial {
         return results;
     }
 
-    public getActiveTextures(): BaseTexture[] {
+    public override getActiveTextures(): BaseTexture[] {
         const activeTextures = super.getActiveTextures();
 
         if (this._diffuseTexture) {
@@ -366,7 +393,7 @@ export class NormalMaterial extends PushMaterial {
         return activeTextures;
     }
 
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -378,7 +405,7 @@ export class NormalMaterial extends PushMaterial {
         return false;
     }
 
-    public dispose(forceDisposeEffect?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean): void {
         if (this.diffuseTexture) {
             this.diffuseTexture.dispose();
         }
@@ -386,22 +413,22 @@ export class NormalMaterial extends PushMaterial {
         super.dispose(forceDisposeEffect);
     }
 
-    public clone(name: string): NormalMaterial {
+    public override clone(name: string): NormalMaterial {
         return SerializationHelper.Clone(() => new NormalMaterial(name, this.getScene()), this);
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
         serializationObject.customType = "BABYLON.NormalMaterial";
         return serializationObject;
     }
 
-    public getClassName(): string {
+    public override getClassName(): string {
         return "NormalMaterial";
     }
 
     // Statics
-    public static Parse(source: any, scene: Scene, rootUrl: string): NormalMaterial {
+    public static override Parse(source: any, scene: Scene, rootUrl: string): NormalMaterial {
         return SerializationHelper.Parse(() => new NormalMaterial(source.name, scene), source, scene, rootUrl);
     }
 }

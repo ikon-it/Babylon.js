@@ -70,6 +70,11 @@ struct SimParams {
         noiseStrength : vec3<f32>,
     #endif
 
+    #ifdef FLOWMAP
+        flowMapProjection : mat4x4<f32>,
+        flowMapStrength : f32,
+    #endif
+
     #ifndef LOCAL
         emitterWM : mat4x4<f32>,
     #endif
@@ -87,7 +92,13 @@ struct SimParams {
         radius : vec2<f32>,
         coneAngle : f32,
         height : vec2<f32>,
-        directionRandomizer : f32,
+        #ifdef DIRECTEDCONEEMITTER
+            direction1 : vec3<f32>,
+            direction2 : vec3<f32>,
+        #else
+            directionRandomizer : f32,
+        #endif
+
     #endif
 
     #ifdef CYLINDEREMITTER
@@ -159,6 +170,11 @@ struct SimParams {
 #ifdef NOISE
     @binding(10) @group(1) var noiseSampler : sampler;
     @binding(11) @group(1) var noiseTexture : texture_2d<f32>;
+#endif
+
+#ifdef FLOWMAP
+    @binding(12) @group(1) var flowMapSampler : sampler;
+    @binding(13) @group(1) var flowMapTexture : texture_2d<f32>;
 #endif
 
 fn getRandomVec3(offset : f32, vertexID : f32) -> vec3<f32> {
@@ -317,14 +333,18 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
             let randY : f32 = h  * params.height.x;
 
             newPosition = vec3<f32>(randX, randY, randZ); 
-
-            // Direction
-            if (abs(cos(params.coneAngle)) == 1.0) {
-                newDirection = vec3<f32>(0., 1.0, 0.);
-            } else {
-                let randoms3 : vec3<f32> = getRandomVec3(seed.z, vertexID);
-                newDirection = normalize(newPosition + params.directionRandomizer * randoms3);        
-            }
+            
+            let randoms3 : vec3<f32> = getRandomVec3(seed.z, vertexID);
+            #ifdef DIRECTEDCONEEMITTER
+                newDirection = params.direction1 + (params.direction2 - params.direction1) * randoms3;
+            #else
+                // Direction
+                if (abs(cos(params.coneAngle)) == 1.0) {
+                    newDirection = vec3<f32>(0., 1.0, 0.);
+                } else {
+                    newDirection = normalize(newPosition + params.directionRandomizer * randoms3);        
+                }
+            #endif
         #elif defined(CUSTOMEMITTER)
             newPosition = particlesIn.particles[index].initialPosition;
             particlesOut.particles[index].initialPosition = newPosition;
@@ -416,6 +436,15 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
             particlesOut.particles[index].direction = direction;
         #else
             var updatedDirection : vec3<f32> = direction + params.gravity * timeDelta;
+
+            #ifdef FLOWMAP
+                var clipSpace = (params.flowMapProjection * vec4f(position, 1.));
+                var ndcSpace = clipSpace.xyz / clipSpace.w;
+                var flowMapUV = ndcSpace.xy * 0.5 + 0.5;
+                var flowMapValue = textureSampleLevel(flowMapTexture, flowMapSampler, flowMapUV, 0.);
+                var flowMapDirection = (flowMapValue.xyz * 2.0 - 1.0) * flowMapValue.w;
+                updatedDirection += flowMapDirection * timeDelta * params.flowMapStrength;
+            #endif
 
             #ifdef LIMITVELOCITYGRADIENTS
                 let limitVelocity : f32 = textureSampleLevel(limitVelocityGradientTexture, limitVelocityGradientSampler, vec2<f32>(ageGradient, 0.), 0.).r;

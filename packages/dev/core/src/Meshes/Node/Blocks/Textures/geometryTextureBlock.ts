@@ -18,13 +18,13 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
     /**
      * Gets or sets a boolean indicating that this block should serialize its cached data
      */
-    @editableInPropertyPage("Serialize cached data", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { rebuild: true } })
+    @editableInPropertyPage("Serialize cached data", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
     public serializedCachedData = false;
 
     /**
      * Gets the texture data
      */
-    public get textureData() {
+    public get textureData(): Nullable<Float32Array> {
         return this._data;
     }
 
@@ -56,7 +56,7 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "GeometryTextureBlock";
     }
 
@@ -67,8 +67,8 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    private _prepareImgToLoadAsync(url: string) {
-        return new Promise<void>((resolve, reject) => {
+    private async _prepareImgToLoadAsync(url: string) {
+        return await new Promise<void>((resolve, reject) => {
             const img = new Image();
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
@@ -95,7 +95,7 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
 
             img.onerror = () => {
                 this._data = null;
-                reject();
+                reject(new Error("Failed to load image"));
             };
 
             img.src = url;
@@ -114,8 +114,8 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
      * @param imageFile defines the file to load data from
      * @returns a promise fulfilled when image data is loaded
      */
-    public loadTextureFromFileAsync(imageFile: File) {
-        return this._prepareImgToLoadAsync(URL.createObjectURL(imageFile));
+    public async loadTextureFromFileAsync(imageFile: File) {
+        return await this._prepareImgToLoadAsync(URL.createObjectURL(imageFile));
     }
 
     /**
@@ -123,8 +123,8 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
      * @param url defines the url to load data from
      * @returns a promise fulfilled when image data is loaded
      */
-    public loadTextureFromUrlAsync(url: string) {
-        return this._prepareImgToLoadAsync(url);
+    public async loadTextureFromUrlAsync(url: string) {
+        return await this._prepareImgToLoadAsync(url);
     }
 
     /**
@@ -132,17 +132,25 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
      * @param texture defines the source texture
      * @returns a promise fulfilled when image data is loaded
      */
-    public extractFromTextureAsync(texture: Texture) {
-        return new Promise<void>((resolve, reject) => {
+    public async extractFromTextureAsync(texture: Texture) {
+        return await new Promise<void>((resolve, reject) => {
             if (!texture.isReady()) {
-                texture.onLoadObservable.addOnce(() => {
-                    return this.extractFromTextureAsync(texture).then(resolve).catch(reject);
+                // eslint-disable-next-line @typescript-eslint/no-misused-promises
+                texture.onLoadObservable.addOnce(async () => {
+                    try {
+                        await this.extractFromTextureAsync(texture);
+                        resolve();
+                    } catch (e) {
+                        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                        reject(e);
+                    }
                 });
                 return;
             }
             const size = texture.getSize();
             TextureTools.GetTextureDataAsync(texture, size.width, size.height)
-                .then(async (data) => {
+                // eslint-disable-next-line github/no-then
+                .then((data) => {
                     const floatArray = new Float32Array(data.length);
 
                     for (let i = 0; i < data.length; i++) {
@@ -153,11 +161,12 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
                     this._height = size.height;
                     resolve();
                 })
+                // eslint-disable-next-line github/no-then
                 .catch(reject);
         });
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         if (!this._data) {
             this.texture._storedValue = null;
             return;
@@ -176,7 +185,7 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.width = this._width;
@@ -189,7 +198,7 @@ export class GeometryTextureBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this._width = serializationObject.width;

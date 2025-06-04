@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { LockObject } from "../../tabs/propertyGrids/lockObject";
-import style from "./ColorComponentEntry.modules.scss";
+import * as style from "./ColorComponentEntry.module.scss";
 
 export interface IColorComponentEntryProps {
     value: number;
@@ -12,7 +12,7 @@ export interface IColorComponentEntryProps {
     lockObject: LockObject;
 }
 
-export class ColorComponentEntry extends React.Component<IColorComponentEntryProps> {
+export class ColorComponentComponentEntry extends React.Component<IColorComponentEntryProps> {
     constructor(props: IColorComponentEntryProps) {
         super(props);
     }
@@ -49,7 +49,7 @@ export class ColorComponentEntry extends React.Component<IColorComponentEntryPro
         }
     }
 
-    public render() {
+    public override render() {
         return (
             <div className={style.colorPickerComponent}>
                 <div className={style.colorPickerComponentValue}>

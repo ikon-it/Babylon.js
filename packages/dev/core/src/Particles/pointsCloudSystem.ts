@@ -12,11 +12,11 @@ import { Ray } from "../Culling/ray";
 import type { PickingInfo } from "../Collisions/pickingInfo";
 import { StandardMaterial } from "../Materials/standardMaterial";
 import { BaseTexture } from "./../Materials/Textures/baseTexture";
-import { Scalar } from "../Maths/math.scalar";
+import { RandomRange } from "../Maths/math.scalar.functions";
 import type { Material } from "../Materials/material";
 
 /** Defines the 4 color options */
-export enum PointColor {
+export const enum PointColor {
     /** color value */
     Color = 2,
     /** uv value */
@@ -93,21 +93,21 @@ export class PointsCloudSystem implements IDisposable {
     /**
      * Gets the particle positions computed by the Point Cloud System
      */
-    public get positions() {
+    public get positions(): Float32Array {
         return this._positions32;
     }
 
     /**
      * Gets the particle colors computed by the Point Cloud System
      */
-    public get colors() {
+    public get colors(): Float32Array {
         return this._colors32;
     }
 
     /**
      * Gets the particle uvs computed by the Point Cloud System
      */
-    public get uvs() {
+    public get uvs(): Float32Array {
         return this._uvs32;
     }
 
@@ -118,7 +118,6 @@ export class PointsCloudSystem implements IDisposable {
      * @param scene (Scene) is the scene in which the PCS is added
      * @param options defines the options of the PCS e.g.
      * * updatable (optional boolean, default true) : if the PCS must be updatable or immutable
-     * @param options.updatable
      */
     constructor(name: string, pointSize: number, scene: Scene, options?: { updatable?: boolean }) {
         this.name = name;
@@ -137,17 +136,13 @@ export class PointsCloudSystem implements IDisposable {
      * @param material The material to use to render the mesh. If not provided, will create a default one
      * @returns a promise for the created mesh
      */
-    public buildMeshAsync(material?: Material): Promise<Mesh> {
-        return Promise.all(this._promises).then(() => {
-            this._isReady = true;
-            return this._buildMesh(material);
-        });
+    public async buildMeshAsync(material?: Material): Promise<Mesh> {
+        await Promise.all(this._promises);
+        this._isReady = true;
+        return await this._buildMeshAsync(material);
     }
 
-    /**
-     * @internal
-     */
-    private _buildMesh(material?: Material): Promise<Mesh> {
+    private async _buildMeshAsync(material?: Material): Promise<Mesh> {
         if (this.nbParticles === 0) {
             this.addPoints(1);
         }
@@ -191,7 +186,7 @@ export class PointsCloudSystem implements IDisposable {
         }
         mesh.material = mat;
 
-        return new Promise((resolve) => resolve(mesh));
+        return mesh;
     }
 
     // adds a new particle object in the particles array
@@ -399,16 +394,16 @@ export class PointsCloudSystem implements IDisposable {
                 this._addParticle(idxPoints, pointsGroup, this._groupCounter, index + i);
                 particle = this.particles[idxPoints];
                 //form a point inside the facet v0, v1, v2;
-                lamda = Scalar.RandomRange(0, 1);
-                mu = Scalar.RandomRange(0, 1);
+                lamda = Math.sqrt(RandomRange(0, 1));
+                mu = RandomRange(0, 1);
                 facetPoint = vertex0.add(vec0.scale(lamda)).add(vec1.scale(lamda * mu));
                 if (isVolume) {
                     norm = mesh.getFacetNormal(index).normalize().scale(-1);
                     tang = vec0.clone().normalize();
                     biNorm = Vector3.Cross(norm, tang);
-                    angle = Scalar.RandomRange(0, 2 * Math.PI);
+                    angle = RandomRange(0, 2 * Math.PI);
                     facetPlaneVec = tang.scale(Math.cos(angle)).add(biNorm.scale(Math.sin(angle)));
-                    angle = Scalar.RandomRange(0.1, Math.PI / 2);
+                    angle = RandomRange(0.1, Math.PI / 2);
                     direction = facetPlaneVec.scale(Math.cos(angle)).add(norm.scale(Math.sin(angle)));
 
                     ray.origin = facetPoint.add(direction.scale(0.00001));
@@ -417,7 +412,7 @@ export class PointsCloudSystem implements IDisposable {
                     pickInfo = ray.intersectsMesh(mesh);
                     if (pickInfo.hit) {
                         distance = pickInfo.pickedPoint!.subtract(facetPoint).length();
-                        gap = Scalar.RandomRange(0, 1) * distance;
+                        gap = RandomRange(0, 1) * distance;
                         facetPoint.addInPlace(direction.scale(gap));
                     }
                 }
@@ -455,8 +450,8 @@ export class PointsCloudSystem implements IDisposable {
                 } else {
                     if (color) {
                         statedColor.set(color.r, color.g, color.b);
-                        deltaS = Scalar.RandomRange(-range, range);
-                        deltaV = Scalar.RandomRange(-range, range);
+                        deltaS = RandomRange(-range, range);
+                        deltaV = RandomRange(-range, range);
                         hsvCol = statedColor.toHSV();
                         h = hsvCol.r;
                         s = hsvCol.g + deltaS;
@@ -504,7 +499,7 @@ export class PointsCloudSystem implements IDisposable {
             return;
         }
 
-        const clone = <Mesh>mesh.clone();
+        const clone = mesh.clone();
         clone.setEnabled(false);
         this._promises.push(
             new Promise((resolve: (_: void) => void) => {
@@ -528,6 +523,7 @@ export class PointsCloudSystem implements IDisposable {
                     if (!dataPromise) {
                         finalize();
                     } else {
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
                         dataPromise.then((data) => {
                             pointsGroup._groupImageData = data;
                             finalize();
@@ -540,7 +536,6 @@ export class PointsCloudSystem implements IDisposable {
 
     // calculates the point density per facet of a mesh for surface points
     private _calculateDensity(nbPoints: number, positions: FloatArray, indices: IndicesArray): number[] {
-        let density: number[] = new Array<number>();
         let id0: number;
         let id1: number;
         let id2: number;
@@ -558,14 +553,10 @@ export class PointsCloudSystem implements IDisposable {
         const vertex2 = Vector3.Zero();
         const vec0 = Vector3.Zero();
         const vec1 = Vector3.Zero();
-        const vec2 = Vector3.Zero();
+        const normal = Vector3.Zero();
 
-        let a: number; //length of side of triangle
-        let b: number; //length of side of triangle
-        let c: number; //length of side of triangle
-        let p: number; //perimeter of triangle
         let area: number;
-        const areas: number[] = new Array<number>();
+        const cumulativeAreas: number[] = [];
         let surfaceArea: number = 0;
 
         const nbFacets = indices.length / 3;
@@ -589,32 +580,31 @@ export class PointsCloudSystem implements IDisposable {
             vertex2.set(v2X, v2Y, v2Z);
             vertex1.subtractToRef(vertex0, vec0);
             vertex2.subtractToRef(vertex1, vec1);
-            vertex2.subtractToRef(vertex0, vec2);
-            a = vec0.length();
-            b = vec1.length();
-            c = vec2.length();
-            p = (a + b + c) / 2;
-            area = Math.sqrt(p * (p - a) * (p - b) * (p - c));
+            Vector3.CrossToRef(vec0, vec1, normal);
+            area = 0.5 * normal.length();
             surfaceArea += area;
-            areas[index] = area;
-        }
-        let pointCount: number = 0;
-        for (let index = 0; index < nbFacets; index++) {
-            density[index] = Math.floor((nbPoints * areas[index]) / surfaceArea);
-            pointCount += density[index];
+            cumulativeAreas[index] = surfaceArea;
         }
 
-        const diff: number = nbPoints - pointCount;
-        const pointsPerFacet: number = Math.floor(diff / nbFacets);
-        const extraPoints: number = diff % nbFacets;
-
-        if (pointsPerFacet > 0) {
-            density = density.map((x) => x + pointsPerFacet);
+        const density: number[] = new Array<number>(nbFacets);
+        let remainingPoints = nbPoints;
+        for (let index = nbFacets - 1; index > 0; index--) {
+            const cumulativeArea = cumulativeAreas[index];
+            if (cumulativeArea === 0) {
+                // avoiding division by 0 upon degenerate triangles
+                density[index] = 0;
+            } else {
+                const area = cumulativeArea - cumulativeAreas[index - 1];
+                const facetPointsWithFraction = (area / cumulativeArea) * remainingPoints;
+                const floored = Math.floor(facetPointsWithFraction);
+                const fraction = facetPointsWithFraction - floored;
+                const extraPoint = Number(Math.random() < fraction);
+                const facetPoints = floored + extraPoint;
+                density[index] = facetPoints;
+                remainingPoints -= facetPoints;
+            }
         }
-
-        for (let index = 0; index < extraPoints; index++) {
-            density[index] += 1;
-        }
+        density[0] = remainingPoints;
 
         return density;
     }

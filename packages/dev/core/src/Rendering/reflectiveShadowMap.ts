@@ -1,10 +1,9 @@
 /**
  * Reflective Shadow Maps were first described in http://www.klayge.org/material/3_12/GI/rsm.pdf by Carsten Dachsbacher and Marc Stamminger
- * The ReflectiveShadowMap class only implements the geometry buffer generation part.
+ * The ReflectiveShadowMap class only implements the position / normal / flux texture generation part.
  * For the global illumination effect, see the GIRSMManager class.
  */
 import { Constants } from "core/Engines/constants";
-import type { ShadowLight } from "core/Lights/shadowLight";
 import { MultiRenderTarget } from "core/Materials/Textures/multiRenderTarget";
 import type { UniformBuffer } from "core/Materials/uniformBuffer";
 import { Color3, Color4 } from "core/Maths/math.color";
@@ -21,6 +20,9 @@ import { PBRBaseMaterial } from "core/Materials/PBR/pbrBaseMaterial";
 import { expandToProperty, serialize } from "core/Misc/decorators";
 import { RegisterClass } from "core/Misc/typeStore";
 import { Light } from "core/Lights/light";
+import type { DirectionalLight } from "core/Lights/directionalLight";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import type { Nullable } from "core/types";
 
 /**
  * Class used to generate the RSM (Reflective Shadow Map) textures for a given light.
@@ -28,7 +30,7 @@ import { Light } from "core/Lights/light";
  */
 export class ReflectiveShadowMap {
     private _scene: Scene;
-    private _light: ShadowLight;
+    private _light: DirectionalLight | SpotLight;
     private _lightTransformMatrix: Matrix = Matrix.Identity();
     private _mrt: MultiRenderTarget;
     private _textureDimensions: { width: number; height: number };
@@ -101,7 +103,7 @@ export class ReflectiveShadowMap {
      * @param light The light to use to generate the RSM textures
      * @param textureDimensions The dimensions of the textures to generate. Default: \{ width: 512, height: 512 \}
      */
-    constructor(scene: Scene, light: ShadowLight, textureDimensions = { width: 512, height: 512 }) {
+    constructor(scene: Scene, light: DirectionalLight | SpotLight, textureDimensions = { width: 512, height: 512 }) {
         this._scene = scene;
         this._light = light;
         this._textureDimensions = textureDimensions;
@@ -125,9 +127,11 @@ export class ReflectiveShadowMap {
         this._disposeMultiRenderTarget();
         this._createMultiRenderTarget();
 
-        renderList?.forEach((mesh) => {
-            this._addMeshToMRT(mesh);
-        });
+        if (renderList) {
+            for (const mesh of renderList) {
+                this._addMeshToMRT(mesh);
+            }
+        }
     }
 
     /**
@@ -138,9 +142,9 @@ export class ReflectiveShadowMap {
         if (mesh) {
             this._addMeshToMRT(mesh);
         } else {
-            this._scene.meshes.forEach((mesh) => {
+            for (const mesh of this._scene.meshes) {
                 this._addMeshToMRT(mesh);
-            });
+            }
         }
         this._recomputeLightTransformationMatrix();
     }
@@ -334,7 +338,7 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
      * Defines the light that should be used to generate the RSM textures.
      */
     @serialize()
-    public light: ShadowLight;
+    public light: DirectionalLight | SpotLight;
 
     private _isEnabled = false;
     /**
@@ -352,6 +356,14 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
     private _internalMarkAllSubMeshesAsTexturesDirty: () => void;
 
     /**
+     * Gets a boolean indicating that the plugin is compatible with a give shader language.
+     * @returns true if the plugin is compatible with the shader language
+     */
+    public override isCompatible(): boolean {
+        return true;
+    }
+
+    /**
      * Create a new RSMCreatePluginMaterial
      * @param material Parent material of the plugin
      */
@@ -363,7 +375,7 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
         this._varAlbedoName = material instanceof PBRBaseMaterial ? "surfaceAlbedo" : "baseColor.rgb";
     }
 
-    public prepareDefines(defines: MaterialRSMCreateDefines) {
+    public override prepareDefines(defines: MaterialRSMCreateDefines) {
         defines.RSMCREATE = this._isEnabled;
 
         this._hasProjectionTexture = false;
@@ -376,13 +388,14 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
 
         defines.RSMCREATE_PROJTEXTURE = this._hasProjectionTexture;
         defines.RSMCREATE_LIGHT_IS_SPOT = isSpot;
+        defines.SCENE_MRT_COUNT = 3;
     }
 
-    public getClassName() {
+    public override getClassName() {
         return "RSMCreatePluginMaterial";
     }
 
-    public getUniforms() {
+    public override getUniforms() {
         return {
             ubo: [
                 { name: "rsmTextureProjectionMatrix", size: 16, type: "mat4" },
@@ -394,16 +407,16 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
                     uniform mat4 rsmTextureProjectionMatrix;
                     uniform vec4 rsmSpotInfo;
                     uniform vec3 rsmLightColor;
-                    unfiorm vec3 rsmLightPosition;
+                    uniform vec3 rsmLightPosition;
                 #endif`,
         };
     }
 
-    public getSamplers(samplers: string[]) {
+    public override getSamplers(samplers: string[]) {
         samplers.push("rsmTextureProjectionSampler");
     }
 
-    public bindForSubMesh(uniformBuffer: UniformBuffer) {
+    public override bindForSubMesh(uniformBuffer: UniformBuffer) {
         if (!this._isEnabled) {
             return;
         }
@@ -433,19 +446,59 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
         }
     }
 
-    public getCustomCode(shaderType: string) {
-        return shaderType === "vertex"
-            ? null
-            : {
-                  // eslint-disable-next-line @typescript-eslint/naming-convention
-                  CUSTOM_FRAGMENT_BEGIN: `
+    public override getCustomCode(shaderType: string, shaderLanguage: ShaderLanguage): Nullable<{ [pointName: string]: string }> {
+        if (shaderType === "vertex") {
+            return null;
+        }
+        if (shaderLanguage === ShaderLanguage.WGSL) {
+            return {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                CUSTOM_FRAGMENT_DEFINITIONS: `
+                #ifdef RSMCREATE
+                    #ifdef RSMCREATE_PROJTEXTURE
+                        var rsmTextureProjectionSamplerSampler: sampler;
+                        var rsmTextureProjectionSampler: texture_2d<f32>;
+                    #endif
+                #endif
+            `,
+
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
+                #ifdef RSMCREATE
+                    var rsmColor = ${this._varAlbedoName} * uniforms.rsmLightColor;
+                    #ifdef RSMCREATE_PROJTEXTURE
+                    {
+                        var strq = uniforms.rsmTextureProjectionMatrix * vec4f(fragmentInputs.vPositionW, 1.0);
+                        strq /= strq.w;
+                        rsmColor *= textureSample(rsmTextureProjectionSampler, rsmTextureProjectionSamplerSampler, strq.xy).rgb;
+                    }
+                    #endif
+                    #ifdef RSMCREATE_LIGHT_IS_SPOT
+                    {
+                        var cosAngle = max(0., dot(uniforms.rsmSpotInfo.xyz, normalize(fragmentInputs.vPositionW - uniforms.rsmLightPosition)));
+                        rsmColor = sign(cosAngle - uniforms.rsmSpotInfo.w) * rsmColor;
+                    }
+                    #endif
+
+                    #define MRT_AND_COLOR
+                    fragmentOutputs.fragData0 = vec4f(fragmentInputs.vPositionW, 1.);
+                    fragmentOutputs.fragData1 = vec4f(normalize(normalW) * 0.5 + 0.5, 1.);
+                    fragmentOutputs.fragData2 = vec4f(rsmColor, 1.);
+                #endif
+            `,
+            };
+        }
+
+        return {
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            CUSTOM_FRAGMENT_BEGIN: `
                 #ifdef RSMCREATE
                     #extension GL_EXT_draw_buffers : require
                 #endif
             `,
 
-                  // eslint-disable-next-line @typescript-eslint/naming-convention
-                  CUSTOM_FRAGMENT_DEFINITIONS: `
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            CUSTOM_FRAGMENT_DEFINITIONS: `
                 #ifdef RSMCREATE
                     #ifdef RSMCREATE_PROJTEXTURE
                         uniform highp sampler2D rsmTextureProjectionSampler;                    
@@ -455,8 +508,8 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
                 #endif
             `,
 
-                  // eslint-disable-next-line @typescript-eslint/naming-convention
-                  CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
                 #ifdef RSMCREATE
                     vec3 rsmColor = ${this._varAlbedoName} * rsmLightColor;
                     #ifdef RSMCREATE_PROJTEXTURE
@@ -477,7 +530,7 @@ export class RSMCreatePluginMaterial extends MaterialPluginBase {
                     glFragData[2] = vec4(rsmColor, 1.);
                 #endif
             `,
-              };
+        };
     }
 }
 

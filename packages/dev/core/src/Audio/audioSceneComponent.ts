@@ -1,20 +1,21 @@
 import { Sound } from "./sound";
 import { SoundTrack } from "./soundTrack";
-import { Engine } from "../Engines/engine";
 import type { Nullable } from "../types";
 import { Matrix, Vector3 } from "../Maths/math.vector";
 import type { ISceneSerializableComponent } from "../sceneComponent";
 import { SceneComponentConstants } from "../sceneComponent";
 import { Scene } from "../scene";
-import { AbstractScene } from "../abstractScene";
 import type { AssetContainer } from "../assetContainer";
 
 import "./audioEngine";
 import { PrecisionDate } from "../Misc/precisionDate";
 import { EngineStore } from "../Engines/engineStore";
+import { AbstractEngine } from "core/Engines/abstractEngine";
+import { AddParser } from "core/Loading/Plugins/babylonFileParser.function";
+import type { IAssetContainer } from "core/IAssetContainer";
 
 // Adds the parser to the scene parsers.
-AbstractScene.AddParser(SceneComponentConstants.NAME_AUDIO, (parsedData: any, scene: Scene, container: AssetContainer, rootUrl: string) => {
+AddParser(SceneComponentConstants.NAME_AUDIO, (parsedData: any, scene: Scene, container: AssetContainer, rootUrl: string) => {
     // TODO: add sound
     let loadedSounds: Sound[] = [];
     let loadedSound: Sound;
@@ -22,7 +23,7 @@ AbstractScene.AddParser(SceneComponentConstants.NAME_AUDIO, (parsedData: any, sc
     if (parsedData.sounds !== undefined && parsedData.sounds !== null) {
         for (let index = 0, cache = parsedData.sounds.length; index < cache; index++) {
             const parsedSound = parsedData.sounds[index];
-            if (Engine.audioEngine?.canUseWebAudio) {
+            if (AbstractEngine.audioEngine?.canUseWebAudio) {
                 if (!parsedSound.url) {
                     parsedSound.url = parsedSound.name;
                 }
@@ -42,16 +43,8 @@ AbstractScene.AddParser(SceneComponentConstants.NAME_AUDIO, (parsedData: any, sc
     loadedSounds = [];
 });
 
-declare module "../abstractScene" {
-    export interface AbstractScene {
-        /**
-         * The list of sounds used in the scene.
-         */
-        sounds: Nullable<Array<Sound>>;
-    }
-}
-
 declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface Scene {
         /**
          * @internal
@@ -381,15 +374,15 @@ export class AudioSceneComponent implements ISceneSerializableComponent {
      * Adds all the elements from the container to the scene
      * @param container the container holding the elements
      */
-    public addFromContainer(container: AbstractScene): void {
+    public addFromContainer(container: IAssetContainer): void {
         if (!container.sounds) {
             return;
         }
-        container.sounds.forEach((sound) => {
+        for (const sound of container.sounds) {
             sound.play();
             sound.autoplay = true;
             this.scene.mainSoundTrack.addSound(sound);
-        });
+        }
     }
 
     /**
@@ -397,18 +390,18 @@ export class AudioSceneComponent implements ISceneSerializableComponent {
      * @param container contains the elements to remove
      * @param dispose if the removed element should be disposed (default: false)
      */
-    public removeFromContainer(container: AbstractScene, dispose = false): void {
+    public removeFromContainer(container: IAssetContainer, dispose = false): void {
         if (!container.sounds) {
             return;
         }
-        container.sounds.forEach((sound) => {
+        for (const sound of container.sounds) {
             sound.stop();
             sound.autoplay = false;
             this.scene.mainSoundTrack.removeSound(sound);
             if (dispose) {
                 sound.dispose();
             }
-        });
+        }
     }
 
     /**
@@ -434,8 +427,9 @@ export class AudioSceneComponent implements ISceneSerializableComponent {
         const scene = this.scene;
         this._audioEnabled = false;
 
-        if (Engine.audioEngine && Engine.audioEngine.audioContext) {
-            Engine.audioEngine.audioContext.suspend();
+        if (AbstractEngine.audioEngine && AbstractEngine.audioEngine.audioContext) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            AbstractEngine.audioEngine.audioContext.suspend();
         }
 
         let i: number;
@@ -458,8 +452,9 @@ export class AudioSceneComponent implements ISceneSerializableComponent {
         const scene = this.scene;
         this._audioEnabled = true;
 
-        if (Engine.audioEngine && Engine.audioEngine.audioContext) {
-            Engine.audioEngine.audioContext.resume();
+        if (AbstractEngine.audioEngine && AbstractEngine.audioEngine.audioContext) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            AbstractEngine.audioEngine.audioContext.resume();
         }
 
         let i: number;
@@ -529,7 +524,7 @@ export class AudioSceneComponent implements ISceneSerializableComponent {
             return;
         }
 
-        const audioEngine = Engine.audioEngine;
+        const audioEngine = AbstractEngine.audioEngine;
 
         if (!audioEngine) {
             return;

@@ -5,7 +5,7 @@ import type { GlobalState } from "../globalState";
 import "../scss/monaco.scss";
 
 interface IMonacoComponentProps {
-    className: string;
+    className?: string;
     refObject: React.RefObject<HTMLDivElement>;
     globalState: GlobalState;
 }
@@ -21,20 +21,20 @@ export class MonacoComponent extends React.Component<IMonacoComponentProps> {
             const editorDiv = this.props.refObject.current! as any;
             if (editorDiv.requestFullscreen) {
                 editorDiv.requestFullscreen();
-            } else if (editorDiv.mozRequestFullScreen) {
-                editorDiv.mozRequestFullScreen();
+                // iOS 12 introduced the ewbkit prefixed version of the Fullscreen API. Not needed since 16.4
             } else if (editorDiv.webkitRequestFullscreen) {
                 editorDiv.webkitRequestFullscreen();
             }
         });
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         const hostElement = this.props.refObject.current!;
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
         this._monacoManager.setupMonacoAsync(hostElement, true);
     }
 
-    public render() {
+    public override render() {
         return <div id="monacoHost" ref={this.props.refObject} className={this.props.className}></div>;
     }
 }

@@ -14,7 +14,7 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
      * Gets or sets a boolean indicating that this block can evaluate context
      * Build performance is improved when this value is set to false as the system will cache values instead of reevaluating everything per context change
      */
-    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { notifiers: { rebuild: true } })
+    @editableInPropertyPage("Evaluate context", PropertyTypeForEdition.Boolean, "ADVANCED", { embedded: true, notifiers: { rebuild: true } })
     public evaluateContext = false;
 
     /**
@@ -37,7 +37,7 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "MergeGeometryBlock";
     }
 
@@ -83,41 +83,47 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         const func = (state: NodeGeometryBuildState) => {
-            let vertexData = this.geometry0.getConnectedValue(state) as VertexData;
-            const additionalVertexData: VertexData[] = [];
+            const vertexDataSource: VertexData[] = [];
 
-            if (vertexData) {
-                vertexData = vertexData.clone(); // Preserve source data
-            } else {
-                return null;
+            if (this.geometry0.isConnected) {
+                const data = this.geometry0.getConnectedValue(state);
+                if (data) {
+                    vertexDataSource.push(data);
+                }
             }
-
             if (this.geometry1.isConnected) {
                 const data = this.geometry1.getConnectedValue(state);
                 if (data) {
-                    additionalVertexData.push(data);
+                    vertexDataSource.push(data);
                 }
             }
             if (this.geometry2.isConnected) {
                 const data = this.geometry2.getConnectedValue(state);
                 if (data) {
-                    additionalVertexData.push(data);
+                    vertexDataSource.push(data);
                 }
             }
             if (this.geometry3.isConnected) {
                 const data = this.geometry3.getConnectedValue(state);
                 if (data) {
-                    additionalVertexData.push(data);
+                    vertexDataSource.push(data);
                 }
             }
             if (this.geometry4.isConnected) {
                 const data = this.geometry4.getConnectedValue(state);
                 if (data) {
-                    additionalVertexData.push(data);
+                    vertexDataSource.push(data);
                 }
             }
+
+            if (vertexDataSource.length === 0) {
+                return null;
+            }
+
+            let vertexData = vertexDataSource[0].clone(); // Preserve source data
+            const additionalVertexData: VertexData[] = vertexDataSource.slice(1);
 
             if (additionalVertexData.length && vertexData) {
                 vertexData = vertexData.merge(additionalVertexData, true, false, true, true);
@@ -133,7 +139,7 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.evaluateContext = ${this.evaluateContext ? "true" : "false"};\n`;
         return codeString;
     }
@@ -142,7 +148,7 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.evaluateContext = this.evaluateContext;
@@ -150,7 +156,7 @@ export class MergeGeometryBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.evaluateContext = serializationObject.evaluateContext;

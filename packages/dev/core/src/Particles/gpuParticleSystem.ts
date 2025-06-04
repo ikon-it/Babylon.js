@@ -3,10 +3,9 @@ import type { Immutable, Nullable, float, DataArray } from "../types";
 import type { Color3Gradient, IValueGradient } from "../Misc/gradients";
 import { FactorGradient, ColorGradient, GradientHelper } from "../Misc/gradients";
 import { Observable } from "../Misc/observable";
-import type { Vector3 } from "../Maths/math.vector";
-import { Matrix, TmpVectors } from "../Maths/math.vector";
+import { Vector3, Matrix, TmpVectors } from "../Maths/math.vector";
 import { Color4, TmpColors } from "../Maths/math.color";
-import { Scalar } from "../Maths/math.scalar";
+import { Lerp } from "../Maths/math.scalar.functions";
 import { VertexBuffer, Buffer } from "../Buffers/buffer";
 
 import type { IParticleSystem } from "./IParticleSystem";
@@ -15,20 +14,19 @@ import { ParticleSystem } from "./particleSystem";
 import { BoxParticleEmitter } from "../Particles/EmitterTypes/boxParticleEmitter";
 import type { IDisposable } from "../scene";
 import type { Effect } from "../Materials/effect";
-import { MaterialHelper } from "../Materials/materialHelper";
 import { ImageProcessingConfiguration } from "../Materials/imageProcessingConfiguration";
 import { RawTexture } from "../Materials/Textures/rawTexture";
 import { Constants } from "../Engines/constants";
 import { EngineStore } from "../Engines/engineStore";
 import type { IAnimatable } from "../Animations/animatable.interface";
 import { CustomParticleEmitter } from "./EmitterTypes/customParticleEmitter";
-import { ThinEngine } from "../Engines/thinEngine";
+import { AbstractEngine } from "../Engines/abstractEngine";
 import type { DataBuffer } from "../Buffers/dataBuffer";
 import { DrawWrapper } from "../Materials/drawWrapper";
 import type { UniformBufferEffectCommonAccessor } from "../Materials/uniformBufferEffectCommonAccessor";
 import type { IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
 import { GetClass } from "../Misc/typeStore";
-import { addClipPlaneUniforms, bindClipPlane, prepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
+import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
 
 import { Scene } from "../scene";
 import type { Engine } from "../Engines/engine";
@@ -38,6 +36,23 @@ import "../Engines/Extensions/engine.transformFeedback";
 
 import "../Shaders/gpuRenderParticles.fragment";
 import "../Shaders/gpuRenderParticles.vertex";
+import { BindFogParameters, BindLogDepth } from "../Materials/materialHelper.functions";
+import type { PointParticleEmitter } from "./EmitterTypes/pointParticleEmitter";
+import type { HemisphericParticleEmitter } from "./EmitterTypes/hemisphericParticleEmitter";
+import type { SphereDirectedParticleEmitter, SphereParticleEmitter } from "./EmitterTypes/sphereParticleEmitter";
+import type { CylinderDirectedParticleEmitter, CylinderParticleEmitter } from "./EmitterTypes/cylinderParticleEmitter";
+import type { ConeDirectedParticleEmitter, ConeParticleEmitter } from "./EmitterTypes/coneParticleEmitter";
+import {
+    CreateConeEmitter,
+    CreateCylinderEmitter,
+    CreateDirectedCylinderEmitter,
+    CreateDirectedSphereEmitter,
+    CreateDirectedConeEmitter,
+    CreateHemisphericEmitter,
+    CreatePointEmitter,
+    CreateSphereEmitter,
+} from "./particleSystem.functions";
+import type { Texture } from "core/Materials/Textures/texture";
 
 /**
  * This represents a GPU particle system in Babylon
@@ -48,7 +63,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     /**
      * The layer mask we are rendering the particles through.
      */
-    public layerMask: number = 0x0fffffff;
+    public override layerMask: number = 0x0fffffff;
 
     private _capacity: number;
     private _maxActiveParticleCount: number;
@@ -131,7 +146,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      * Forces the particle to write their depth information to the depth buffer. This can help preventing other draw calls
      * to override the particles.
      */
-    public forceDepthWrite = false;
+    public override forceDepthWrite = false;
 
     /**
      * Gets or set the number of active particles
@@ -171,6 +186,154 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     public defaultProjectionMatrix: Matrix;
 
     /**
+     * Creates a Point Emitter for the particle system (emits directly from the emitter position)
+     * @param direction1 Particles are emitted between the direction1 and direction2 from within the box
+     * @param direction2 Particles are emitted between the direction1 and direction2 from within the box
+     * @returns the emitter
+     */
+    public override createPointEmitter(direction1: Vector3, direction2: Vector3): PointParticleEmitter {
+        const particleEmitter = CreatePointEmitter(direction1, direction2);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Hemisphere Emitter for the particle system (emits along the hemisphere radius)
+     * @param radius The radius of the hemisphere to emit from
+     * @param radiusRange The range of the hemisphere to emit from [0-1] 0 Surface Only, 1 Entire Radius
+     * @returns the emitter
+     */
+    public override createHemisphericEmitter(radius = 1, radiusRange = 1): HemisphericParticleEmitter {
+        const particleEmitter = CreateHemisphericEmitter(radius, radiusRange);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Sphere Emitter for the particle system (emits along the sphere radius)
+     * @param radius The radius of the sphere to emit from
+     * @param radiusRange The range of the sphere to emit from [0-1] 0 Surface Only, 1 Entire Radius
+     * @returns the emitter
+     */
+    public override createSphereEmitter(radius = 1, radiusRange = 1): SphereParticleEmitter {
+        const particleEmitter = CreateSphereEmitter(radius, radiusRange);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Directed Sphere Emitter for the particle system (emits between direction1 and direction2)
+     * @param radius The radius of the sphere to emit from
+     * @param direction1 Particles are emitted between the direction1 and direction2 from within the sphere
+     * @param direction2 Particles are emitted between the direction1 and direction2 from within the sphere
+     * @returns the emitter
+     */
+    public override createDirectedSphereEmitter(radius = 1, direction1 = new Vector3(0, 1.0, 0), direction2 = new Vector3(0, 1.0, 0)): SphereDirectedParticleEmitter {
+        const particleEmitter = CreateDirectedSphereEmitter(radius, direction1, direction2);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Cylinder Emitter for the particle system (emits from the cylinder to the particle position)
+     * @param radius The radius of the emission cylinder
+     * @param height The height of the emission cylinder
+     * @param radiusRange The range of emission [0-1] 0 Surface only, 1 Entire Radius
+     * @param directionRandomizer How much to randomize the particle direction [0-1]
+     * @returns the emitter
+     */
+    public override createCylinderEmitter(radius = 1, height = 1, radiusRange = 1, directionRandomizer = 0): CylinderParticleEmitter {
+        const particleEmitter = CreateCylinderEmitter(radius, height, radiusRange, directionRandomizer);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Directed Cylinder Emitter for the particle system (emits between direction1 and direction2)
+     * @param radius The radius of the cylinder to emit from
+     * @param height The height of the emission cylinder
+     * @param radiusRange the range of the emission cylinder [0-1] 0 Surface only, 1 Entire Radius (1 by default)
+     * @param direction1 Particles are emitted between the direction1 and direction2 from within the cylinder
+     * @param direction2 Particles are emitted between the direction1 and direction2 from within the cylinder
+     * @returns the emitter
+     */
+    public override createDirectedCylinderEmitter(
+        radius = 1,
+        height = 1,
+        radiusRange = 1,
+        direction1 = new Vector3(0, 1.0, 0),
+        direction2 = new Vector3(0, 1.0, 0)
+    ): CylinderDirectedParticleEmitter {
+        const particleEmitter = CreateDirectedCylinderEmitter(radius, height, radiusRange, direction1, direction2);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Cone Emitter for the particle system (emits from the cone to the particle position)
+     * @param radius The radius of the cone to emit from
+     * @param angle The base angle of the cone
+     * @returns the emitter
+     */
+    public override createConeEmitter(radius = 1, angle = Math.PI / 4): ConeParticleEmitter {
+        const particleEmitter = CreateConeEmitter(radius, angle);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    public override createDirectedConeEmitter(
+        radius = 1,
+        angle = Math.PI / 4,
+        direction1 = new Vector3(0, 1.0, 0),
+        direction2 = new Vector3(0, 1.0, 0)
+    ): ConeDirectedParticleEmitter {
+        const particleEmitter = CreateDirectedConeEmitter(radius, angle, direction1, direction2);
+        this.particleEmitterType = particleEmitter;
+        return particleEmitter;
+    }
+
+    /**
+     * Creates a Box Emitter for the particle system. (emits between direction1 and direction2 from withing the box defined by minEmitBox and maxEmitBox)
+     * @param direction1 Particles are emitted between the direction1 and direction2 from within the box
+     * @param direction2 Particles are emitted between the direction1 and direction2 from within the box
+     * @param minEmitBox Particles are emitted from the box between minEmitBox and maxEmitBox
+     * @param maxEmitBox  Particles are emitted from the box between minEmitBox and maxEmitBox
+     * @returns the emitter
+     */
+    public override createBoxEmitter(direction1: Vector3, direction2: Vector3, minEmitBox: Vector3, maxEmitBox: Vector3): BoxParticleEmitter {
+        const particleEmitter = new BoxParticleEmitter();
+        this.particleEmitterType = particleEmitter;
+        this.direction1 = direction1;
+        this.direction2 = direction2;
+        this.minEmitBox = minEmitBox;
+        this.maxEmitBox = maxEmitBox;
+        return particleEmitter;
+    }
+
+    /** Flow map */
+
+    /** @internal */
+    public _flowMap: Nullable<Texture> = null;
+
+    /**
+     * The strength of the flow map
+     */
+    public flowMapStrength = 1.0;
+
+    /** Gets or sets the current flow map */
+    public get flowMap(): Nullable<Texture> {
+        return this._flowMap;
+    }
+
+    public set flowMap(value: Nullable<Texture>) {
+        if (this._flowMap === value) {
+            return;
+        }
+
+        this._flowMap = value;
+    }
+
+    /**
      * Is this system ready to be used/rendered
      * @returns true if the system is ready
      */
@@ -178,6 +341,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         if (
             !this.emitter ||
             (this._imageProcessingConfiguration && !this._imageProcessingConfiguration.isReady()) ||
+            (this._flowMap && !this._flowMap.isReady()) ||
             !this.particleTexture ||
             !this.particleTexture.isReady() ||
             this._rebuildingAfterContextLost
@@ -270,6 +434,9 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         if (this._stopped) {
             return;
         }
+
+        this.onStoppedObservable.notifyObservers(this);
+
         this._stopped = true;
     }
 
@@ -311,7 +478,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      */
     public setCustomEffect(effect: Nullable<Effect>, blendMode: number = 0) {
         this._customWrappers[blendMode] = new DrawWrapper(this._engine);
-        this._customWrappers[blendMode]!.effect = effect;
+        this._customWrappers[blendMode].effect = effect;
     }
 
     /** @internal */
@@ -358,7 +525,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     /** @internal */
     public _colorGradientsTexture: RawTexture;
 
-    protected _removeGradientAndTexture(gradient: number, gradients: Nullable<IValueGradient[]>, texture: RawTexture): BaseParticleSystem {
+    protected override _removeGradientAndTexture(gradient: number, gradients: Nullable<IValueGradient[]>, texture: RawTexture): BaseParticleSystem {
         super._removeGradientAndTexture(gradient, gradients, texture);
         this._releaseBuffers();
 
@@ -792,7 +959,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             capacity: number;
             randomTextureSize: number;
         }>,
-        sceneOrEngine: Scene | ThinEngine,
+        sceneOrEngine: Scene | AbstractEngine,
         customEffect: Nullable<Effect> = null,
         isAnimationSheetEnabled: boolean = false
     ) {
@@ -804,7 +971,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             this.uniqueId = this._scene.getUniqueId();
             this._scene.particleSystems.push(this);
         } else {
-            this._engine = sceneOrEngine as ThinEngine;
+            this._engine = sceneOrEngine as AbstractEngine;
             this.defaultProjectionMatrix = Matrix.PerspectiveFovLH(0.8, 1, 0.1, 100, this._engine.isNDCHalfZRange);
         }
 
@@ -812,12 +979,12 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             if (!GetClass("BABYLON.ComputeShaderParticleSystem")) {
                 throw new Error("The ComputeShaderParticleSystem class is not available! Make sure you have imported it.");
             }
-            this._platform = new (GetClass("BABYLON.ComputeShaderParticleSystem") as any)(this, this._engine);
+            this._platform = new (GetClass("BABYLON.ComputeShaderParticleSystem"))(this, this._engine);
         } else {
             if (!GetClass("BABYLON.WebGL2ParticleSystem")) {
                 throw new Error("The WebGL2ParticleSystem class is not available! Make sure you have imported it.");
             }
-            this._platform = new (GetClass("BABYLON.WebGL2ParticleSystem") as any)(this, this._engine);
+            this._platform = new (GetClass("BABYLON.WebGL2ParticleSystem"))(this, this._engine);
         }
 
         this._customWrappers = { 0: new DrawWrapper(this._engine) };
@@ -906,7 +1073,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         this._randomTextureSize = maxTextureSize;
     }
 
-    protected _reset() {
+    protected override _reset() {
         this._releaseBuffers();
     }
 
@@ -1223,6 +1390,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             defines += "\n#define DRAGGRADIENTS";
         }
 
+        if (this._flowMap) {
+            defines += "\n#define FLOWMAP";
+        }
+
         if (this.isAnimationSheetEnabled) {
             defines += "\n#define ANIMATESHEET";
             if (this.spriteRandomStartCell) {
@@ -1318,7 +1489,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      */
     public static _GetEffectCreationOptions(isAnimationSheetEnabled = false, useLogarithmicDepth = false, applyFog = false): string[] {
         const effectCreationOption = ["emitterWM", "worldOffset", "view", "projection", "colorDead", "invView", "translationPivot", "eyePosition"];
-        addClipPlaneUniforms(effectCreationOption);
+        AddClipPlaneUniforms(effectCreationOption);
 
         if (isAnimationSheetEnabled) {
             effectCreationOption.push("sheetInfos");
@@ -1339,10 +1510,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      * Fill the defines array according to the current settings of the particle system
      * @param defines Array to be updated
      * @param blendMode blend mode to take into account when updating the array
+     * @param fillImageProcessing fills the image processing defines
      */
-    public fillDefines(defines: Array<string>, blendMode: number = 0) {
+    public fillDefines(defines: Array<string>, blendMode: number = 0, fillImageProcessing: boolean = true): void {
         if (this._scene) {
-            prepareStringDefinesForClipPlanes(this, this._scene, defines);
+            PrepareStringDefinesForClipPlanes(this, this._scene, defines);
             if (this.applyFog && this._scene.fogEnabled && this._scene.fogMode !== Scene.FOGMODE_NONE) {
                 defines.push("#define FOG");
             }
@@ -1386,7 +1558,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             defines.push("#define ANIMATESHEET");
         }
 
-        if (this._imageProcessingConfiguration) {
+        if (fillImageProcessing && this._imageProcessingConfiguration) {
             this._imageProcessingConfiguration.prepareDefines(this._imageProcessingConfigurationDefines);
             defines.push("" + this._imageProcessingConfigurationDefines.toString());
         }
@@ -1450,7 +1622,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             const ratio = x / this._rawTextureWidth;
 
             GradientHelper.GetCurrentGradient(ratio, factorGradients, (currentGradient, nextGradient, scale) => {
-                data[x] = Scalar.Lerp((<FactorGradient>currentGradient).factor1, (<FactorGradient>nextGradient).factor1, scale);
+                data[x] = Lerp((<FactorGradient>currentGradient).factor1, (<FactorGradient>nextGradient).factor1, scale);
             });
         }
 
@@ -1536,10 +1708,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         const defines = effect.defines;
 
         if (this._scene) {
-            bindClipPlane(effect, this, this._scene);
+            BindClipPlane(effect, this, this._scene);
 
             if (this.applyFog) {
-                MaterialHelper.BindFogParameters(this._scene, undefined, effect);
+                BindFogParameters(this._scene, undefined, effect);
             }
         }
 
@@ -1551,7 +1723,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         // Log. depth
         if (this.useLogarithmicDepth && this._scene) {
-            MaterialHelper.BindLogDepth(defines, effect, this._scene);
+            BindLogDepth(defines, effect, this._scene);
         }
 
         // image processing
@@ -1560,20 +1732,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         }
 
         // Draw order
-        switch (blendMode) {
-            case ParticleSystem.BLENDMODE_ADD:
-                this._engine.setAlphaMode(Constants.ALPHA_ADD);
-                break;
-            case ParticleSystem.BLENDMODE_ONEONE:
-                this._engine.setAlphaMode(Constants.ALPHA_ONEONE);
-                break;
-            case ParticleSystem.BLENDMODE_STANDARD:
-                this._engine.setAlphaMode(Constants.ALPHA_COMBINE);
-                break;
-            case ParticleSystem.BLENDMODE_MULTIPLY:
-                this._engine.setAlphaMode(Constants.ALPHA_MULTIPLY);
-                break;
-        }
+        this._setEngineBasedOnBlendMode(blendMode);
 
         // Bind source VAO
         this._platform.bindDrawBuffers(this._targetIndex, effect, this._scene?.forceWireframe ? this._linesIndexBufferUseInstancing : null);
@@ -1618,6 +1777,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             }
         }
 
+        const engine = this._engine as Engine;
+        const depthWriteState = engine.getDepthWrite();
+        engine.setDepthWrite(false);
+
         this._platform.preUpdateParticleBuffer();
 
         this._updateBuffer.setFloat("currentCount", this._currentActiveCount);
@@ -1646,6 +1809,12 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         if (this.noiseTexture) {
             this._updateBuffer.setVector3("noiseStrength", this.noiseStrength);
         }
+        if (this._flowMap) {
+            const scene = this.getScene()!;
+            this._updateBuffer.setFloat("flowMapStrength", this.flowMapStrength);
+            this._updateBuffer.setMatrix("flowMapProjection", scene.getTransformMatrix());
+        }
+
         if (!this.isLocal) {
             this._updateBuffer.setMatrix("emitterWM", emitterWM);
         }
@@ -1662,6 +1831,8 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         const tmpBuffer = this._sourceBuffer;
         this._sourceBuffer = this._targetBuffer;
         this._targetBuffer = tmpBuffer;
+
+        engine.setDepthWrite(depthWriteState);
     }
 
     /**
@@ -1705,8 +1876,13 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         // Get everything ready to render
         this._initialize();
 
-        this._accumulatedCount += this.emitRate * this._timeDelta;
-        if (this._accumulatedCount > 1) {
+        if (this.manualEmitCount > -1) {
+            this._accumulatedCount += this.manualEmitCount;
+            this.manualEmitCount = 0;
+        } else {
+            this._accumulatedCount += this.emitRate * this._timeDelta;
+        }
+        if (this._accumulatedCount >= 1) {
             const intPart = this._accumulatedCount | 0;
             this._accumulatedCount -= intPart;
             this._currentActiveCount += intPart;
@@ -1952,15 +2128,15 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      * @param capacity defines the system capacity (if null or undefined the sotred capacity will be used)
      * @returns the parsed GPU particle system
      */
-    public static Parse(parsedParticleSystem: any, sceneOrEngine: Scene | ThinEngine, rootUrl: string, doNotStart = false, capacity?: number): GPUParticleSystem {
+    public static Parse(parsedParticleSystem: any, sceneOrEngine: Scene | AbstractEngine, rootUrl: string, doNotStart = false, capacity?: number): GPUParticleSystem {
         const name = parsedParticleSystem.name;
-        let engine: ThinEngine;
+        let engine: AbstractEngine;
         let scene: Nullable<Scene>;
 
-        if (sceneOrEngine instanceof ThinEngine) {
+        if (sceneOrEngine instanceof AbstractEngine) {
             engine = sceneOrEngine;
         } else {
-            scene = sceneOrEngine as Scene;
+            scene = sceneOrEngine;
             engine = scene.getEngine();
         }
 

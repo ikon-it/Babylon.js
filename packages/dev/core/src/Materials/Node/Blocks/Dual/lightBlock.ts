@@ -3,7 +3,6 @@ import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
 import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import { MaterialHelper } from "../../../materialHelper";
 import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
 import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
 import type { Effect } from "../../../effect";
@@ -16,16 +15,9 @@ import { RegisterClass } from "../../../../Misc/typeStore";
 import type { Scene } from "../../../../scene";
 import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Decorators/nodeDecorator";
 
-import "../../../../Shaders/ShadersInclude/lightFragmentDeclaration";
-import "../../../../Shaders/ShadersInclude/lightVxFragmentDeclaration";
-import "../../../../Shaders/ShadersInclude/lightUboDeclaration";
-import "../../../../Shaders/ShadersInclude/lightVxUboDeclaration";
-import "../../../../Shaders/ShadersInclude/lightFragment";
-import "../../../../Shaders/ShadersInclude/helperFunctions";
-import "../../../../Shaders/ShadersInclude/lightsFragmentFunctions";
-import "../../../../Shaders/ShadersInclude/shadowsFragmentFunctions";
-import "../../../../Shaders/ShadersInclude/shadowsVertex";
-import { Logger } from "core/Misc/logger";
+import { Logger } from "../../../../Misc/logger";
+import { BindLight, BindLights, PrepareDefinesForLight, PrepareDefinesForLights, PrepareUniformsAndSamplersForLight } from "../../../materialHelper.functions";
+import { ShaderLanguage } from "../../../../Materials/shaderLanguage";
 
 /**
  * Block used to add light in the fragment shader
@@ -90,7 +82,7 @@ export class LightBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "LightBlock";
     }
 
@@ -171,7 +163,43 @@ export class LightBlock extends NodeMaterialBlock {
         return this._outputs[2];
     }
 
-    public autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
+    public override initialize(state: NodeMaterialBuildState) {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this._initShaderSourceAsync(state.shaderLanguage);
+    }
+
+    private async _initShaderSourceAsync(shaderLanguage: ShaderLanguage) {
+        this._codeIsReady = false;
+
+        if (shaderLanguage === ShaderLanguage.WGSL) {
+            await Promise.all([
+                import("../../../../ShadersWGSL/ShadersInclude/lightFragment"),
+                import("../../../../ShadersWGSL/ShadersInclude/lightUboDeclaration"),
+                import("../../../../ShadersWGSL/ShadersInclude/lightVxUboDeclaration"),
+                import("../../../../ShadersWGSL/ShadersInclude/helperFunctions"),
+                import("../../../../ShadersWGSL/ShadersInclude/lightsFragmentFunctions"),
+                import("../../../../ShadersWGSL/ShadersInclude/shadowsFragmentFunctions"),
+                import("../../../../ShadersWGSL/ShadersInclude/shadowsVertex"),
+            ]);
+        } else {
+            await Promise.all([
+                import("../../../../Shaders/ShadersInclude/lightFragmentDeclaration"),
+                import("../../../../Shaders/ShadersInclude/lightFragment"),
+                import("../../../../Shaders/ShadersInclude/lightUboDeclaration"),
+                import("../../../../Shaders/ShadersInclude/lightVxUboDeclaration"),
+                import("../../../../Shaders/ShadersInclude/lightVxFragmentDeclaration"),
+                import("../../../../Shaders/ShadersInclude/helperFunctions"),
+                import("../../../../Shaders/ShadersInclude/lightsFragmentFunctions"),
+                import("../../../../Shaders/ShadersInclude/shadowsFragmentFunctions"),
+                import("../../../../Shaders/ShadersInclude/shadowsVertex"),
+            ]);
+        }
+
+        this._codeIsReady = true;
+        this.onCodeIsReadyObservable.notifyObservers(this);
+    }
+
+    public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.cameraPosition.isConnected) {
             let cameraPositionInput = material.getInputBlockByPredicate((b) => b.systemValue === NodeMaterialSystemValues.CameraPosition && additionalFilteringInfo(b));
 
@@ -183,7 +211,7 @@ export class LightBlock extends NodeMaterialBlock {
         }
     }
 
-    public prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         if (!defines._areLightsDirty) {
             return;
         }
@@ -191,7 +219,7 @@ export class LightBlock extends NodeMaterialBlock {
         const scene = mesh.getScene();
 
         if (!this.light) {
-            MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, true, nodeMaterial.maxSimultaneousLights);
+            PrepareDefinesForLights(scene, mesh, defines, true, nodeMaterial.maxSimultaneousLights);
         } else {
             const state = {
                 needNormals: false,
@@ -201,7 +229,7 @@ export class LightBlock extends NodeMaterialBlock {
                 specularEnabled: false,
             };
 
-            MaterialHelper.PrepareDefinesForLight(scene, mesh, this.light, this._lightId, defines, true, state);
+            PrepareDefinesForLight(scene, mesh, this.light, this._lightId, defines, true, state);
 
             if (state.needRebuild) {
                 defines.rebuild();
@@ -209,24 +237,27 @@ export class LightBlock extends NodeMaterialBlock {
         }
     }
 
-    public updateUniformsAndSamples(state: NodeMaterialBuildState, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines, uniformBuffers: string[]) {
+    public override updateUniformsAndSamples(state: NodeMaterialBuildState, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines, uniformBuffers: string[]) {
+        state.samplers.push("areaLightsLTC1Sampler");
+        state.samplers.push("areaLightsLTC2Sampler");
         for (let lightIndex = 0; lightIndex < nodeMaterial.maxSimultaneousLights; lightIndex++) {
             if (!defines["LIGHT" + lightIndex]) {
                 break;
             }
             const onlyUpdateBuffersList = state.uniforms.indexOf("vLightData" + lightIndex) >= 0;
-            MaterialHelper.PrepareUniformsAndSamplersForLight(
+            PrepareUniformsAndSamplersForLight(
                 lightIndex,
                 state.uniforms,
                 state.samplers,
                 defines["PROJECTEDLIGHTTEXTURE" + lightIndex],
                 uniformBuffers,
-                onlyUpdateBuffersList
+                onlyUpdateBuffersList,
+                defines["IESLIGHTTEXTURE" + lightIndex]
             );
         }
     }
 
-    public bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
+    public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         if (!mesh) {
             return;
         }
@@ -234,9 +265,9 @@ export class LightBlock extends NodeMaterialBlock {
         const scene = mesh.getScene();
 
         if (!this.light) {
-            MaterialHelper.BindLights(scene, mesh, effect, true, nodeMaterial.maxSimultaneousLights);
+            BindLights(scene, mesh, effect, true, nodeMaterial.maxSimultaneousLights);
         } else {
-            MaterialHelper.BindLight(this.light, this._lightId, scene, effect, true);
+            BindLight(this.light, this._lightId, scene, effect, true);
         }
     }
 
@@ -269,8 +300,9 @@ export class LightBlock extends NodeMaterialBlock {
 
         // Inject code in vertex
         const worldPosVaryingName = "v_" + worldPos.associatedVariableName;
-        if (state._emitVaryingFromString(worldPosVaryingName, "vec4")) {
-            state.compilationString += `${worldPosVaryingName} = ${worldPos.associatedVariableName};\n`;
+
+        if (state._emitVaryingFromString(worldPosVaryingName, NodeMaterialBlockConnectionPointTypes.Vector4)) {
+            state.compilationString += (state.shaderLanguage === ShaderLanguage.WGSL ? "vertexOutputs." : "") + `${worldPosVaryingName} = ${worldPos.associatedVariableName};\n`;
         }
 
         if (this.light) {
@@ -281,9 +313,9 @@ export class LightBlock extends NodeMaterialBlock {
                 ],
             });
         } else {
-            state.compilationString += `vec4 worldPos = ${worldPos.associatedVariableName};\n`;
+            state.compilationString += `${state._declareLocalVar("worldPos", NodeMaterialBlockConnectionPointTypes.Vector4)} = ${worldPos.associatedVariableName};\n`;
             if (this.view.isConnected) {
-                state.compilationString += `mat4 view = ${this.view.associatedVariableName};\n`;
+                state.compilationString += `${state._declareLocalVar("view", NodeMaterialBlockConnectionPointTypes.Matrix)} = ${this.view.associatedVariableName};\n`;
             }
             state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
                 repeatKey: "maxSimultaneousLights",
@@ -291,50 +323,8 @@ export class LightBlock extends NodeMaterialBlock {
         }
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
-        super._buildBlock(state);
-
-        if (state.target !== NodeMaterialBlockTargets.Fragment) {
-            // Vertex
-            this._injectVertexCode(state);
-
-            return;
-        }
-
-        if (this.generateOnlyFragmentCode) {
-            state.sharedData.dynamicUniformBlocks.push(this);
-        }
-
-        // Fragment
-        state.sharedData.forcedBindableBlocks.push(this);
-        state.sharedData.blocksWithDefines.push(this);
-
+    private _injectUBODeclaration(state: NodeMaterialBuildState) {
         const comments = `//${this.name}`;
-        const worldPos = this.worldPosition;
-
-        let worldPosVariableName = worldPos.associatedVariableName;
-        if (this.generateOnlyFragmentCode) {
-            worldPosVariableName = state._getFreeVariableName("globalWorldPos");
-            state._emitFunction("light_globalworldpos", `vec3 ${worldPosVariableName};\n`, comments);
-            state.compilationString += `${worldPosVariableName} = ${worldPos.associatedVariableName}.xyz;\n`;
-
-            state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
-                repeatKey: "maxSimultaneousLights",
-                substitutionVars: this.generateOnlyFragmentCode ? `worldPos,${worldPos.associatedVariableName}` : undefined,
-            });
-        } else {
-            worldPosVariableName = "v_" + worldPosVariableName + ".xyz";
-        }
-
-        state._emitFunctionFromInclude("helperFunctions", comments);
-
-        state._emitFunctionFromInclude("lightsFragmentFunctions", comments, {
-            replaceStrings: [{ search: /vPositionW/g, replace: worldPosVariableName }],
-        });
-
-        state._emitFunctionFromInclude("shadowsFragmentFunctions", comments, {
-            replaceStrings: [{ search: /vPositionW/g, replace: worldPosVariableName }],
-        });
 
         if (!this.light) {
             // Emit for all lights
@@ -352,35 +342,102 @@ export class LightBlock extends NodeMaterialBlock {
                 this._lightId.toString()
             );
         }
+    }
+
+    protected override _buildBlock(state: NodeMaterialBuildState) {
+        super._buildBlock(state);
+
+        const isWGSL = state.shaderLanguage === ShaderLanguage.WGSL;
+        const addF = isWGSL ? "f" : "";
+
+        const comments = `//${this.name}`;
+
+        if (state.target !== NodeMaterialBlockTargets.Fragment) {
+            // Vertex
+            this._injectVertexCode(state);
+            return;
+        }
+
+        if (this.generateOnlyFragmentCode) {
+            state.sharedData.dynamicUniformBlocks.push(this);
+        }
+        // Fragment
+        const accessor = isWGSL ? "fragmentInputs." : "";
+        state.sharedData.forcedBindableBlocks.push(this);
+        state.sharedData.blocksWithDefines.push(this);
+        const worldPos = this.worldPosition;
+
+        let worldPosVariableName = worldPos.associatedVariableName;
+        if (this.generateOnlyFragmentCode) {
+            worldPosVariableName = state._getFreeVariableName("globalWorldPos");
+            state._emitFunction("light_globalworldpos", `${state._declareLocalVar(worldPosVariableName, NodeMaterialBlockConnectionPointTypes.Vector3)};\n`, comments);
+            state.compilationString += `${worldPosVariableName} = ${worldPos.associatedVariableName}.xyz;\n`;
+
+            state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
+                repeatKey: "maxSimultaneousLights",
+                substitutionVars: this.generateOnlyFragmentCode ? `worldPos,${worldPos.associatedVariableName}` : undefined,
+            });
+        } else {
+            worldPosVariableName = accessor + "v_" + worldPosVariableName + ".xyz";
+        }
+
+        state._emitFunctionFromInclude("helperFunctions", comments);
+
+        let replaceString = { search: /vPositionW/g, replace: worldPosVariableName };
+
+        if (isWGSL) {
+            replaceString = { search: /fragmentInputs\.vPositionW/g, replace: worldPosVariableName };
+        }
+
+        state._emitFunctionFromInclude("lightsFragmentFunctions", comments, {
+            replaceStrings: [replaceString],
+        });
+
+        state._emitFunctionFromInclude("shadowsFragmentFunctions", comments, {
+            replaceStrings: [replaceString],
+        });
+
+        this._injectUBODeclaration(state);
 
         // Code
         if (this._lightId === 0) {
             if (state._registerTempVariable("viewDirectionW")) {
-                state.compilationString += `vec3 viewDirectionW = normalize(${this.cameraPosition.associatedVariableName} - ${worldPosVariableName});\n`;
+                state.compilationString += `${state._declareLocalVar("viewDirectionW", NodeMaterialBlockConnectionPointTypes.Vector3)} = normalize(${this.cameraPosition.associatedVariableName} - ${worldPosVariableName});\n`;
             }
-            state.compilationString += `lightingInfo info;\n`;
-            state.compilationString += `float shadow = 1.;\n`;
-            state.compilationString += `float aggShadow = 0.;\n`;
-            state.compilationString += `float numLights = 0.;\n`;
-            state.compilationString += `float glossiness = ${this.glossiness.isConnected ? this.glossiness.associatedVariableName : "1.0"} * ${
+            state.compilationString += isWGSL ? `var info: lightingInfo;\n` : `lightingInfo info;\n`;
+            state.compilationString += `${state._declareLocalVar("shadow", NodeMaterialBlockConnectionPointTypes.Float)} = 1.;\n`;
+            state.compilationString += `${state._declareLocalVar("aggShadow", NodeMaterialBlockConnectionPointTypes.Float)} = 0.;\n`;
+            state.compilationString += `${state._declareLocalVar("numLights", NodeMaterialBlockConnectionPointTypes.Float)} = 0.;\n`;
+            state.compilationString += `${state._declareLocalVar("glossiness", NodeMaterialBlockConnectionPointTypes.Float)} = ${this.glossiness.isConnected ? this.glossiness.associatedVariableName : "1.0"} * ${
                 this.glossPower.isConnected ? this.glossPower.associatedVariableName : "1024.0"
             };\n`;
-            state.compilationString += `vec3 diffuseBase = vec3(0., 0., 0.);\n`;
-            state.compilationString += `vec3 specularBase = vec3(0., 0., 0.);\n`;
-            state.compilationString += `vec3 normalW = ${this.worldNormal.associatedVariableName}.xyz;\n`;
+            state.compilationString += `${state._declareLocalVar("diffuseBase", NodeMaterialBlockConnectionPointTypes.Vector3)} = vec3${addF}(0., 0., 0.);\n`;
+            state.compilationString += `${state._declareLocalVar("specularBase", NodeMaterialBlockConnectionPointTypes.Vector3)}  = vec3${addF}(0., 0., 0.);\n`;
+            state.compilationString += `${state._declareLocalVar("normalW", NodeMaterialBlockConnectionPointTypes.Vector3)} = ${this.worldNormal.associatedVariableName}.xyz;\n`;
         }
 
         if (this.light) {
+            let replaceString = [{ search: /vPositionW/g, replace: worldPosVariableName + ".xyz" }];
+
+            if (isWGSL) {
+                replaceString = [
+                    { search: /fragmentInputs\.vPositionW/g, replace: worldPosVariableName + ".xyz" },
+                    { search: /uniforms\.vReflectivityColor/g, replace: "vReflectivityColor" },
+                ];
+            }
+
             state.compilationString += state._emitCodeFromInclude("lightFragment", comments, {
-                replaceStrings: [
-                    { search: /{X}/g, replace: this._lightId.toString() },
-                    { search: /vPositionW/g, replace: worldPosVariableName + ".xyz" },
-                ],
+                replaceStrings: [{ search: /{X}/g, replace: this._lightId.toString() }, ...replaceString],
             });
         } else {
+            let substitutionVars = `vPositionW,${worldPosVariableName}.xyz`;
+
+            if (isWGSL) {
+                substitutionVars = `fragmentInputs.vPositionW,${worldPosVariableName}.xyz`;
+            }
             state.compilationString += state._emitCodeFromInclude("lightFragment", comments, {
                 repeatKey: "maxSimultaneousLights",
-                substitutionVars: `vPositionW,${worldPosVariableName}.xyz`,
+                substitutionVars: substitutionVars,
             });
         }
 
@@ -392,20 +449,20 @@ export class LightBlock extends NodeMaterialBlock {
         const specularOutput = this.specularOutput;
 
         state.compilationString +=
-            this._declareOutput(diffuseOutput, state) + ` = diffuseBase${this.diffuseColor.isConnected ? " * " + this.diffuseColor.associatedVariableName : ""};\n`;
+            state._declareOutput(diffuseOutput) + ` = diffuseBase${this.diffuseColor.isConnected ? " * " + this.diffuseColor.associatedVariableName : ""};\n`;
         if (specularOutput.hasEndpoints) {
             state.compilationString +=
-                this._declareOutput(specularOutput, state) + ` = specularBase${this.specularColor.isConnected ? " * " + this.specularColor.associatedVariableName : ""};\n`;
+                state._declareOutput(specularOutput) + ` = specularBase${this.specularColor.isConnected ? " * " + this.specularColor.associatedVariableName : ""};\n`;
         }
 
         if (this.shadow.hasEndpoints) {
-            state.compilationString += this._declareOutput(this.shadow, state) + ` = aggShadow;\n`;
+            state.compilationString += state._declareOutput(this.shadow) + ` = aggShadow;\n`;
         }
 
         return this;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.generateOnlyFragmentCode = this.generateOnlyFragmentCode;
@@ -417,7 +474,7 @@ export class LightBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         if (serializationObject.lightId) {

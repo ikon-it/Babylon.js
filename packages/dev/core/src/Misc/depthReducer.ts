@@ -50,10 +50,19 @@ export class DepthReducer extends MinMaxReducer {
                 scene._depthRenderer = {};
             }
 
-            depthRenderer = this._depthRenderer = new DepthRenderer(scene, type, this._camera, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE);
+            this._depthRendererId = "minmax_" + this._camera.id;
+
+            depthRenderer = this._depthRenderer = new DepthRenderer(
+                scene,
+                type,
+                this._camera,
+                false,
+                Constants.TEXTURE_NEAREST_SAMPLINGMODE,
+                false,
+                `DepthRenderer ${this._depthRendererId}`
+            );
             depthRenderer.enabled = false;
 
-            this._depthRendererId = "minmax" + this._camera.id;
             scene._depthRenderer[this._depthRendererId] = depthRenderer;
         }
 
@@ -63,7 +72,12 @@ export class DepthReducer extends MinMaxReducer {
     /**
      * @internal
      */
-    public setSourceTexture(sourceTexture: RenderTargetTexture, depthRedux: boolean, type: number = Constants.TEXTURETYPE_HALF_FLOAT, forceFullscreenViewport = true): void {
+    public override setSourceTexture(
+        sourceTexture: RenderTargetTexture,
+        depthRedux: boolean,
+        type: number = Constants.TEXTURETYPE_HALF_FLOAT,
+        forceFullscreenViewport = true
+    ): void {
         super.setSourceTexture(sourceTexture, depthRedux, type, forceFullscreenViewport);
     }
 
@@ -72,7 +86,7 @@ export class DepthReducer extends MinMaxReducer {
      * When activated, the observers registered in onAfterReductionPerformed are
      * called after the computation is performed
      */
-    public activate(): void {
+    public override activate(): void {
         if (this._depthRenderer) {
             this._depthRenderer.enabled = true;
         }
@@ -83,7 +97,7 @@ export class DepthReducer extends MinMaxReducer {
     /**
      * Deactivates the reduction computation.
      */
-    public deactivate(): void {
+    public override deactivate(): void {
         super.deactivate();
 
         if (this._depthRenderer) {
@@ -95,15 +109,10 @@ export class DepthReducer extends MinMaxReducer {
      * Disposes the depth reducer
      * @param disposeAll true to dispose all the resources. You should always call this function with true as the parameter (or without any parameter as it is the default one). This flag is meant to be used internally.
      */
-    public dispose(disposeAll = true): void {
+    public override dispose(disposeAll = true): void {
         super.dispose(disposeAll);
 
         if (this._depthRenderer && disposeAll) {
-            const scene = this._depthRenderer.getDepthMap().getScene();
-            if (scene) {
-                delete scene._depthRenderer[this._depthRendererId];
-            }
-
             this._depthRenderer.dispose();
             this._depthRenderer = null;
         }

@@ -10,6 +10,19 @@ import type { InternalTexture } from "../../Materials/Textures/internalTexture";
 import type { ExternalTexture } from "../../Materials/Textures/externalTexture";
 import type { WebGPUDrawContext } from "./webgpuDrawContext";
 
+/**
+ * Sampler hash codes are 19 bits long, so using a start value of 2^20 for buffer ids will ensure we can't have any collision with the sampler hash codes
+ */
+const BufferIdStart = 1 << 20;
+
+/**
+ * textureIdStart is added to texture ids to ensure we can't have any collision with the buffer ids / sampler hash codes.
+ * 2^35 for textureIdStart means we can have:
+ * - 2^(35-20) = 2^15 = 32768 possible buffer ids
+ * - 2^(53-35) = 2^18 = 524288 possible texture ids
+ */
+const TextureIdStart = 2 ** 35;
+
 class WebGPUBindGroupCacheNode {
     public values: { [id: number]: WebGPUBindGroupCacheNode };
     public bindGroups: GPUBindGroup[];
@@ -94,7 +107,7 @@ export class WebGPUCacheBindGroups {
             }
 
             for (const bufferName of webgpuPipelineContext.shaderProcessingContext.bufferNames) {
-                const uboId = drawContext.buffers[bufferName]?.uniqueId ?? 0;
+                const uboId = (drawContext.buffers[bufferName]?.uniqueId ?? 0) + BufferIdStart;
                 let nextNode = node.values[uboId];
                 if (!nextNode) {
                     nextNode = new WebGPUBindGroupCacheNode();
@@ -114,7 +127,7 @@ export class WebGPUCacheBindGroups {
             }
 
             for (const textureName of webgpuPipelineContext.shaderProcessingContext.textureNames) {
-                const textureId = materialContext.textures[textureName]?.texture?.uniqueId ?? 0;
+                const textureId = (materialContext.textures[textureName]?.texture?.uniqueId ?? 0) + TextureIdStart;
                 let nextNode = node.values[textureId];
                 if (!nextNode) {
                     nextNode = new WebGPUBindGroupCacheNode();
@@ -174,8 +187,9 @@ export class WebGPUCacheBindGroups {
                         entries[j].resource = this._cacheSampler.getSampler(sampler, false, bindingInfo.hashCode, sampler.label);
                     } else {
                         Logger.Error(
-                            `Sampler "${name}" could not be bound. entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(materialContext, (key: string, value: any) =>
-                                key === "texture" || key === "sampler" ? "<no dump>" : value
+                            `Sampler "${name}" not found in the material context. Make sure you bound it. entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(
+                                materialContext,
+                                (key: string, value: any) => (key === "texture" || key === "sampler" ? "<no dump>" : value)
                             )}`,
                             50
                         );
@@ -185,8 +199,9 @@ export class WebGPUCacheBindGroups {
                     if (bindingInfo) {
                         if (this._engine.dbgSanityChecks && bindingInfo.texture === null) {
                             Logger.Error(
-                                `Trying to bind a null texture! entry=${JSON.stringify(entry)}, bindingInfo=${JSON.stringify(bindingInfo, (key: string, value: any) =>
-                                    key === "texture" ? "<no dump>" : value
+                                `Trying to bind a null texture! name="${name}", entry=${JSON.stringify(entry)}, bindingInfo=${JSON.stringify(
+                                    bindingInfo,
+                                    (key: string, value: any) => (key === "texture" ? "<no dump>" : value)
                                 )}, materialContext.uniqueId=${materialContext.uniqueId}`,
                                 50
                             );
@@ -211,8 +226,9 @@ export class WebGPUCacheBindGroups {
                         entries[j].resource = entry.storageTexture ? hardwareTexture.viewForWriting! : hardwareTexture.view!;
                     } else {
                         Logger.Error(
-                            `Texture "${name}" could not be bound. entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(materialContext, (key: string, value: any) =>
-                                key === "texture" || key === "sampler" ? "<no dump>" : value
+                            `Texture "${name}" not found in the material context. Make sure you bound it (something like effect.setTexture("${name}", texture)). entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(
+                                materialContext,
+                                (key: string, value: any) => (key === "texture" || key === "sampler" ? "<no dump>" : value)
                             )}`,
                             50
                         );
@@ -246,8 +262,9 @@ export class WebGPUCacheBindGroups {
                         entries[j].resource = this._device.importExternalTexture({ source: externalTexture });
                     } else {
                         Logger.Error(
-                            `Texture "${name}" could not be bound. entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(materialContext, (key: string, value: any) =>
-                                key === "texture" || key === "sampler" ? "<no dump>" : value
+                            `External texture "${name}" not found in the material context. Make sure you bound it. entry=${JSON.stringify(entry)}, materialContext=${JSON.stringify(
+                                materialContext,
+                                (key: string, value: any) => (key === "texture" || key === "sampler" ? "<no dump>" : value)
                             )}`,
                             50
                         );
@@ -260,7 +277,7 @@ export class WebGPUCacheBindGroups {
                         (entries[j].resource as GPUBufferBinding).size = dataBuffer.capacity;
                     } else {
                         Logger.Error(
-                            `Can't find buffer "${name}". entry=${JSON.stringify(entry)}, buffers=${JSON.stringify(drawContext.buffers)}, drawContext.uniqueId=${
+                            `Can't find buffer "${name}" in the draw context. Make sure you bound it. entry=${JSON.stringify(entry)}, buffers=${JSON.stringify(drawContext.buffers)}, drawContext.uniqueId=${
                                 drawContext.uniqueId
                             }`,
                             50

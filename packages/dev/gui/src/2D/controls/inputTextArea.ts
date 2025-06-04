@@ -25,8 +25,6 @@ export class InputTextArea extends InputText {
 
     private _lines: any[];
     private _lineSpacing: ValueAndUnit = new ValueAndUnit(0);
-    private _outlineWidth: number = 0;
-    private _outlineColor: string = "white";
     private _maxHeight = new ValueAndUnit(1, ValueAndUnit.UNITMODE_PERCENTAGE, false);
 
     private _clipTextTop: number;
@@ -41,7 +39,7 @@ export class InputTextArea extends InputText {
     public onLinesReadyObservable = new Observable<InputTextArea>();
 
     /** @internal */
-    public _connectedVirtualKeyboard: Nullable<VirtualKeyboard>;
+    public override _connectedVirtualKeyboard: Nullable<VirtualKeyboard>;
     private _contextForBreakLines: ICanvasRenderingContext;
     private _clickedCoordinateX: Nullable<number>;
     private _clickedCoordinateY: Nullable<number>;
@@ -52,42 +50,6 @@ export class InputTextArea extends InputText {
     private _scrollTop: Nullable<number>;
 
     private _autoStretchHeight: boolean;
-
-    /**
-     * Gets or sets outlineWidth of the text to display
-     */
-    public get outlineWidth(): number {
-        return this._outlineWidth;
-    }
-
-    /**
-     * Gets or sets outlineWidth of the text to display
-     */
-    public set outlineWidth(value: number) {
-        if (this._outlineWidth === value) {
-            return;
-        }
-        this._outlineWidth = value;
-        this._markAsDirty();
-    }
-
-    /**
-     * Gets or sets outlineColor of the text to display
-     */
-    public get outlineColor(): string {
-        return this._outlineColor;
-    }
-
-    /**
-     * Gets or sets outlineColor of the text to display
-     */
-    public set outlineColor(value: string) {
-        if (this._outlineColor === value) {
-            return;
-        }
-        this._outlineColor = value;
-        this._markAsDirty();
-    }
 
     /** Gets or sets a boolean indicating if the control can auto stretch its height to adapt to the text */
     @serialize()
@@ -104,7 +66,7 @@ export class InputTextArea extends InputText {
         this._markAsDirty();
     }
 
-    public set height(value: string | number) {
+    public override set height(value: string | number) {
         this.fixedRatioMasterIsWidth = false;
 
         if (this._height.toString(this._host) === value) {
@@ -144,7 +106,7 @@ export class InputTextArea extends InputText {
      * @param text defines the text of the control
      */
     constructor(
-        public name?: string,
+        public override name?: string,
         text: string = ""
     ) {
         super(name);
@@ -170,7 +132,7 @@ export class InputTextArea extends InputText {
         };
     }
 
-    protected _getTypeName(): string {
+    protected override _getTypeName(): string {
         return "InputTextArea";
     }
 
@@ -178,7 +140,7 @@ export class InputTextArea extends InputText {
      * Handles the keyboard event
      * @param evt Defines the KeyboardEvent
      */
-    public processKeyboard(evt: IKeyboardEvent): void {
+    public override processKeyboard(evt: IKeyboardEvent): void {
         if (this.isReadOnly) {
             return;
         }
@@ -199,19 +161,12 @@ export class InputTextArea extends InputText {
      */
     public alternativeProcessKey(code: string, key?: string, evt?: IKeyboardEvent) {
         //return if clipboard event keys (i.e -ctr/cmd + c,v,x)
-        if (evt && (evt.ctrlKey || evt.metaKey) && (code === "KeyC" || code === "KeyV" || code === "KeyX")) {
+        if (evt && (evt.ctrlKey || evt.metaKey) && (key === "c" || key === "v" || key === "x")) {
             return;
         }
 
         // Specific cases
         switch (code) {
-            case "KeyA": // A - select all
-                if (evt && (evt.ctrlKey || evt.metaKey)) {
-                    this._selectAllText();
-                    evt.preventDefault();
-                    return;
-                }
-                break;
             case "Period": //SLASH
                 if (evt && evt.shiftKey) {
                     evt.preventDefault();
@@ -254,6 +209,7 @@ export class InputTextArea extends InputText {
 
                 this._textHasChanged();
                 break;
+            case "NumpadEnter": // NUMPAD ENTER
             case "Enter": // RETURN
                 this._prevText = this._textWrapper.text;
                 this._textWrapper.removePart(this._cursorInfo.globalStartIndex, this._cursorInfo.globalEndIndex, "\n");
@@ -402,7 +358,7 @@ export class InputTextArea extends InputText {
                         relativeIndex = this._cursorInfo.relativeEndIndex;
                     }
 
-                    const currentText = currentLine.text.substr(0, relativeIndex);
+                    const currentText = currentLine.text.substring(0, relativeIndex);
                     const currentWidth = this._contextForBreakLines.measureText(currentText).width;
 
                     let upperWidth = 0;
@@ -416,7 +372,7 @@ export class InputTextArea extends InputText {
                         tmpIndex++;
                         upperLineRelativeIndex++;
                         previousWidth = Math.abs(currentWidth - upperWidth);
-                        upperWidth = this._contextForBreakLines.measureText(upperLine.text.substr(0, upperLineRelativeIndex)).width;
+                        upperWidth = this._contextForBreakLines.measureText(upperLine.text.substring(0, upperLineRelativeIndex)).width;
                     }
 
                     // Find closest move
@@ -474,7 +430,7 @@ export class InputTextArea extends InputText {
                         relativeIndex = this._cursorInfo.relativeEndIndex;
                     }
 
-                    const currentText = currentLine.text.substr(0, relativeIndex);
+                    const currentText = currentLine.text.substring(0, relativeIndex);
                     const currentWidth = this._contextForBreakLines.measureText(currentText).width;
 
                     let underWidth = 0;
@@ -487,7 +443,7 @@ export class InputTextArea extends InputText {
                         tmpIndex++;
                         underLineRelativeIndex++;
                         previousWidth = Math.abs(currentWidth - underWidth);
-                        underWidth = this._contextForBreakLines.measureText(underLine.text.substr(0, underLineRelativeIndex)).width;
+                        underWidth = this._contextForBreakLines.measureText(underLine.text.substring(0, underLineRelativeIndex)).width;
                     }
 
                     // Find closest move
@@ -512,6 +468,13 @@ export class InputTextArea extends InputText {
 
                 this._markAsDirty();
                 return;
+        }
+
+        // special case - select all. Use key instead of code to support all keyboard layouts
+        if (key === "a" && evt && (evt.ctrlKey || evt.metaKey)) {
+            this.selectAllText();
+            evt.preventDefault();
+            return;
         }
 
         // Printable characters
@@ -604,9 +567,9 @@ export class InputTextArea extends InputText {
      * @param context The rendering canvas
      * @internal
      */
-    protected _preMeasure(parentMeasure: Measure, context: ICanvasRenderingContext): void {
+    protected override _preMeasure(parentMeasure: Measure, context: ICanvasRenderingContext): void {
         if (!this._fontOffset || this._wasDirty) {
-            this._fontOffset = Control._GetFontOffset(context.font);
+            this._fontOffset = Control._GetFontOffset(context.font, this._host.getScene()?.getEngine());
         }
 
         let text = this._beforeRenderText(this._textWrapper).text;
@@ -669,7 +632,7 @@ export class InputTextArea extends InputText {
         }
     }
 
-    protected _textHasChanged() {
+    protected override _textHasChanged() {
         if (!this._prevText && this._textWrapper.text && this.placeholderText) {
             this._cursorInfo.currentLineIndex = 0;
             this._cursorInfo.globalStartIndex = 1;
@@ -694,7 +657,7 @@ export class InputTextArea extends InputText {
             this._scrollLeft = this._clipTextLeft;
         }
 
-        if (this._isFocused && !this._autoStretchHeight) {
+        if (this._isFocused) {
             const selectedHeight = (this._cursorInfo.currentLineIndex + 1) * this._fontOffset.height;
             const textTop = this._clipTextTop - selectedHeight;
 
@@ -711,7 +674,7 @@ export class InputTextArea extends InputText {
      *
      * @internal
      */
-    protected _additionalProcessing(): void {
+    protected override _additionalProcessing(): void {
         // Flush the highlighted text each frame
         this.highlightedText = "";
 
@@ -752,7 +715,7 @@ export class InputTextArea extends InputText {
      * @param ev The clipboard event
      * @internal
      */
-    protected _onCopyText(ev: ClipboardEvent): void {
+    protected override _onCopyText(ev: ClipboardEvent): void {
         this._isTextHighlightOn = false;
         //when write permission to clipbaord data is denied
         try {
@@ -767,7 +730,7 @@ export class InputTextArea extends InputText {
      * @param ev The clipboard event
      * @internal
      */
-    protected _onCutText(ev: ClipboardEvent): void {
+    protected override _onCutText(ev: ClipboardEvent): void {
         if (!this._highlightedText) {
             return;
         }
@@ -789,7 +752,7 @@ export class InputTextArea extends InputText {
      * @param ev The clipboard event
      * @internal
      */
-    protected _onPasteText(ev: ClipboardEvent): void {
+    protected override _onPasteText(ev: ClipboardEvent): void {
         let data: string = "";
         if (ev.clipboardData && ev.clipboardData.types.indexOf("text/plain") !== -1) {
             data = ev.clipboardData.getData("text/plain");
@@ -806,11 +769,13 @@ export class InputTextArea extends InputText {
 
         this._cursorInfo.globalStartIndex += deltaIndex;
         this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
+        this._clickedCoordinateX = null;
+        this._clickedCoordinateY = null;
 
-        this._textHasChanged();
+        super._textHasChanged();
     }
 
-    public _draw(context: ICanvasRenderingContext): void {
+    public override _draw(context: ICanvasRenderingContext): void {
         this._computeScroll();
 
         this._scrollLeft = this._scrollLeft ?? 0;
@@ -900,7 +865,8 @@ export class InputTextArea extends InputText {
         if (this._isFocused) {
             // Render cursor
             if (!this._blinkIsEven || this._isTextHighlightOn) {
-                let cursorLeft = this._scrollLeft + context.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substr(0, this._cursorInfo.relativeStartIndex)).width;
+                let cursorLeft =
+                    this._scrollLeft + context.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substring(0, this._cursorInfo.relativeStartIndex)).width;
 
                 if (cursorLeft < this._clipTextLeft) {
                     this._scrollLeft += this._clipTextLeft - cursorLeft;
@@ -918,7 +884,7 @@ export class InputTextArea extends InputText {
                     this._scrollTop += this._clipTextTop - cursorTop;
                     cursorTop = this._clipTextTop;
                     this._markAsDirty();
-                } else if (cursorTop + this._fontOffset.height > this._clipTextTop + this._availableHeight) {
+                } else if (cursorTop + this._fontOffset.height > this._clipTextTop + this._availableHeight && this._availableHeight > this._fontOffset.height) {
                     this._scrollTop += this._clipTextTop + this._availableHeight - cursorTop - this._fontOffset.height;
                     cursorTop = this._clipTextTop + this._availableHeight - this._fontOffset.height;
                     this._markAsDirty();
@@ -948,7 +914,7 @@ export class InputTextArea extends InputText {
                 for (let i = startLineIndex; i <= endLineIndex; i++) {
                     const line = this._lines[i];
 
-                    let highlightRootX = this._scrollLeft as number;
+                    let highlightRootX = this._scrollLeft;
                     switch (this._textHorizontalAlignment) {
                         case Control.HORIZONTAL_ALIGNMENT_LEFT:
                             highlightRootX += 0;
@@ -964,7 +930,7 @@ export class InputTextArea extends InputText {
                     const begin = i === startLineIndex ? this._cursorInfo.relativeStartIndex : 0;
                     const end = i === endLineIndex ? this._cursorInfo.relativeEndIndex : line.text.length;
 
-                    const leftOffsetWidth = context.measureText(line.text.substr(0, begin)).width;
+                    const leftOffsetWidth = context.measureText(line.text.substring(0, begin)).width;
                     const selectedText = line.text.substring(begin, end);
                     const hightlightWidth = context.measureText(selectedText).width;
 
@@ -1012,15 +978,7 @@ export class InputTextArea extends InputText {
         }, 500);
     }
 
-    protected _applyStates(context: ICanvasRenderingContext): void {
-        super._applyStates(context);
-        if (this.outlineWidth) {
-            context.lineWidth = this.outlineWidth;
-            context.strokeStyle = this.outlineColor;
-        }
-    }
-
-    public _onPointerDown(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, pi: PointerInfoBase): boolean {
+    public override _onPointerDown(target: Control, coordinates: Vector2, pointerId: number, buttonIndex: number, pi: PointerInfoBase): boolean {
         if (!super._onPointerDown(target, coordinates, pointerId, buttonIndex, pi)) {
             return false;
         }
@@ -1051,7 +1009,7 @@ export class InputTextArea extends InputText {
     }
 
     // for textselection
-    public _onPointerMove(target: Control, coordinates: Vector2, pointerId: number, pi: PointerInfoBase): void {
+    public override _onPointerMove(target: Control, coordinates: Vector2, pointerId: number, pi: PointerInfoBase): void {
         // Avoid Chromium-like beahavior when this event is fired right after onPointerDown
         if (pi.event.movementX === 0 && pi.event.movementY === 0) {
             return;
@@ -1122,7 +1080,7 @@ export class InputTextArea extends InputText {
                 while (currentSize < relativeXPosition && this._lines[this._cursorInfo.currentLineIndex].text.length > relativeIndex) {
                     relativeIndex++;
                     previousDist = Math.abs(relativeXPosition - currentSize);
-                    currentSize = this._contextForBreakLines.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substr(0, relativeIndex)).width;
+                    currentSize = this._contextForBreakLines.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substring(0, relativeIndex)).width;
                 }
 
                 // Find closest move
@@ -1174,7 +1132,10 @@ export class InputTextArea extends InputText {
 
                 this._cursorInfo.relativeStartIndex = this._cursorInfo.globalStartIndex - tmpLength;
 
-                if (this._highlightCursorInfo.initialStartIndex !== -1 && this._cursorInfo.globalStartIndex >= this._highlightCursorInfo.initialStartIndex) {
+                if (!this._isTextHighlightOn) {
+                    this._cursorInfo.relativeEndIndex = this._cursorInfo.relativeStartIndex;
+                    this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
+                } else if (this._highlightCursorInfo.initialStartIndex !== -1 && this._cursorInfo.globalStartIndex >= this._highlightCursorInfo.initialStartIndex) {
                     // Current line is at least below the initial highlight index
                     while (tmpLength + lineLength <= this._cursorInfo.globalEndIndex) {
                         tmpLength += lineLength;
@@ -1186,9 +1147,6 @@ export class InputTextArea extends InputText {
                     }
 
                     this._cursorInfo.relativeEndIndex = this._cursorInfo.globalEndIndex - tmpLength;
-                } else if (!this._isTextHighlightOn) {
-                    this._cursorInfo.relativeEndIndex = this._cursorInfo.relativeStartIndex;
-                    this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
                 }
             }
         }
@@ -1201,7 +1159,7 @@ export class InputTextArea extends InputText {
      * @internal
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    protected _updateValueFromCursorIndex(offset: number) {
+    protected override _updateValueFromCursorIndex(offset: number) {
         // Override to avoid parent behavior during _onPointerMove
     }
 
@@ -1211,7 +1169,7 @@ export class InputTextArea extends InputText {
      * @param _evt Pointer informations of double click
      * @internal
      */
-    protected _processDblClick(_evt: PointerInfo) {
+    protected override _processDblClick(_evt: PointerInfo) {
         //pre-find the start and end index of the word under cursor, speeds up the rendering
         let moveLeft, moveRight;
         do {
@@ -1231,7 +1189,7 @@ export class InputTextArea extends InputText {
     }
 
     /** @internal */
-    protected _selectAllText() {
+    public override selectAllText() {
         this._isTextHighlightOn = true;
         this._blinkIsEven = true;
 
@@ -1252,7 +1210,7 @@ export class InputTextArea extends InputText {
         this._markAsDirty();
     }
 
-    public dispose() {
+    public override dispose() {
         super.dispose();
 
         this.onLinesReadyObservable.clear();

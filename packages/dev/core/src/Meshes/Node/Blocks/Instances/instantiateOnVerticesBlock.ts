@@ -44,6 +44,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
         this.registerInput("instance", NodeGeometryBlockConnectionPointTypes.Geometry, true);
         this.registerInput("density", NodeGeometryBlockConnectionPointTypes.Float, true, 1, 0, 1);
         this.registerInput("matrix", NodeGeometryBlockConnectionPointTypes.Matrix, true);
+        this.registerInput("offset", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.Zero());
         this.registerInput("rotation", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.Zero());
         this.registerInput("scaling", NodeGeometryBlockConnectionPointTypes.Vector3, true, Vector3.One());
 
@@ -87,7 +88,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "InstantiateOnVerticesBlock";
     }
 
@@ -120,17 +121,24 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
     }
 
     /**
+     * Gets the offset input component
+     */
+    public get offset(): NodeGeometryConnectionPoint {
+        return this._inputs[4];
+    }
+
+    /**
      * Gets the rotation input component
      */
     public get rotation(): NodeGeometryConnectionPoint {
-        return this._inputs[4];
+        return this._inputs[5];
     }
 
     /**
      * Gets the scaling input component
      */
     public get scaling(): NodeGeometryConnectionPoint {
-        return this._inputs[5];
+        return this._inputs[6];
     }
 
     /**
@@ -140,7 +148,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeGeometryBuildState) {
+    protected override _buildBlock(state: NodeGeometryBuildState) {
         const func = (state: NodeGeometryBuildState) => {
             state.pushExecutionContext(this);
             state.pushInstancingContext(this);
@@ -216,8 +224,12 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
                     const transform = this.matrix.getConnectedValue(state);
                     state._instantiateWithPositionAndMatrix(clone, currentPosition, transform, additionalVertexData);
                 } else {
+                    const offset = state.adaptInput(this.offset, NodeGeometryBlockConnectionPointTypes.Vector3, Vector3.ZeroReadOnly);
                     const scaling = state.adaptInput(this.scaling, NodeGeometryBlockConnectionPointTypes.Vector3, Vector3.OneReadOnly);
                     const rotation = this.rotation.getConnectedValue(state) || Vector3.ZeroReadOnly;
+
+                    currentPosition.addInPlace(offset);
+
                     state._instantiate(clone, currentPosition, rotation, scaling, additionalVertexData);
                 }
                 this._currentLoopIndex++;
@@ -253,7 +265,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         let codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.removeDuplicatedPositions = ${this.removeDuplicatedPositions ? "true" : "false"};\n`;
         codeString += `${this._codeVariableName}.evaluateContext = ${this.evaluateContext ? "true" : "false"};\n`;
         return codeString;
@@ -263,7 +275,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.removeDuplicatedPositions = this.removeDuplicatedPositions;
@@ -272,7 +284,7 @@ export class InstantiateOnVerticesBlock extends NodeGeometryBlock implements INo
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.removeDuplicatedPositions = serializationObject.removeDuplicatedPositions;

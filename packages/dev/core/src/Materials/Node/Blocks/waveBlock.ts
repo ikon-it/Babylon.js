@@ -5,11 +5,12 @@ import type { NodeMaterialConnectionPoint } from "../nodeMaterialBlockConnection
 import { NodeMaterialBlockTargets } from "../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../Misc/typeStore";
 import type { Scene } from "../../../scene";
+import { editableInPropertyPage, PropertyTypeForEdition } from "core/Decorators/nodeDecorator";
 
 /**
  * Operations supported by the Wave block
  */
-export enum WaveBlockKind {
+export const enum WaveBlockKind {
     /** SawTooth */
     SawTooth,
     /** Square */
@@ -25,6 +26,15 @@ export class WaveBlock extends NodeMaterialBlock {
     /**
      * Gets or sets the kibnd of wave to be applied by the block
      */
+    @editableInPropertyPage("Kind", PropertyTypeForEdition.List, "ADVANCED", {
+        notifiers: { rebuild: true },
+        embedded: true,
+        options: [
+            { label: "SawTooth", value: WaveBlockKind.SawTooth },
+            { label: "Square", value: WaveBlockKind.Square },
+            { label: "Triangle", value: WaveBlockKind.Triangle },
+        ],
+    })
     public kind = WaveBlockKind.SawTooth;
 
     /**
@@ -46,7 +56,7 @@ export class WaveBlock extends NodeMaterialBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "WaveBlock";
     }
 
@@ -64,23 +74,23 @@ export class WaveBlock extends NodeMaterialBlock {
         return this._outputs[0];
     }
 
-    protected _buildBlock(state: NodeMaterialBuildState) {
+    protected override _buildBlock(state: NodeMaterialBuildState) {
         super._buildBlock(state);
 
         const output = this._outputs[0];
 
         switch (this.kind) {
             case WaveBlockKind.SawTooth: {
-                state.compilationString += this._declareOutput(output, state) + ` = ${this.input.associatedVariableName} - floor(0.5 + ${this.input.associatedVariableName});\n`;
+                state.compilationString += state._declareOutput(output) + ` = ${this.input.associatedVariableName} - floor(0.5 + ${this.input.associatedVariableName});\n`;
                 break;
             }
             case WaveBlockKind.Square: {
-                state.compilationString += this._declareOutput(output, state) + ` = 1.0 - 2.0 * round(fract(${this.input.associatedVariableName}));\n`;
+                state.compilationString += state._declareOutput(output) + ` = 1.0 - 2.0 * round(fract(${this.input.associatedVariableName}));\n`;
                 break;
             }
             case WaveBlockKind.Triangle: {
                 state.compilationString +=
-                    this._declareOutput(output, state) + ` = 2.0 * abs(2.0 * (${this.input.associatedVariableName} - floor(0.5 + ${this.input.associatedVariableName}))) - 1.0;\n`;
+                    state._declareOutput(output) + ` = 2.0 * abs(2.0 * (${this.input.associatedVariableName} - floor(0.5 + ${this.input.associatedVariableName}))) - 1.0;\n`;
                 break;
             }
         }
@@ -88,7 +98,7 @@ export class WaveBlock extends NodeMaterialBlock {
         return this;
     }
 
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.kind = this.kind;
@@ -96,7 +106,7 @@ export class WaveBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
+    public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 
         this.kind = serializationObject.kind;

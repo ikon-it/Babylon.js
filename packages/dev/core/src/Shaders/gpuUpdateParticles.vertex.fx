@@ -13,6 +13,12 @@ uniform vec2 emitPower;
 uniform vec2 sizeRange;
 uniform vec4 scaleRange;
 
+#ifdef FLOWMAP
+uniform mat4 flowMapProjection;
+uniform float flowMapStrength;
+uniform sampler2D flowMapSampler;
+#endif
+
 #ifndef COLORGRADIENTS
 uniform vec4 color1;
 uniform vec4 color2;
@@ -67,7 +73,12 @@ uniform float radiusRange;
 uniform vec2 radius;
 uniform float coneAngle;
 uniform vec2 height;
-uniform float directionRandomizer;
+#ifdef DIRECTEDCONEEMITTER
+  uniform vec3 direction1;
+  uniform vec3 direction2;
+#else
+  uniform float directionRandomizer;
+#endif
 #endif
 
 // Particles state
@@ -304,13 +315,17 @@ void main() {
 
     newPosition = vec3(randX, randY, randZ); 
 
-    // Direction
-    if (abs(cos(coneAngle)) == 1.0) {
-        newDirection = vec3(0., 1.0, 0.);
-    } else {
-        vec3 randoms3 = getRandomVec3(seed.z);
-        newDirection = normalize(newPosition + directionRandomizer * randoms3);        
-    }
+    vec3 randoms3 = getRandomVec3(seed.z);
+    #ifdef DIRECTEDCONEEMITTER
+      newDirection = direction1 + (direction2 - direction1) * randoms3;
+    #else
+        // Direction
+        if (abs(cos(coneAngle)) == 1.0) {
+            newDirection = vec3(0., 1.0, 0.);
+        } else {
+            newDirection = normalize(newPosition + directionRandomizer * randoms3);        
+        }
+    #endif
 #elif defined(CUSTOMEMITTER)
       newPosition = initialPosition;
       outInitialPosition = initialPosition;
@@ -400,6 +415,15 @@ void main() {
     outDirection = direction;
 #else
     vec3 updatedDirection = direction + gravity * timeDelta;
+
+    #ifdef FLOWMAP
+        vec4 clipSpace = (flowMapProjection * vec4(position, 1.));
+        vec3 ndcSpace = clipSpace.xyz / clipSpace.w;
+        vec2 flowMapUV = ndcSpace.xy * 0.5 + 0.5;
+        vec4 flowMapValue = texture(flowMapSampler, flowMapUV);
+        vec3 flowMapDirection = (flowMapValue.xyz * 2.0 - 1.0) * flowMapValue.w;
+        updatedDirection += flowMapDirection * timeDelta * flowMapStrength;
+    #endif
 
     #ifdef LIMITVELOCITYGRADIENTS
         float limitVelocity = texture(limitVelocityGradientSampler, vec2(ageGradient, 0)).r;

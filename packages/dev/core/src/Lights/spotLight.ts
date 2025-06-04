@@ -11,6 +11,8 @@ import { ShadowLight } from "./shadowLight";
 import { Texture } from "../Materials/Textures/texture";
 import type { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
 import type { Camera } from "../Cameras/camera";
+import { RegisterClass } from "../Misc/typeStore";
+import { Constants } from "core/Engines/constants";
 
 Node.AddNodeConstructor("Light_Type_2", (name, scene) => {
     return () => new SpotLight(name, Vector3.Zero(), Vector3.Zero(), 0, 0, scene);
@@ -43,6 +45,30 @@ export class SpotLight extends ShadowLight {
 
     private _lightAngleScale: number;
     private _lightAngleOffset: number;
+
+    private _iesProfileTexture: Nullable<BaseTexture> = null;
+
+    /**
+     * Gets or sets the IES profile texture used to create the spotlight
+     * @see https://playground.babylonjs.com/#UIAXAU#1
+     */
+    public get iesProfileTexture(): Nullable<BaseTexture> {
+        return this._iesProfileTexture;
+    }
+
+    public set iesProfileTexture(value: Nullable<BaseTexture>) {
+        if (this._iesProfileTexture === value) {
+            return;
+        }
+
+        this._iesProfileTexture = value;
+
+        if (this._iesProfileTexture && SpotLight._IsTexture(this._iesProfileTexture)) {
+            this._iesProfileTexture.onLoadObservable.addOnce(() => {
+                this._markMeshesAsLightDirty();
+            });
+        }
+    }
 
     /**
      * Gets the cone angle of the spot light in Radians.
@@ -244,7 +270,7 @@ export class SpotLight extends ShadowLight {
      * Returns the string "SpotLight".
      * @returns the class name
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "SpotLight";
     }
 
@@ -252,7 +278,8 @@ export class SpotLight extends ShadowLight {
      * Returns the integer 2.
      * @returns The light Type id as a constant defines in Light.LIGHTTYPEID_x
      */
-    public getTypeID(): number {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    public override getTypeID(): number {
         return Light.LIGHTTYPEID_SPOTLIGHT;
     }
 
@@ -260,7 +287,7 @@ export class SpotLight extends ShadowLight {
      * Overrides the direction setter to recompute the projection texture view light Matrix.
      * @param value
      */
-    protected _setDirection(value: Vector3) {
+    protected override _setDirection(value: Vector3) {
         super._setDirection(value);
         this._projectionTextureViewLightDirty = true;
     }
@@ -269,7 +296,7 @@ export class SpotLight extends ShadowLight {
      * Overrides the position setter to recompute the projection texture view light Matrix.
      * @param value
      */
-    protected _setPosition(value: Vector3) {
+    protected override _setPosition(value: Vector3) {
         super._setPosition(value);
         this._projectionTextureViewLightDirty = true;
     }
@@ -325,12 +352,12 @@ export class SpotLight extends ShadowLight {
         const lightFar = this.projectionTextureLightFar;
         const lightNear = this.projectionTextureLightNear;
 
-        const P = lightFar / (lightFar - lightNear);
-        const Q = -P * lightNear;
-        const S = 1.0 / Math.tan(this._angle / 2.0);
-        const A = 1.0;
+        const p = lightFar / (lightFar - lightNear);
+        const q = -p * lightNear;
+        const s = 1.0 / Math.tan(this._angle / 2.0);
+        const a = 1.0;
 
-        Matrix.FromValuesToRef(S / A, 0.0, 0.0, 0.0, 0.0, S, 0.0, 0.0, 0.0, 0.0, P, 1.0, 0.0, 0.0, Q, 0.0, this._projectionTextureProjectionLightMatrix);
+        Matrix.FromValuesToRef(s / a, 0.0, 0.0, 0.0, 0.0, s, 0.0, 0.0, 0.0, 0.0, p, 1.0, 0.0, 0.0, q, 0.0, this._projectionTextureProjectionLightMatrix);
     }
 
     /**
@@ -370,7 +397,7 @@ export class SpotLight extends ShadowLight {
      * @param lightIndex The index of the light in the effect to update
      * @returns The light
      */
-    public transferTexturesToEffect(effect: Effect, lightIndex: string): Light {
+    public override transferTexturesToEffect(effect: Effect, lightIndex: string): Light {
         if (this.projectionTexture && this.projectionTexture.isReady()) {
             if (this._projectionTextureViewLightDirty) {
                 this._computeProjectionTextureViewLightMatrix();
@@ -382,7 +409,11 @@ export class SpotLight extends ShadowLight {
                 this._computeProjectionTextureMatrix();
             }
             effect.setMatrix("textureProjectionMatrix" + lightIndex, this._projectionTextureMatrix);
-            effect.setTexture("projectionLightSampler" + lightIndex, this.projectionTexture);
+            effect.setTexture("projectionLightTexture" + lightIndex, this.projectionTexture);
+        }
+
+        if (this._iesProfileTexture && this._iesProfileTexture.isReady()) {
+            effect.setTexture("iesLightTexture" + lightIndex, this._iesProfileTexture);
         }
         return this;
     }
@@ -433,10 +464,14 @@ export class SpotLight extends ShadowLight {
     /**
      * Disposes the light and the associated resources.
      */
-    public dispose(): void {
+    public override dispose(): void {
         super.dispose();
         if (this._projectionTexture) {
             this._projectionTexture.dispose();
+        }
+        if (this._iesProfileTexture) {
+            this._iesProfileTexture.dispose();
+            this._iesProfileTexture = null;
         }
     }
 
@@ -445,9 +480,9 @@ export class SpotLight extends ShadowLight {
      * @param activeCamera The camera we are returning the min for
      * @returns the depth min z
      */
-    public getDepthMinZ(activeCamera: Camera): number {
+    public override getDepthMinZ(activeCamera: Nullable<Camera>): number {
         const engine = this._scene.getEngine();
-        const minZ = this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera.minZ;
+        const minZ = this.shadowMinZ !== undefined ? this.shadowMinZ : (activeCamera?.minZ ?? Constants.ShadowMinZ);
 
         return engine.useReverseDepthBuffer && engine.isNDCHalfZRange ? minZ : this._scene.getEngine().isNDCHalfZRange ? 0 : minZ;
     }
@@ -457,9 +492,9 @@ export class SpotLight extends ShadowLight {
      * @param activeCamera The camera we are returning the max for
      * @returns the depth max z
      */
-    public getDepthMaxZ(activeCamera: Camera): number {
+    public override getDepthMaxZ(activeCamera: Nullable<Camera>): number {
         const engine = this._scene.getEngine();
-        const maxZ = this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera.maxZ;
+        const maxZ = this.shadowMaxZ !== undefined ? this.shadowMaxZ : (activeCamera?.maxZ ?? Constants.ShadowMaxZ);
 
         return engine.useReverseDepthBuffer && engine.isNDCHalfZRange ? 0 : maxZ;
     }
@@ -472,5 +507,9 @@ export class SpotLight extends ShadowLight {
     public prepareLightSpecificDefines(defines: any, lightIndex: number): void {
         defines["SPOTLIGHT" + lightIndex] = true;
         defines["PROJECTEDLIGHTTEXTURE" + lightIndex] = this.projectionTexture && this.projectionTexture.isReady() ? true : false;
+        defines["IESLIGHTTEXTURE" + lightIndex] = this._iesProfileTexture && this._iesProfileTexture.isReady() ? true : false;
     }
 }
+
+// Register Class Name
+RegisterClass("BABYLON.SpotLight", SpotLight);

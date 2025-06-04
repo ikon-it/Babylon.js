@@ -1,5 +1,6 @@
 import type { Nullable } from "core/types";
-import { serialize, SerializationHelper } from "core/Misc/decorators";
+import { serialize } from "core/Misc/decorators";
+import { SerializationHelper } from "core/Misc/decorators.serialization";
 import type { Camera } from "core/Cameras/camera";
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Texture } from "core/Materials/Textures/texture";
@@ -146,7 +147,7 @@ export class AsciiArtFontTexture extends BaseTexture {
      * Clones the current AsciiArtTexture.
      * @returns the clone of the texture.
      */
-    public clone(): AsciiArtFontTexture {
+    public override clone(): AsciiArtFontTexture {
         return new AsciiArtFontTexture(this.name, this._font, this._text, this.getScene());
     }
 
@@ -231,12 +232,12 @@ export class AsciiArtPostProcess extends PostProcess {
         // Use options.
         if (options) {
             if (typeof options === "string") {
-                font = <string>options;
+                font = options;
             } else {
-                font = (<IAsciiArtPostProcessOptions>options).font || font;
-                characterSet = (<IAsciiArtPostProcessOptions>options).characterSet || characterSet;
-                this.mixToTile = (<IAsciiArtPostProcessOptions>options).mixToTile || this.mixToTile;
-                this.mixToNormal = (<IAsciiArtPostProcessOptions>options).mixToNormal || this.mixToNormal;
+                font = options.font || font;
+                characterSet = options.characterSet || characterSet;
+                this.mixToTile = options.mixToTile || this.mixToTile;
+                this.mixToNormal = options.mixToNormal || this.mixToNormal;
             }
         }
 

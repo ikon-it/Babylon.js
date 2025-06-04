@@ -12,8 +12,9 @@ import type { Camera } from "../Cameras/camera";
 import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import type { PrePassRenderTarget } from "../Materials/Textures/prePassRenderTarget";
 
-declare module "../abstractScene" {
-    export interface AbstractScene {
+declare module "../scene" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    export interface Scene {
         /** @internal (Backing field) */
         _prePassRenderer: Nullable<PrePassRenderer>;
 
@@ -36,6 +37,7 @@ declare module "../abstractScene" {
 }
 
 declare module "../Materials/Textures/renderTargetTexture" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface RenderTargetTexture {
         /**
          * Gets or sets a boolean indicating that the prepass renderer should not be used with this render target

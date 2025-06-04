@@ -12,7 +12,11 @@ import type { InternalTexture } from "./internalTexture";
  */
 export interface IMultiRenderTargetOptions {
     /**
-     * Define if the texture needs to create mip maps after render.
+     * Specifies if mipmaps must be created. If undefined, the value from generateMipMaps is taken instead
+     */
+    createMipMaps?: boolean;
+    /**
+     * Define if the texture needs to create mip maps after render (default: false).
      */
     generateMipMaps?: boolean;
     /**
@@ -28,15 +32,15 @@ export interface IMultiRenderTargetOptions {
      */
     useSRGBBuffers?: boolean[];
     /**
-     * Define if a depth buffer is required
+     * Define if a depth buffer is required (default: true)
      */
     generateDepthBuffer?: boolean;
     /**
-     * Define if a stencil buffer is required
+     * Define if a stencil buffer is required (default: false)
      */
     generateStencilBuffer?: boolean;
     /**
-     * Define if a depth texture is required instead of a depth buffer
+     * Define if a depth texture is required instead of a depth buffer (default: false)
      */
     generateDepthTexture?: boolean;
     /**
@@ -48,19 +52,23 @@ export interface IMultiRenderTargetOptions {
      */
     depthTextureFormat?: number;
     /**
-     * Define the number of desired draw buffers (render textures)
+     * Define the number of desired draw buffers (render textures). You can set it to 0 if you don't need any color attachment. (default: 1)
      */
     textureCount?: number;
     /**
-     * Define if aspect ratio should be adapted to the texture or stay the scene one
+     * Define if aspect ratio should be adapted to the texture or stay the scene one (default: true)
      */
     doNotChangeAspectRatio?: boolean;
     /**
-     * Define the default type of the buffers we are creating
+     * Define the default type of the buffers we are creating (default: Constants.TEXTURETYPE_UNSIGNED_BYTE). types[] is prioritized over defaultType if provided.
      */
     defaultType?: number;
     /**
-     * Define the default type of the buffers we are creating
+     * Defines sample count (1 by default)
+     */
+    samples?: number;
+    /**
+     * Defines if we should draw into all attachments or the first one only by default (default: false)
      */
     drawOnlyOnFirstAttachmentByDefault?: boolean;
     /**
@@ -85,6 +93,10 @@ export interface IMultiRenderTargetOptions {
      */
     layerCounts?: number[];
     /**
+     * Define the creation flags of the textures (Constants.TEXTURE_CREATIONFLAG_STORAGE for storage textures, for eg)
+     */
+    creationFlags?: number[];
+    /**
      * Define the names of the textures (used for debugging purpose)
      */
     labels?: string[];
@@ -92,6 +104,11 @@ export interface IMultiRenderTargetOptions {
      * Label of the RenderTargetWrapper (used for debugging only)
      */
     label?: string;
+    /**
+     * Define if the textures should not be created by the MultiRenderTarget (default: false)
+     * If true, you will need to set the textures yourself by calling setTexture on the MultiRenderTarget.
+     */
+    dontCreateTextures?: boolean;
 }
 
 /**
@@ -139,7 +156,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
      * Set the wrapping mode on U of all the textures we are rendering to.
      * Can be any of the Texture. (CLAMP_ADDRESSMODE, MIRROR_ADDRESSMODE or WRAP_ADDRESSMODE)
      */
-    public set wrapU(wrap: number) {
+    public override set wrapU(wrap: number) {
         if (this._textures) {
             for (let i = 0; i < this._textures.length; i++) {
                 this._textures[i].wrapU = wrap;
@@ -151,7 +168,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
      * Set the wrapping mode on V of all the textures we are rendering to.
      * Can be any of the Texture. (CLAMP_ADDRESSMODE, MIRROR_ADDRESSMODE or WRAP_ADDRESSMODE)
      */
-    public set wrapV(wrap: number) {
+    public override set wrapV(wrap: number) {
         if (this._textures) {
             for (let i = 0; i < this._textures.length; i++) {
                 this._textures[i].wrapV = wrap;
@@ -199,6 +216,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
 
         const generateDepthBuffer = !options || options.generateDepthBuffer === undefined ? true : options.generateDepthBuffer;
         const generateStencilBuffer = !options || options.generateStencilBuffer === undefined ? false : options.generateStencilBuffer;
+        const samples = options && options.samples ? options.samples : 1;
 
         this._multiRenderTargetOptions = {
             samplingModes: samplingModes,
@@ -210,6 +228,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
             types: types,
             textureCount: count,
             useSRGBBuffers: useSRGBBuffers,
+            samples,
             formats: formats,
             targetTypes: targetTypes,
             faceIndex: faceIndex,
@@ -244,7 +263,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
             if (options && options.types && options.types[i] !== undefined) {
                 types.push(options.types[i]);
             } else {
-                types.push(options && options.defaultType ? options.defaultType : Constants.TEXTURETYPE_UNSIGNED_INT);
+                types.push(options && options.defaultType ? options.defaultType : Constants.TEXTURETYPE_UNSIGNED_BYTE);
             }
 
             if (options && options.samplingModes && options.samplingModes[i] !== undefined) {
@@ -299,7 +318,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
             return mapInternalTexture2MainIndex;
         }
 
-        const internalTextures = this._renderTarget!.textures!;
+        const internalTextures = this._renderTarget.textures!;
         for (let i = 0; i < internalTextures.length; i++) {
             const texture = internalTextures[i];
             if (!texture) {
@@ -319,7 +338,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
     /**
      * @internal
      */
-    public _rebuild(fromContextLost = false, forceFullRebuild: boolean = false, textureNames?: string[]): void {
+    public override _rebuild(fromContextLost = false, forceFullRebuild: boolean = false, textureNames?: string[]): void {
         if (this._count < 1 || fromContextLost) {
             return;
         }
@@ -476,11 +495,11 @@ export class MultiRenderTarget extends RenderTargetTexture {
     /**
      * Define the number of samples used if MSAA is enabled.
      */
-    public get samples(): number {
+    public override get samples(): number {
         return this._samples;
     }
 
-    public set samples(value: number) {
+    public override set samples(value: number) {
         if (this._renderTarget) {
             this._samples = this._renderTarget.setSamples(value);
         } else {
@@ -494,8 +513,8 @@ export class MultiRenderTarget extends RenderTargetTexture {
      * Be careful as it will recreate all the data in the new texture.
      * @param size Define the new size
      */
-    public resize(size: any) {
-        this._processSizeParameter(size, false);
+    public override resize(size: any) {
+        this._processSizeParameter(size);
         this._rebuild(false, undefined, this._textureNames);
     }
 
@@ -535,7 +554,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
         this._rebuild(false, true, textureNames);
     }
 
-    protected _unbindFrameBuffer(engine: Engine, faceIndex: number): void {
+    protected override _unbindFrameBuffer(engine: Engine, faceIndex: number): void {
         if (this._renderTarget) {
             engine.unBindMultiColorAttachmentFramebuffer(this._renderTarget, this.isCube, () => {
                 this.onAfterRenderObservable.notifyObservers(faceIndex);
@@ -547,7 +566,7 @@ export class MultiRenderTarget extends RenderTargetTexture {
      * Dispose the render targets and their associated resources
      * @param doNotDisposeInternalTextures if set to true, internal textures won't be disposed (default: false).
      */
-    public dispose(doNotDisposeInternalTextures = false): void {
+    public override dispose(doNotDisposeInternalTextures = false): void {
         this._releaseTextures();
         if (!doNotDisposeInternalTextures) {
             this.releaseInternalTextures();

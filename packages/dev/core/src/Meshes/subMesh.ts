@@ -1,6 +1,5 @@
 import type { Nullable, IndicesArray, DeepImmutable, FloatArray } from "../types";
 import type { Matrix, Vector3 } from "../Maths/math.vector";
-import type { Engine } from "../Engines/engine";
 import { VertexBuffer } from "../Buffers/buffer";
 import { IntersectionInfo } from "../Collisions/intersectionInfo";
 import type { ICullable } from "../Culling/boundingInfo";
@@ -21,12 +20,13 @@ import type { AbstractMesh } from "./abstractMesh";
 import type { Mesh } from "./mesh";
 import type { Ray } from "../Culling/ray";
 import type { TrianglePickingPredicate } from "../Culling/ray";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 
 /**
  * Defines a subdivision inside a mesh
  */
 export class SubMesh implements ICullable {
-    private _engine: Engine;
+    private _engine: AbstractEngine;
     /** @internal */
     public _drawWrappers: Array<DrawWrapper>; // index in this array = pass id
     private _mainDrawWrapperOverride: Nullable<DrawWrapper> = null;
@@ -61,9 +61,9 @@ export class SubMesh implements ICullable {
     /**
      * @internal
      */
-    public _removeDrawWrapper(passId: number, disposeWrapper = true) {
+    public _removeDrawWrapper(passId: number, disposeWrapper = true, immediate = false): void {
         if (disposeWrapper) {
-            this._drawWrappers[passId]?.dispose();
+            this._drawWrappers[passId]?.dispose(immediate);
         }
         this._drawWrappers[passId] = undefined as any;
     }
@@ -72,7 +72,7 @@ export class SubMesh implements ICullable {
      * Gets associated (main) effect (possibly the effect override if defined)
      */
     public get effect(): Nullable<Effect> {
-        return this._mainDrawWrapperOverride ? this._mainDrawWrapperOverride.effect : this._getDrawWrapper()?.effect ?? null;
+        return this._mainDrawWrapperOverride ? this._mainDrawWrapperOverride.effect : (this._getDrawWrapper()?.effect ?? null);
     }
 
     /** @internal */
@@ -114,15 +114,16 @@ export class SubMesh implements ICullable {
     /**
      * Resets the draw wrappers cache
      * @param passId If provided, releases only the draw wrapper corresponding to this render pass id
+     * @param immediate If true, the draw wrapper will dispose the effect immediately (false by default)
      */
-    public resetDrawCache(passId?: number): void {
+    public resetDrawCache(passId?: number, immediate = false): void {
         if (this._drawWrappers) {
             if (passId !== undefined) {
-                this._removeDrawWrapper(passId);
+                this._removeDrawWrapper(passId, true, immediate);
                 return;
             } else {
                 for (const drawWrapper of this._drawWrappers) {
-                    drawWrapper?.dispose();
+                    drawWrapper?.dispose(immediate);
                 }
             }
         }
@@ -300,7 +301,7 @@ export class SubMesh implements ICullable {
         const rootMaterial = this._renderingMesh.getMaterialForRenderPass(this._engine.currentRenderPassId) ?? this._renderingMesh.material;
 
         if (!rootMaterial) {
-            return getDefaultMaterial ? this._mesh.getScene().defaultMaterial : null;
+            return getDefaultMaterial && this._mesh.getScene()._hasDefaultMaterial ? this._mesh.getScene().defaultMaterial : null;
         } else if (this._isMultiMaterial(rootMaterial)) {
             const effectiveMaterial = rootMaterial.getSubMaterial(this.materialIndex);
 
@@ -385,7 +386,7 @@ export class SubMesh implements ICullable {
             boundingInfo = this.getBoundingInfo();
         }
         if (boundingInfo) {
-            (<BoundingInfo>boundingInfo).update(world);
+            boundingInfo.update(world);
         }
         return this;
     }
@@ -431,12 +432,32 @@ export class SubMesh implements ICullable {
     /**
      * @internal
      */
-    public _getLinesIndexBuffer(indices: IndicesArray, engine: Engine): DataBuffer {
+    public _getLinesIndexBuffer(indices: IndicesArray, engine: AbstractEngine): DataBuffer {
         if (!this._linesIndexBuffer) {
-            const linesIndices = [];
+            const adjustedIndexCount = Math.floor(this.indexCount / 3) * 6;
+            const shouldUseUint32 = this.verticesStart + this.verticesCount > 65535;
+            const linesIndices = shouldUseUint32 ? new Uint32Array(adjustedIndexCount) : new Uint16Array(adjustedIndexCount);
 
-            for (let index = this.indexStart; index < this.indexStart + this.indexCount; index += 3) {
-                linesIndices.push(indices[index], indices[index + 1], indices[index + 1], indices[index + 2], indices[index + 2], indices[index]);
+            let offset = 0;
+            if (indices.length === 0) {
+                // Unindexed mesh
+                for (let index = this.indexStart; index < this.indexStart + this.indexCount; index += 3) {
+                    linesIndices[offset++] = index;
+                    linesIndices[offset++] = index + 1;
+                    linesIndices[offset++] = index + 1;
+                    linesIndices[offset++] = index + 2;
+                    linesIndices[offset++] = index + 2;
+                    linesIndices[offset++] = index;
+                }
+            } else {
+                for (let index = this.indexStart; index < this.indexStart + this.indexCount; index += 3) {
+                    linesIndices[offset++] = indices[index];
+                    linesIndices[offset++] = indices[index + 1];
+                    linesIndices[offset++] = indices[index + 1];
+                    linesIndices[offset++] = indices[index + 2];
+                    linesIndices[offset++] = indices[index + 2];
+                    linesIndices[offset++] = indices[index];
+                }
             }
 
             this._linesIndexBuffer = engine.createIndexBuffer(linesIndices);
@@ -697,8 +718,9 @@ export class SubMesh implements ICullable {
 
     /**
      * Release associated resources
+     * @param immediate If true, the effect will be disposed immediately (false by default)
      */
-    public dispose(): void {
+    public dispose(immediate = false): void {
         if (this._linesIndexBuffer) {
             this._mesh.getScene().getEngine()._releaseBuffer(this._linesIndexBuffer);
             this._linesIndexBuffer = null;
@@ -708,7 +730,7 @@ export class SubMesh implements ICullable {
         const index = this._mesh.subMeshes.indexOf(this);
         this._mesh.subMeshes.splice(index, 1);
 
-        this.resetDrawCache();
+        this.resetDrawCache(undefined, immediate);
     }
 
     /**
@@ -742,7 +764,7 @@ export class SubMesh implements ICullable {
         let maxVertexIndex = -Number.MAX_VALUE;
 
         const whatWillRender = renderingMesh || mesh;
-        const indices = whatWillRender!.getIndices()!;
+        const indices = whatWillRender.getIndices()!;
 
         for (let index = startIndex; index < startIndex + indexCount; index++) {
             const vertexIndex = indices[index];

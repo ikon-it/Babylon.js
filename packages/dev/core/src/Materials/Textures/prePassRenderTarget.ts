@@ -29,12 +29,12 @@ export class PrePassRenderTarget extends MultiRenderTarget {
     /**
      * @internal
      */
-    public _engine: Engine;
+    public override _engine: Engine;
 
     /**
      * @internal
      */
-    public _scene: Scene;
+    public override _scene: Scene;
 
     /**
      * @internal
@@ -57,7 +57,7 @@ export class PrePassRenderTarget extends MultiRenderTarget {
      */
     public renderTargetTexture: Nullable<RenderTargetTexture> = null;
 
-    public constructor(name: string, renderTargetTexture: Nullable<RenderTargetTexture>, size: any, count: number, scene?: Scene, options?: IMultiRenderTargetOptions | undefined) {
+    public constructor(name: string, renderTargetTexture: Nullable<RenderTargetTexture>, size: any, count: number, scene?: Scene, options?: IMultiRenderTargetOptions) {
         super(name, size, count, scene, options);
 
         this.renderTargetTexture = renderTargetTexture;
@@ -97,7 +97,7 @@ export class PrePassRenderTarget extends MultiRenderTarget {
      * @param options Specifies texture types and sampling modes for new textures
      * @param textureNames Specifies the names of the textures (optional)
      */
-    public updateCount(count: number, options?: IMultiRenderTargetOptions, textureNames?: string[]) {
+    public override updateCount(count: number, options?: IMultiRenderTargetOptions, textureNames?: string[]) {
         super.updateCount(count, options, textureNames);
         this._internalTextureDirty = true;
     }
@@ -113,7 +113,7 @@ export class PrePassRenderTarget extends MultiRenderTarget {
     /**
      * Diposes this render target
      */
-    public dispose() {
+    public override dispose() {
         const scene = this._scene;
 
         super.dispose();

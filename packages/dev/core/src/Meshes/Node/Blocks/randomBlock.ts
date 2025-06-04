@@ -16,9 +16,13 @@ export enum RandomBlockLocks {
     /** None */
     None,
     /** LoopID */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     LoopID,
     /** InstanceID */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     InstanceID,
+    /** Once */
+    Once,
 }
 
 /**
@@ -31,10 +35,12 @@ export class RandomBlock extends NodeGeometryBlock {
      */
     @editableInPropertyPage("LockMode", PropertyTypeForEdition.List, "ADVANCED", {
         notifiers: { rebuild: true },
+        embedded: true,
         options: [
             { label: "None", value: RandomBlockLocks.None },
             { label: "LoopID", value: RandomBlockLocks.LoopID },
             { label: "InstanceID", value: RandomBlockLocks.InstanceID },
+            { label: "Once", value: RandomBlockLocks.Once },
         ],
     })
     public lockMode = RandomBlockLocks.None;
@@ -66,7 +72,7 @@ export class RandomBlock extends NodeGeometryBlock {
      * Gets the current class name
      * @returns the class name
      */
-    public getClassName() {
+    public override getClassName() {
         return "RandomBlock";
     }
 
@@ -91,7 +97,7 @@ export class RandomBlock extends NodeGeometryBlock {
         return this._outputs[0];
     }
 
-    public autoConfigure() {
+    public override autoConfigure() {
         if (!this.min.isConnected) {
             const minInput = new GeometryInputBlock("Min");
             minInput.value = 0;
@@ -105,7 +111,7 @@ export class RandomBlock extends NodeGeometryBlock {
         }
     }
 
-    protected _buildBlock() {
+    protected override _buildBlock() {
         let func: Nullable<(state: NodeGeometryBuildState) => any> = null;
         this._currentLockId = -1;
 
@@ -163,18 +169,21 @@ export class RandomBlock extends NodeGeometryBlock {
                     case RandomBlockLocks.LoopID:
                         lockId = state.getContextualValue(NodeGeometryContextualSources.LoopID, true) || 0;
                         break;
+                    case RandomBlockLocks.Once:
+                        lockId = state.buildId || 0;
+                        break;
                 }
 
                 if (this._currentLockId !== lockId || this.lockMode === RandomBlockLocks.None) {
                     this._currentLockId = lockId;
-                    this.output._storedValue = func!(state);
+                    this.output._storedValue = func(state);
                 }
                 return this.output._storedValue;
             };
         }
     }
 
-    protected _dumpPropertiesCode() {
+    protected override _dumpPropertiesCode() {
         const codeString = super._dumpPropertiesCode() + `${this._codeVariableName}.lockMode = BABYLON.RandomBlockLocks.${RandomBlockLocks[this.lockMode]};\n`;
         return codeString;
     }
@@ -183,7 +192,7 @@ export class RandomBlock extends NodeGeometryBlock {
      * Serializes this block in a JSON representation
      * @returns the serialized block object
      */
-    public serialize(): any {
+    public override serialize(): any {
         const serializationObject = super.serialize();
 
         serializationObject.lockMode = this.lockMode;
@@ -191,7 +200,7 @@ export class RandomBlock extends NodeGeometryBlock {
         return serializationObject;
     }
 
-    public _deserialize(serializationObject: any) {
+    public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 
         this.lockMode = serializationObject.lockMode;

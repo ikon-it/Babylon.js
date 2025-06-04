@@ -1,12 +1,12 @@
 import type { Nullable } from "../types";
 import { Vector2, Vector3, TmpVectors, Vector4 } from "../Maths/math.vector";
 import { Color4 } from "../Maths/math.color";
-import { Scalar } from "../Maths/math.scalar";
-import type { ParticleSystem } from "./particleSystem";
 import type { SubEmitter } from "./subEmitter";
 import type { ColorGradient, FactorGradient } from "../Misc/gradients";
 
 import type { AbstractMesh } from "../Meshes/abstractMesh";
+import type { ThinParticleSystem } from "./thinParticleSystem";
+import { Clamp } from "../Maths/math.scalar.functions";
 
 /**
  * A particle represents one of the element emitted by a particle system.
@@ -88,9 +88,9 @@ export class Particle {
     public _attachedSubEmitters: Nullable<Array<SubEmitter>> = null;
 
     /** @internal */
-    public _initialStartSpriteCellID: number;
+    public _initialStartSpriteCellId: number;
     /** @internal */
-    public _initialEndSpriteCellID: number;
+    public _initialEndSpriteCellId: number;
     /** @internal */
     public _initialSpriteCellLoop: boolean;
 
@@ -152,7 +152,7 @@ export class Particle {
         /**
          * The particle system the particle belongs to.
          */
-        public particleSystem: ParticleSystem
+        public particleSystem: ThinParticleSystem
     ) {
         this.id = Particle._Count++;
         if (!this.particleSystem.isAnimationSheetEnabled) {
@@ -187,14 +187,14 @@ export class Particle {
             }
         }
 
-        const dist = this._initialEndSpriteCellID - this._initialStartSpriteCellID;
+        const dist = this._initialEndSpriteCellId - this._initialStartSpriteCellId + 1;
         let ratio: number;
         if (this._initialSpriteCellLoop) {
-            ratio = Scalar.Clamp(((offsetAge * changeSpeed) % this.lifeTime) / this.lifeTime);
+            ratio = Clamp(((offsetAge * changeSpeed) % this.lifeTime) / this.lifeTime);
         } else {
-            ratio = Scalar.Clamp((offsetAge * changeSpeed) / this.lifeTime);
+            ratio = Clamp((offsetAge * changeSpeed) / this.lifeTime);
         }
-        this.cellIndex = (this._initialStartSpriteCellID + ratio * dist) | 0;
+        this.cellIndex = (this._initialStartSpriteCellId + ratio * dist) | 0;
     }
 
     /**
@@ -221,9 +221,9 @@ export class Particle {
     /** @internal */
     public _inheritParticleInfoToSubEmitters() {
         if (this._attachedSubEmitters && this._attachedSubEmitters.length > 0) {
-            this._attachedSubEmitters.forEach((subEmitter) => {
+            for (const subEmitter of this._attachedSubEmitters) {
                 this._inheritParticleInfoToSubEmitter(subEmitter);
-            });
+            }
         }
     }
 
@@ -308,8 +308,8 @@ export class Particle {
             other._currentDrag2 = this._currentDrag2;
         }
         if (this.particleSystem.isAnimationSheetEnabled) {
-            other._initialStartSpriteCellID = this._initialStartSpriteCellID;
-            other._initialEndSpriteCellID = this._initialEndSpriteCellID;
+            other._initialStartSpriteCellId = this._initialStartSpriteCellId;
+            other._initialEndSpriteCellId = this._initialEndSpriteCellId;
             other._initialSpriteCellLoop = this._initialSpriteCellLoop;
         }
         if (this.particleSystem.useRampGradients) {

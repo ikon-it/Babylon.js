@@ -1,7 +1,7 @@
 /**
  * Enum used to define the mode for an animation group mask
  */
-export enum AnimationGroupMaskMode {
+export const enum AnimationGroupMaskMode {
     /**
      * The mask defines the animatable target names that should be included
      */
@@ -21,7 +21,7 @@ export class AnimationGroupMask {
     /**
      * The set of target names included in the mask. If mode is AnimationGroupMaskMode.Exclude, the targets in this set will be excluded from the mask instead.
      */
-    private _targetNames: Set<String>;
+    private _targetNames: Set<string>;
 
     /**
      * Gets or sets a boolean indicating if the mask is disabled (default is false)
@@ -36,11 +36,11 @@ export class AnimationGroupMask {
     constructor(
         names?: string[],
         /**
-         * Defines the mode for the mask
+         * [0] Defines the mode for the mask
          */
         public mode: AnimationGroupMaskMode = AnimationGroupMaskMode.Include
     ) {
-        this._targetNames = new Set<String>();
+        this._targetNames = new Set<string>();
         if (names) {
             this.addTargetName(names);
         }

@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { LockObject } from "../../tabs/propertyGrids/lockObject";
-import style from "./HexColor.modules.scss";
+import * as style from "./HexColor.module.scss";
 
 export interface IHexColorProps {
     value: string;
@@ -9,14 +9,14 @@ export interface IHexColorProps {
     lockObject: LockObject;
 }
 
-export class HexColor extends React.Component<IHexColorProps, { hex: string }> {
+export class HexColorComponent extends React.Component<IHexColorProps, { hex: string }> {
     constructor(props: IHexColorProps) {
         super(props);
 
         this.state = { hex: this.props.value.replace("#", "") };
     }
 
-    shouldComponentUpdate(nextProps: IHexColorProps, nextState: { hex: string }) {
+    override shouldComponentUpdate(nextProps: IHexColorProps, nextState: { hex: string }) {
         if (nextProps.value !== this.props.value) {
             nextState.hex = nextProps.value.replace("#", "");
         }
@@ -54,7 +54,7 @@ export class HexColor extends React.Component<IHexColorProps, { hex: string }> {
         this.props.onChange("#" + valueString);
     }
 
-    public render() {
+    public override render() {
         return (
             <div className={style.colorPickerHex}>
                 <div className={style.colorPickerHexLabel}>Hex</div>

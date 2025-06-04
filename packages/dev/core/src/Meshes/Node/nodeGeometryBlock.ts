@@ -9,6 +9,7 @@ import { PrecisionDate } from "../../Misc/precisionDate";
 import type { Nullable } from "../../types";
 import type { GeometryInputBlock } from "./Blocks/geometryInputBlock";
 import { Logger } from "core/Misc/logger";
+import type { NodeGeometry } from "./nodeGeometry";
 
 /**
  * Defines a block that can be used inside a node based geometry
@@ -209,6 +210,13 @@ export class NodeGeometryBlock {
     }
 
     /**
+     * @internal
+     */
+    public get _isReadyState(): Nullable<Promise<void>> {
+        return null;
+    }
+
+    /**
      * Creates a new NodeGeometryBlock
      * @param name defines the block name
      */
@@ -282,7 +290,9 @@ export class NodeGeometryBlock {
                 return false;
             }
 
-            this.outputs.forEach((o) => o._resetCounters());
+            for (const o of this.outputs) {
+                o._resetCounters();
+            }
         }
 
         this._buildId = state.buildId;
@@ -314,17 +324,6 @@ export class NodeGeometryBlock {
         this._buildBlock(state);
         this._buildExecutionTime = PrecisionDate.Now - now;
 
-        // Compile connected blocks
-        for (const output of this._outputs) {
-            for (const endpoint of output.endpoints) {
-                const block = endpoint.ownerBlock;
-
-                if (block) {
-                    block.build(state);
-                }
-            }
-        }
-
         this.onBuildObservable.notifyObservers(this);
 
         return false;
@@ -335,6 +334,7 @@ export class NodeGeometryBlock {
             this._inputs[inputIndex1]._acceptedConnectionPointType = this._inputs[inputIndex0];
         } else {
             this._inputs[inputIndex0]._linkedConnectionSource = this._inputs[inputIndex1];
+            this._inputs[inputIndex0]._isMainLinkSource = true;
         }
         this._inputs[inputIndex1]._linkedConnectionSource = this._inputs[inputIndex0];
     }
@@ -348,8 +348,9 @@ export class NodeGeometryBlock {
 
     /**
      * Lets the block try to connect some inputs automatically
+     * @param _nodeGeometry defines the node geometry to use for auto connection
      */
-    public autoConfigure() {
+    public autoConfigure(_nodeGeometry: NodeGeometry) {
         // Do nothing
     }
 
@@ -392,6 +393,7 @@ export class NodeGeometryBlock {
         serializationObject.customType = "BABYLON." + this.getClassName();
         serializationObject.id = this.uniqueId;
         serializationObject.name = this.name;
+        serializationObject.visibleOnFrame = this.visibleOnFrame;
 
         serializationObject.inputs = [];
         serializationObject.outputs = [];
@@ -421,7 +423,7 @@ export class NodeGeometryBlock {
         const serializedInputs = serializationObject.inputs;
         const serializedOutputs = serializationObject.outputs;
         if (serializedInputs) {
-            serializedInputs.forEach((port: any) => {
+            for (const port of serializedInputs) {
                 const input = this.inputs.find((i) => i.name === port.name);
 
                 if (!input) {
@@ -446,10 +448,11 @@ export class NodeGeometryBlock {
                         }
                     }
                 }
-            });
+            }
         }
         if (serializedOutputs) {
-            serializedOutputs.forEach((port: any, i: number) => {
+            for (let i = 0; i < serializedOutputs.length; i++) {
+                const port = serializedOutputs[i];
                 if (port.displayName) {
                     this.outputs[i].displayName = port.displayName;
                 }
@@ -457,7 +460,7 @@ export class NodeGeometryBlock {
                     this.outputs[i].isExposedOnFrame = port.isExposedOnFrame;
                     this.outputs[i].exposedPortPosition = port.exposedPortPosition;
                 }
-            });
+            }
         }
     }
 

@@ -5,7 +5,7 @@ import { Constants } from "../../Engines/constants";
 import type { ISize } from "../../Maths/math.size";
 import { Size } from "../../Maths/math.size";
 
-import type { ThinEngine } from "../../Engines/thinEngine";
+import type { AbstractEngine } from "../../Engines/abstractEngine";
 import type { RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
 
 /**
@@ -145,25 +145,29 @@ export class ThinTexture {
     /** @internal */
     public _texture: Nullable<InternalTexture> = null;
 
-    protected _engine: Nullable<ThinEngine> = null;
+    protected _engine: Nullable<AbstractEngine> = null;
 
     private _cachedSize: ISize = Size.Zero();
     private _cachedBaseSize: ISize = Size.Zero();
 
     private static _IsRenderTargetWrapper(texture: Nullable<InternalTexture> | Nullable<RenderTargetWrapper>): texture is RenderTargetWrapper {
-        return (texture as RenderTargetWrapper)?._shareDepth !== undefined;
+        return (texture as RenderTargetWrapper)?.shareDepth !== undefined;
     }
 
     /**
      * Instantiates a new ThinTexture.
      * Base class of all the textures in babylon.
-     * This can be used as an internal texture wrapper in ThinEngine to benefit from the cache
+     * This can be used as an internal texture wrapper in AbstractEngine to benefit from the cache
      * @param internalTexture Define the internalTexture to wrap. You can also pass a RenderTargetWrapper, in which case the texture will be the render target's texture
      */
     constructor(internalTexture: Nullable<InternalTexture | RenderTargetWrapper>) {
         this._texture = ThinTexture._IsRenderTargetWrapper(internalTexture) ? internalTexture.texture : internalTexture;
         if (this._texture) {
             this._engine = this._texture.getEngine();
+
+            this.wrapU = this._texture._cachedWrapU ?? this.wrapU;
+            this.wrapV = this._texture._cachedWrapV ?? this.wrapV;
+            this.wrapR = this._texture._cachedWrapR ?? this.wrapR;
         }
     }
 
@@ -282,7 +286,7 @@ export class ThinTexture {
      */
     public updateSamplingMode(samplingMode: number): void {
         if (this._texture && this._engine) {
-            this._engine.updateTextureSamplingMode(samplingMode, this._texture);
+            this._engine.updateTextureSamplingMode(samplingMode, this._texture, this._texture.generateMipMaps);
         }
     }
 

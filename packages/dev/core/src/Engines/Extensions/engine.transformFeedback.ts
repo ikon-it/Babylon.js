@@ -3,10 +3,11 @@ import { Engine } from "../../Engines/engine";
 import type { DataBuffer } from "../../Buffers/dataBuffer";
 
 /** @internal */
-// eslint-disable-next-line no-var
+// eslint-disable-next-line no-var, @typescript-eslint/naming-convention
 export var _forceTransformFeedbackToBundle = true;
 
 declare module "../../Engines/engine" {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     export interface Engine {
         /**
          * Creates a webGL transform feedback object
@@ -50,6 +51,12 @@ declare module "../../Engines/engine" {
          * @param value defines the webGL buffer to bind
          */
         bindTransformFeedbackBuffer(value: Nullable<DataBuffer>): void;
+
+        /**
+         * Read data back from the bound transform feedback buffer
+         * @param target defines the webGL buffer to write to
+         */
+        readTransformFeedbackBuffer(target: ArrayBufferView): void;
     }
 }
 
@@ -83,4 +90,8 @@ Engine.prototype.setTranformFeedbackVaryings = function (program: WebGLProgram, 
 
 Engine.prototype.bindTransformFeedbackBuffer = function (value: Nullable<DataBuffer>): void {
     this._gl.bindBufferBase(this._gl.TRANSFORM_FEEDBACK_BUFFER, 0, value ? value.underlyingResource : null);
+};
+
+Engine.prototype.readTransformFeedbackBuffer = function (target: ArrayBufferView): void {
+    this._gl.getBufferSubData(this._gl.TRANSFORM_FEEDBACK_BUFFER, 0, target);
 };

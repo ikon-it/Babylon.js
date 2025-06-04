@@ -67,7 +67,6 @@ export class FlyCameraMouseInput implements ICameraInput<FlyCamera> {
     private _rollObserver: Nullable<Observer<Scene>>;
     private _previousPosition: Nullable<{ x: number; y: number }> = null;
     private _noPreventDefault: boolean | undefined;
-    private _element: HTMLElement;
 
     /**
      * Listen to mouse events to control the camera.
@@ -80,7 +79,6 @@ export class FlyCameraMouseInput implements ICameraInput<FlyCamera> {
      * @param noPreventDefault Defines whether events caught by the controls should call preventdefault().
      */
     public attachControl(noPreventDefault?: boolean): void {
-        // eslint-disable-next-line prefer-rest-params
         noPreventDefault = Tools.BackCompatCameraNoPreventDefault(arguments);
         this._noPreventDefault = noPreventDefault;
 
@@ -166,7 +164,6 @@ export class FlyCameraMouseInput implements ICameraInput<FlyCamera> {
 
             if (!this._noPreventDefault) {
                 e.preventDefault();
-                this._element.focus();
             }
 
             // This is required to move while pointer button is down
