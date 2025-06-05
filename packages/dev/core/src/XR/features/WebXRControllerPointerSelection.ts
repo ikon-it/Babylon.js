@@ -282,7 +282,7 @@ export class WebXRControllerPointerSelection extends WebXRAbstractFeature {
 
         // force look and pick mode if using WebXR on safari, assuming it is vision OS
         // Only if not explicitly set. If set to false, it will not be forced
-        if (this._options.lookAndPickMode === undefined && (this._scene.getEngine()._badDesktopOS || this._scene.getEngine()._badOS)) {
+        if (this._options.lookAndPickMode === undefined && (this._scene?.getEngine()._badDesktopOS || this._scene?.getEngine()._badOS)) {
             this._options.lookAndPickMode = true;
         }
 

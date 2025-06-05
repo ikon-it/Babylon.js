@@ -178,7 +178,7 @@ export class WebXRDefaultExperience {
             // eslint-disable-next-line require-atomic-updates
             result.baseExperience = xrHelper;
 
-            await result._initializeScene();
+            await result._initializeSceneAsync();
             return result;
         } catch (error) {
             Logger.Error("Error initializing XR");
@@ -193,7 +193,7 @@ export class WebXRDefaultExperience {
      * @param options options for basic configuration
      * @returns resulting WebXRDefaultExperience
      */
-    public static CreatePersistentAsync(engine: Engine, options: WebXRDefaultExperienceOptions = {}): Promise<WebXRDefaultExperience> {
+    public static async CreatePersistentAsync(engine: Engine, options: WebXRDefaultExperienceOptions = {}): Promise<WebXRDefaultExperience> {
         // Add default values for persistent mode.
         if (Object.keys(options).length === 0) {
             options = {
@@ -206,30 +206,26 @@ export class WebXRDefaultExperience {
         result.options = options;
         result.persistent = true;
 
-        // Create base experience, passing an engine, which also sets downstream to persistent
-        return WebXRExperienceHelper.CreateAsync(engine)
-            .then((xrHelper) => {
-                result.baseExperience = xrHelper;
+        try {
+            // Create base experience
+            const xrHelper = await WebXRExperienceHelper.CreateAsync(engine);
+            // eslint-disable-next-line require-atomic-updates
+            result.baseExperience = xrHelper;
 
-                // Create the WebXR output target
-                result.renderTarget = result.baseExperience.sessionManager.getWebXRRenderTarget(result.options.outputCanvasOptions);
+            // Create the WebXR output target
+            result.renderTarget = result.baseExperience.sessionManager.getWebXRRenderTarget(result.options.outputCanvasOptions);
 
-                if (!options.disableDefaultUI) {
-                    result._addUI(engine);
-                    // Create ui for entering/exiting xr
-                    return result.enterExitUI.setHelperAsync(xrHelper, result.renderTarget);
-                } else {
-                    return;
-                }
-            })
-            .then(() => {
-                return result;
-            })
-            .catch((error) => {
-                Logger.Error("Error initializing XR");
-                Logger.Error(error);
-                return result;
-            });
+            if (!options.disableDefaultUI) {
+                result._addUI(engine);
+                // Create ui for entering/exiting xr
+                await result.enterExitUI.setHelperAsync(xrHelper, result.renderTarget);
+            }
+            return result;
+        } catch (error) {
+            Logger.Error("Error initializing XR");
+            Logger.Error(error);
+            return result;
+        }
     }
 
     /**
@@ -260,7 +256,7 @@ export class WebXRDefaultExperience {
      * Broken out from CreateAsync().
      * This must be performed for every scene, so also called from moveXRToScene().
      */
-    private async _initializeScene(): Promise<void> {
+    private async _initializeSceneAsync(): Promise<void> {
         if (this.options.ignoreNativeCameraTransformation) {
             // eslint-disable-next-line require-atomic-updates
             this.baseExperience.camera.compensateOnFirstFrame = false;
@@ -294,7 +290,9 @@ export class WebXRDefaultExperience {
             if (!this.options.disableTeleportation) {
                 // added persistence check; there are no floorMeshes at the engine level
                 // disabled actually means not enabled; can always be done at moveXRToScene() time
-                if (this.persistent) throw "Teleport option not suitable to define at engine level for persistent mode";
+                if (this.persistent) {
+                    throw "Teleport option not suitable to define at engine level for persistent mode";
+                }
 
                 // Add default teleportation, including rotation
                 this.teleportation = <WebXRMotionControllerTeleportation>this.baseExperience.featuresManager.enableFeature(
@@ -358,7 +356,9 @@ export class WebXRDefaultExperience {
      */
     public async moveXRToScene(nextScene: Scene, hookUp: (defExperience: WebXRDefaultExperience) => void): Promise<void> {
         // sanity check
-        if (!this.persistent) throw "DefaultExperience must be instanced with CreatePersistentAsync() to move XR";
+        if (!this.persistent) {
+            throw "DefaultExperience must be instanced with CreatePersistentAsync() to move XR";
+        }
 
         // call a persistence aware dispose
         this.dispose(false);
@@ -367,7 +367,7 @@ export class WebXRDefaultExperience {
         await this.baseExperience.moveXRToScene(nextScene);
 
         // re-initialize for the next scene
-        await this._initializeScene();
+        await this._initializeSceneAsync();
 
         // let session manager know new scene & what features / code needs to run on SessionInit
         await this.baseExperience.sessionManager.moveXRToScene(nextScene, this, hookUp);
