@@ -22,7 +22,6 @@ import { Material } from "../../Materials/material";
 import { CreateIcoSphere } from "../../Meshes/Builders/icoSphereBuilder";
 import { TransformNode } from "../../Meshes/transformNode";
 import { Axis } from "../../Maths/math.axis";
-import { EngineStore } from "../../Engines/engineStore";
 import { Constants } from "../../Engines/constants";
 import type { WebXRCompositionLayerWrapper } from "./Layers/WebXRCompositionLayer";
 import { Tools } from "core/Misc/tools";
@@ -842,7 +841,7 @@ export class WebXRHandTracking extends WebXRAbstractFeature {
         // If they didn't supply custom meshes and are not disabling the default meshes...
         if (!this.options.handMeshes?.customMeshes && !this.options.handMeshes?.disableDefaultMeshes) {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises, github/no-then
-            WebXRHandTracking._GenerateDefaultHandMeshesAsync(EngineStore.LastCreatedScene!, this._xrSessionManager, this.options).then((defaultHandMeshes) => {
+            WebXRHandTracking._GenerateDefaultHandMeshesAsync(this._xrSessionManager.scene, this._xrSessionManager, this.options).then((defaultHandMeshes) => {
                 this._handResources.handMeshes = defaultHandMeshes;
                 this._handResources.rigMappings = {
                     left: WebXRHandTracking._GenerateDefaultHandMeshRigMapping("left"),

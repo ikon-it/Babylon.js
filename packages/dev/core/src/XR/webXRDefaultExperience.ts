@@ -199,6 +199,7 @@ export class WebXRDefaultExperience {
             options = {
                 disableTeleportation: true,
                 disableNearInteraction: true,
+                disableHandTracking: true,
             };
         }
 
@@ -260,6 +261,10 @@ export class WebXRDefaultExperience {
         if (this.options.ignoreNativeCameraTransformation) {
             // eslint-disable-next-line require-atomic-updates
             this.baseExperience.camera.compensateOnFirstFrame = false;
+        }
+
+        if (this.input) {
+            this.input.dispose();
         }
 
         // Add controller support

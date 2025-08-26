@@ -176,6 +176,9 @@ export class WebXRInput implements IDisposable {
         for (const c of this.controllers) {
             c.dispose();
         }
+
+        this.xrSessionManager.session?.removeEventListener("inputsourceschange", this._onInputSourcesChange);
+
         this.xrSessionManager.onXRFrameObservable.remove(this._frameObserver);
         this.xrSessionManager.onXRSessionInit.remove(this._sessionInitObserver);
         this.xrSessionManager.onXRSessionMoved.remove(this._sessionMovedObserver);
