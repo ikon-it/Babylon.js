@@ -1,6 +1,6 @@
 {
     "name": "babylonjs",
-    "version": "8.10.1-ikon.2",
+    "version": "8.10.1-ikon.3",
     "main": "babylon.js",
     "types": "babylon.module.d.ts",
     "files": [
