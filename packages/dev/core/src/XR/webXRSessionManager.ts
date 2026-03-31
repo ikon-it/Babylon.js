@@ -1,16 +1,14 @@
 import { Logger } from "../Misc/logger";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
-import type { IDisposable } from "../scene";
-import { Scene } from "../scene";
-import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import type { WebXRRenderTarget } from "./webXRTypes";
+import { type Observer, Observable } from "../Misc/observable";
+import { type Nullable } from "../types";
+import { Scene, type IDisposable } from "../scene";
+import { type RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
+import { type WebXRRenderTarget } from "./webXRTypes";
 import { WebXRManagedOutputCanvas, WebXRManagedOutputCanvasOptions } from "./webXRManagedOutputCanvas";
-import type { Engine } from "../Engines/engine";
-import type { IWebXRRenderTargetTextureProvider, WebXRLayerRenderTargetTextureProvider } from "./webXRRenderTargetTextureProvider";
-import type { Viewport } from "../Maths/math.viewport";
-import type { WebXRLayerWrapper } from "./webXRLayerWrapper";
+import { type Engine } from "../Engines/engine";
+import { type IWebXRRenderTargetTextureProvider, type WebXRLayerRenderTargetTextureProvider } from "./webXRRenderTargetTextureProvider";
+import { type Viewport } from "../Maths/math.viewport";
+import { type WebXRLayerWrapper } from "./webXRLayerWrapper";
 import { NativeXRLayerWrapper, NativeXRRenderTarget } from "./native/nativeXRRenderTarget";
 import { WebXRWebGLLayerWrapper } from "./webXRWebGLLayer";
 import type { WebXRDefaultExperience } from "./webXRDefaultExperience";
@@ -154,6 +152,11 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         this._onEngineDisposedObserver = this.engine.onDisposeObservable.addOnce(() => {
             this.engine = null;
         });
+
+        this.onXRSessionEnded.add(() => {
+            // Set the scene's pointer camera to null to stop the XR camera being used for picking.
+            scene.cameraToUseForPointers = null;
+        });
     }
 
     /**
@@ -232,6 +235,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
         this.onXRReady.clear();
         this.onXRFrameObservable.clear();
         this.onXRReferenceSpaceChanged.clear();
+        this.onXRReferenceSpaceInitialized.clear();
         this.onXRSessionInit.clear();
         this.onWorldScaleFactorChangedObservable.clear();
 
@@ -434,6 +438,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
      */
     public async setReferenceSpaceTypeAsync(referenceSpaceType: XRReferenceSpaceType = "local-floor"): Promise<XRReferenceSpace> {
         let referenceSpace: XRReferenceSpace;
+        let viewerReferenceSpace: Nullable<XRReferenceSpace> = null;
         try {
             referenceSpace = await this.session.requestReferenceSpace(referenceSpaceType);
         } catch (rejectionReason) {
@@ -442,9 +447,9 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
             Logger.Log('Defaulting to universally-supported "viewer" reference space type.');
 
             try {
-                const referenceSpace = await this.session.requestReferenceSpace("viewer");
+                viewerReferenceSpace = (await this.session.requestReferenceSpace("viewer")) as XRReferenceSpace;
                 const heightCompensation = new XRRigidTransform({ x: 0, y: -this.defaultHeightCompensation, z: 0 });
-                return (referenceSpace as XRReferenceSpace).getOffsetReferenceSpace(heightCompensation);
+                referenceSpace = viewerReferenceSpace.getOffsetReferenceSpace(heightCompensation);
             } catch (rejectionReason) {
                 Logger.Error(rejectionReason);
                 // eslint-disable-next-line no-throw-literal
@@ -452,8 +457,7 @@ export class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextu
             }
         }
         // create viewer reference space before setting the first reference space
-        const viewerReferenceSpace = await this.session.requestReferenceSpace("viewer");
-        this.viewerReferenceSpace = viewerReferenceSpace as XRReferenceSpace;
+        this.viewerReferenceSpace = viewerReferenceSpace ?? ((await this.session.requestReferenceSpace("viewer")) as XRReferenceSpace);
         // initialize the base and offset (currently the same)
         this.referenceSpace = this.baseReferenceSpace = referenceSpace;
         this.onXRReferenceSpaceInitialized.notifyObservers(referenceSpace);

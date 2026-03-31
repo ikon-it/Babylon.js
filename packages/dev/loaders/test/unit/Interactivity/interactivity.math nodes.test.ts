@@ -1,9 +1,10 @@
-import { IKHRInteractivity_Declaration, IKHRInteractivity_Node, IKHRInteractivity_Type } from "babylonjs-gltf2interface";
+import { type IKHRInteractivity_Declaration, type IKHRInteractivity_Graph, type IKHRInteractivity_Node, type IKHRInteractivity_Type } from "babylonjs-gltf2interface";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { NullEngine } from "core/Engines/nullEngine";
 import { PerformanceConfigurator } from "core/Engines/performanceConfigurator";
 import { FlowGraphCoordinator } from "core/FlowGraph/flowGraphCoordinator";
 import { FlowGraphAction } from "core/FlowGraph/flowGraphLogger";
+import { GetAngleBetweenQuaternions, GetQuaternionFromDirections } from "core/FlowGraph/flowGraphMath";
 import { ParseFlowGraphAsync } from "core/FlowGraph/flowGraphParser";
 import { Quaternion, Vector3 } from "core/Maths/math.vector";
 import { Logger } from "core/Misc/logger";
@@ -37,8 +38,8 @@ function roundArray3(value: number[]): number[] {
 describe("Interactivity math nodes", () => {
     let engine;
     let scene: Scene;
-    const log: jest.SpyInstance = jest.spyOn(Logger, "Log").mockImplementation(() => {});
-    const errorLog: jest.SpyInstance = jest.spyOn(Logger, "Error").mockImplementation(() => {});
+    const log: ReturnType<typeof vi.spyOn> = vi.spyOn(Logger, "Log").mockImplementation(() => {});
+    const errorLog: ReturnType<typeof vi.spyOn> = vi.spyOn(Logger, "Error").mockImplementation(() => {});
     let mockGltf: any;
     const pathConverter = GetPathToObjectConverter(mockGltf);
 
@@ -58,7 +59,7 @@ describe("Interactivity math nodes", () => {
                     declaration: declarations.length,
                     flows: {
                         out: {
-                            node: declarations.length + 1,
+                            node: nodes.length + 1,
                             socket: "in",
                         },
                     },
@@ -99,9 +100,9 @@ describe("Interactivity math nodes", () => {
         PerformanceConfigurator.MatrixCurrentType = Array;
     });
 
-    it("should use math/e correctly", async () => {
+    it("should use math/E correctly", async () => {
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/e" }],
+            [{ op: "math/E" }],
             [
                 {
                     declaration: 0,
@@ -114,9 +115,9 @@ describe("Interactivity math nodes", () => {
         expect(logItem!.payload.value).toBe(Math.E);
     });
 
-    it("should use math/pi correctly", async () => {
+    it("should use math/Pi correctly", async () => {
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/pi" }],
+            [{ op: "math/Pi" }],
             [
                 {
                     declaration: 0,
@@ -129,10 +130,9 @@ describe("Interactivity math nodes", () => {
         expect(logItem!.payload.value).toBe(Math.PI);
     });
 
-    // math/inf
-    it("should use math/inf correctly", async () => {
+    it("should use math/Inf correctly", async () => {
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/inf" }],
+            [{ op: "math/Inf" }],
             [
                 {
                     declaration: 0,
@@ -145,10 +145,9 @@ describe("Interactivity math nodes", () => {
         expect(logItem!.payload.value).toBe(Infinity);
     });
 
-    // math/nan
-    it("should use math/nan correctly", async () => {
+    it("should use math/NaN correctly", async () => {
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/nan" }],
+            [{ op: "math/NaN" }],
             [
                 {
                     declaration: 0,
@@ -394,12 +393,12 @@ describe("Interactivity math nodes", () => {
             inputs: 2,
             returnLength: 1,
         },
-        "math/isnan": {
+        "math/isNaN": {
             operation: isNaN,
             types: ["float"],
             inputs: 1,
         },
-        "math/isinf": {
+        "math/isInf": {
             operation: (a: number) => !isFinite(a),
             types: ["float"],
             inputs: 1,
@@ -722,7 +721,7 @@ describe("Interactivity math nodes", () => {
                 {
                     declaration: 0,
                     values: {
-                        b: {
+                        angle: {
                             type: 1,
                             value: [Math.PI / 2],
                         },
@@ -750,7 +749,7 @@ describe("Interactivity math nodes", () => {
                 {
                     declaration: 0,
                     values: {
-                        b: {
+                        angle: {
                             type: 1,
                             value: [rotationAngleInRadians],
                         },
@@ -779,7 +778,7 @@ describe("Interactivity math nodes", () => {
                 {
                     declaration: 0,
                     values: {
-                        b: {
+                        angle: {
                             type: 1,
                             value: [rotationAngleInRadians],
                         },
@@ -813,7 +812,7 @@ describe("Interactivity math nodes", () => {
                             type: 0,
                             value: [1, 1, 1],
                         },
-                        b: {
+                        rotation: {
                             type: 1,
                             value: Quaternion.FromEulerAngles(Math.PI / 2, 0, 0).asArray(),
                         },
@@ -842,7 +841,7 @@ describe("Interactivity math nodes", () => {
                             type: 0,
                             value: vector.asArray(),
                         },
-                        b: {
+                        rotation: {
                             type: 1,
                             value: quaternion.asArray(),
                         },
@@ -1253,13 +1252,11 @@ describe("Interactivity math nodes", () => {
 
     // TODO math/inverse for matrix4
 
-    // math/matmul
-
-    it("should use math/matmul correctly - matrix2", async () => {
+    it("should use math/matMul correctly - matrix2", async () => {
         const randomMatrix1 = Array.from({ length: 4 }, () => Math.random() - 0.5);
         const randomMatrix2 = Array.from({ length: 4 }, () => Math.random() - 0.5);
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/matmul" }],
+            [{ op: "math/matMul" }],
             [
                 {
                     declaration: 0,
@@ -1292,11 +1289,11 @@ describe("Interactivity math nodes", () => {
         expect(resultArray).toEqual(expected);
     });
 
-    it("should use math/matmul correctly - matrix3", async () => {
+    it("should use math/matMul correctly - matrix3", async () => {
         const randomMatrix1 = Array.from({ length: 9 }, () => Math.random() - 0.5);
         const randomMatrix2 = Array.from({ length: 9 }, () => Math.random() - 0.5);
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/matmul" }],
+            [{ op: "math/matMul" }],
             [
                 {
                     declaration: 0,
@@ -1334,11 +1331,11 @@ describe("Interactivity math nodes", () => {
         expect(resultArray).toEqual(expected);
     });
 
-    it("should use math/matmul correctly - matrix4", async () => {
+    it("should use math/matMul correctly - matrix4", async () => {
         const randomMatrix1 = Array.from({ length: 16 }, () => Math.random() - 0.5).map((v: number) => round3(v));
         const randomMatrix2 = Array.from({ length: 16 }, () => Math.random() - 0.5).map((v: number) => round3(v));
         const graph = await generateSimpleNodeGraph(
-            [{ op: "math/matmul" }],
+            [{ op: "math/matMul" }],
             [
                 {
                     declaration: 0,
@@ -1874,4 +1871,224 @@ describe("Interactivity math nodes", () => {
     //     ]);
     //     expect(resultArray).toEqual(expected);
     // });
+
+    it("should use math/quatConjugate", async () => {
+        const randomQuaternion = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        const graph = await generateSimpleNodeGraph(
+            [{ op: "math/quatConjugate" }],
+            [
+                {
+                    declaration: 0,
+                    values: {
+                        a: {
+                            type: 0,
+                            value: randomQuaternion.asArray(),
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float4" }]
+        );
+        const logItem = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue).pop();
+        expect(logItem).toBeDefined();
+        const resultArray = roundArray3(logItem!.payload.value.asArray());
+        const expected = roundArray3(randomQuaternion.conjugate().asArray());
+        expect(resultArray).toEqual(expected);
+    });
+
+    it("should use math/quatMul", async () => {
+        const randomQuaternion1 = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        const randomQuaternion2 = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        const graph = await generateSimpleNodeGraph(
+            [{ op: "math/quatMul" }],
+            [
+                {
+                    declaration: 0,
+                    values: {
+                        a: {
+                            type: 0,
+                            value: randomQuaternion1.asArray(),
+                        },
+                        b: {
+                            type: 0,
+                            value: randomQuaternion2.asArray(),
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float4" }]
+        );
+        const logItem = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue).pop();
+        expect(logItem).toBeDefined();
+        const resultArray = roundArray3(logItem!.payload.value.asArray());
+        const expected = roundArray3(randomQuaternion1.multiply(randomQuaternion2).asArray());
+        expect(resultArray).toEqual(expected);
+    });
+
+    it("should use math/quatAngleBetween", async () => {
+        const randomQuaternion1 = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        const randomQuaternion2 = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        const graph = await generateSimpleNodeGraph(
+            [{ op: "math/quatAngleBetween" }],
+            [
+                {
+                    declaration: 0,
+                    values: {
+                        a: {
+                            type: 0,
+                            value: randomQuaternion1.asArray(),
+                        },
+                        b: {
+                            type: 0,
+                            value: randomQuaternion2.asArray(),
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float4" }]
+        );
+        const logItem = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue).pop();
+        expect(logItem).toBeDefined();
+        const result = round3(logItem!.payload.value);
+        const expected = round3(GetAngleBetweenQuaternions(randomQuaternion1, randomQuaternion2));
+        expect(result).toEqual(expected);
+    });
+
+    it("should use math/quatFromAxisAngle", async () => {
+        const randomAxis = new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+        const randomAngle = Math.random() * Math.PI;
+        const graph = await generateSimpleNodeGraph(
+            [{ op: "math/quatFromAxisAngle" }],
+            [
+                {
+                    declaration: 0,
+                    values: {
+                        axis: {
+                            type: 0,
+                            value: randomAxis.asArray(),
+                        },
+                        angle: {
+                            type: 1,
+                            value: [randomAngle],
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float3" }, { signature: "float" }]
+        );
+        const logItem = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue).pop();
+        expect(logItem).toBeDefined();
+        const resultArray = roundArray3(logItem!.payload.value.asArray());
+        const expected = roundArray3(Quaternion.RotationAxis(randomAxis, randomAngle).asArray());
+        expect(resultArray).toEqual(expected);
+    });
+
+    it("should use math/quatToAxisAngle", async () => {
+        const randomQuaternion = Quaternion.FromEulerAngles(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+
+        const ig: IKHRInteractivity_Graph = {
+            declarations: [{ op: "math/quatToAxisAngle" }, { op: "event/onStart" }, { op: "flow/log", extension: "BABYLON" }],
+            types: [{ signature: "float4" }],
+            nodes: [
+                {
+                    declaration: 0,
+                    values: {
+                        a: {
+                            type: 0,
+                            value: randomQuaternion.asArray(),
+                        },
+                    },
+                },
+                {
+                    declaration: 1,
+                    flows: {
+                        out: {
+                            node: 2,
+                            socket: "in",
+                        },
+                    },
+                },
+                {
+                    declaration: 2,
+                    values: {
+                        axis: {
+                            node: 0,
+                            socket: "axis",
+                        },
+                        angle: {
+                            node: 0,
+                            socket: "angle",
+                        },
+                    },
+                    configuration: {
+                        messageTemplate: {
+                            value: ["{axis}{angle}"],
+                        },
+                    },
+                },
+            ],
+        };
+
+        const i2fg = new InteractivityGraphToFlowGraphParser(ig, mockGltf);
+        const json = i2fg.serializeToFlowGraph();
+        const coordinator = new FlowGraphCoordinator({ scene });
+        const flowGraph = await ParseFlowGraphAsync(json, { coordinator, pathConverter });
+        flowGraph.getContext(0).enableLogging = true;
+        flowGraph.getContext(0).logger!.logToConsole = false;
+
+        coordinator.start();
+
+        const graph = {
+            graph: flowGraph,
+            logger: flowGraph.getContext(0).logger!,
+        };
+
+        const expected = randomQuaternion.toAxisAngle();
+        const logItems = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue);
+
+        {
+            const logItem = logItems.pop();
+            expect(logItem).toBeDefined();
+            const angle = logItem!.payload.value;
+            expect(round3(angle)).toEqual(round3(expected.angle));
+        }
+
+        logItems.pop();
+
+        {
+            const logItem = logItems.pop();
+            expect(logItem).toBeDefined();
+            const axis = logItem!.payload.value;
+            expect(roundArray3(axis.asArray())).toEqual(roundArray3(expected.axis.asArray()));
+        }
+    });
+
+    it("should use math/quatFromDirections", async () => {
+        const randomDirection1 = new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+        const randomDirection2 = new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+        const graph = await generateSimpleNodeGraph(
+            [{ op: "math/quatFromDirections" }],
+            [
+                {
+                    declaration: 0,
+                    values: {
+                        a: {
+                            type: 0,
+                            value: randomDirection1.asArray(),
+                        },
+                        b: {
+                            type: 0,
+                            value: randomDirection2.asArray(),
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float3" }]
+        );
+        const logItem = graph.logger.getItemsOfType(FlowGraphAction.GetConnectionValue).pop();
+        expect(logItem).toBeDefined();
+        const resultArray = roundArray3(logItem!.payload.value.asArray());
+        const expected = roundArray3(GetQuaternionFromDirections(randomDirection1, randomDirection2).asArray());
+        expect(resultArray).toEqual(expected);
+    });
 });

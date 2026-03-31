@@ -1,14 +1,14 @@
 import { RegisterClass } from "../../../Misc/typeStore";
 import { NodeGeometryBlockConnectionPointTypes } from "../Enums/nodeGeometryConnectionPointTypes";
 import { NodeGeometryBlock } from "../nodeGeometryBlock";
-import type { NodeGeometryConnectionPoint } from "../nodeGeometryBlockConnectionPoint";
+import { type NodeGeometryConnectionPoint } from "../nodeGeometryBlockConnectionPoint";
 import { PropertyTypeForEdition, editableInPropertyPage } from "../../../Decorators/nodeDecorator";
-import type { NodeGeometryBuildState } from "../nodeGeometryBuildState";
-import type { FloatArray } from "../../../types";
+import { type NodeGeometryBuildState } from "../nodeGeometryBuildState";
+import { type FloatArray } from "../../../types";
 import { VertexData } from "../../../Meshes/mesh.vertexData";
 import { WithinEpsilon } from "../../../Maths/math.scalar.functions";
 import { Epsilon } from "../../../Maths/math.constants";
-import type { INodeGeometryExecutionContext } from "../Interfaces/nodeGeometryExecutionContext";
+import { type INodeGeometryExecutionContext } from "../Interfaces/nodeGeometryExecutionContext";
 /**
  * Block used to extract unique positions from a geometry
  */
@@ -106,6 +106,7 @@ export class GeometryOptimizeBlock extends NodeGeometryBlock implements INodeGeo
             const vertexData = this.geometry.getConnectedValue(state);
             const newPositions: FloatArray = [];
             const newIndicesMap: { [key: number]: number } = {};
+            const newUVs: FloatArray = [];
             state.pushExecutionContext(this);
             state.pushGeometryContext(vertexData);
 
@@ -124,6 +125,10 @@ export class GeometryOptimizeBlock extends NodeGeometryBlock implements INodeGeo
                 const y = vertexData.positions[index + 1];
                 const z = vertexData.positions[index + 2];
 
+                const uvIndex = (index / 3) * 2;
+                const u = vertexData.uvs ? vertexData.uvs[uvIndex] : 0;
+                const v = vertexData.uvs ? vertexData.uvs[uvIndex + 1] : 0;
+
                 // check if we already have it
                 let found = false;
                 for (let checkIndex = 0; checkIndex < newPositions.length; checkIndex += 3) {
@@ -141,10 +146,14 @@ export class GeometryOptimizeBlock extends NodeGeometryBlock implements INodeGeo
                 if (!found) {
                     newIndicesMap[index / 3] = newPositions.length / 3;
                     newPositions.push(x, y, z);
+                    newUVs.push(u, v);
                 }
             }
             const newVertexData = new VertexData();
             newVertexData.positions = newPositions;
+            if (vertexData.uvs) {
+                newVertexData.uvs = newUVs;
+            }
             const indices: number[] = vertexData.indices.map((index: number) => newIndicesMap[index]);
             const newIndices: number[] = [];
 
@@ -223,6 +232,7 @@ export class GeometryOptimizeBlock extends NodeGeometryBlock implements INodeGeo
         return serializationObject;
     }
 
+    /** @internal */
     public override _deserialize(serializationObject: any) {
         super._deserialize(serializationObject);
 

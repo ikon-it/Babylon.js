@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { Epsilon } from "./math.constants";
-import type { Viewport } from "./math.viewport";
-import type { DeepImmutable, Nullable, FloatArray, float, Tuple } from "../types";
+import { type Viewport } from "./math.viewport";
+import { type DeepImmutable, type Nullable, type FloatArray, type float, type Tuple } from "../types";
 import { BuildTuple } from "../Misc/arrayTools";
 import { RegisterClass } from "../Misc/typeStore";
-import type { Plane } from "./math.plane";
+import { type Plane } from "./math.plane";
 import { PerformanceConfigurator } from "../Engines/performanceConfigurator";
 import { EngineStore } from "../Engines/engineStore";
-import type { TransformNode } from "../Meshes/transformNode";
-import type { Dimension, Tensor, TensorLike, TensorStatic } from "./tensor";
-import type { IVector2Like, IVector3Like, IVector4Like, IQuaternionLike, IMatrixLike, IPlaneLike, IVector3LikeInternal } from "./math.like";
+import { type TransformNode } from "../Meshes/transformNode";
+import { type Dimension, type Tensor, type TensorLike, type TensorStatic } from "./tensor";
+import { type IVector2Like, type IVector3Like, type IVector4Like, type IQuaternionLike, type IMatrixLike, type IPlaneLike, type IVector3LikeInternal } from "./math.like";
 import { Clamp, Lerp, NormalizeRadians, RandomRange, WithinEpsilon } from "./math.scalar.functions";
 import { CopyMatrixToArray, InvertMatrixToArray, MatrixManagement, MultiplyMatricesToArray } from "./ThinMaths/thinMath.matrix.functions";
 
@@ -505,7 +505,7 @@ export class Vector2 implements Vector<Tuple<number, 2>, IVector2Like>, IVector2
     /**
      * Negate the current Vector2 and stores the result in the given vector "result" coordinates
      * Example Playground https://playground.babylonjs.com/#QYBWV4#41
-     * @param result defines the Vector3 object where to store the result
+     * @param result defines the Vector2 object where to store the result
      * @returns the result
      */
     public negateToRef<T extends IVector2Like>(result: T): T {
@@ -3008,19 +3008,6 @@ export class Vector3 implements Vector<Tuple<number, 3>, IVector3LikeInternal>, 
     }
 
     /**
-     * @internal
-     */
-    public static _UnprojectFromInvertedMatrixToRef<T extends Vector3>(source: DeepImmutable<Vector3>, matrix: DeepImmutable<Matrix>, result: T): T {
-        Vector3.TransformCoordinatesToRef(source, matrix, result);
-        const m = matrix.m;
-        const num = source._x * m[3] + source._y * m[7] + source._z * m[11] + m[15];
-        if (WithinEpsilon(num, 1.0)) {
-            result.scaleInPlace(1.0 / num);
-        }
-        return result;
-    }
-
-    /**
      * Unproject from screen space to object space
      * Example Playground https://playground.babylonjs.com/#R1F8YU#121
      * @param source defines the screen space Vector3 to use
@@ -3130,7 +3117,7 @@ export class Vector3 implements Vector<Tuple<number, 3>, IVector3LikeInternal>, 
             screenSource.z = 2 * sourceZ - 1.0;
         }
 
-        Vector3._UnprojectFromInvertedMatrixToRef(screenSource, matrix, result);
+        Vector3.TransformCoordinatesToRef(screenSource, matrix, result);
         return result;
     }
 
@@ -5311,6 +5298,37 @@ export class Quaternion implements Tensor<Tuple<number, 4>, Quaternion>, IQuater
         return this._x * other._x + this._y * other._y + this._z * other._z + this._w * other._w;
     }
 
+    /**
+     * Converts the current quaternion to an axis angle representation
+     * @returns the axis and angle in radians
+     */
+    public toAxisAngle(): { axis: Vector3; angle: number } {
+        const axis = Vector3.Zero();
+        const angle = this.toAxisAngleToRef(axis);
+        return { axis, angle };
+    }
+
+    /**
+     * Converts the current quaternion to an axis angle representation
+     * @param axis defines the target axis vector
+     * @returns the angle in radians
+     */
+    public toAxisAngleToRef<T extends Vector3>(axis: T): number {
+        let angle: number;
+        const sinHalfAngle = Math.sqrt(this._x * this._x + this._y * this._y + this._z * this._z);
+        const cosHalfAngle = this._w;
+
+        if (sinHalfAngle > 0) {
+            angle = 2 * Math.atan2(sinHalfAngle, cosHalfAngle);
+            axis.set(this._x / sinHalfAngle, this._y / sinHalfAngle, this._z / sinHalfAngle);
+        } else {
+            angle = 0;
+            axis.set(1, 0, 0);
+        }
+
+        return angle;
+    }
+
     // Statics
 
     /**
@@ -5640,7 +5658,7 @@ export class Quaternion implements Tensor<Tuple<number, 4>, Quaternion>, IQuater
 
     /**
      * Creates a new rotation from the given Euler float angles (y, x, z) and stores it in the target quaternion
-     * Example Playground https://playground.babylonjs.com/#L49EJ7#78
+     * Example Playground https://playground.babylonjs.com/#L49EJ7#561
      * @param yaw defines the rotation around Y axis
      * @param pitch defines the rotation around X axis
      * @param roll defines the rotation around Z axis
@@ -5648,7 +5666,7 @@ export class Quaternion implements Tensor<Tuple<number, 4>, Quaternion>, IQuater
      * @returns result input
      */
     public static RotationYawPitchRollToRef<T extends Quaternion>(yaw: number, pitch: number, roll: number, result: T): T {
-        // Produces a quaternion from Euler angles in the z-y-x orientation (Tait-Bryan angles)
+        // Produces a quaternion from Euler angles in the y-x-z orientation
         const halfRoll = roll * 0.5;
         const halfPitch = pitch * 0.5;
         const halfYaw = yaw * 0.5;

@@ -1,13 +1,13 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { GaussianSplattingMaterial } from "core/Materials/GaussianSplatting/gaussianSplattingMaterial";
-import type { Mesh } from "core/Meshes/mesh";
-import type { Effect } from "core/Materials/effect";
-import type { NodeMaterial } from "../../nodeMaterial";
+import { type Mesh } from "core/Meshes/mesh";
+import { type Effect } from "core/Materials/effect";
+import { type NodeMaterial } from "../../nodeMaterial";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
@@ -73,6 +73,12 @@ export class SplatReaderBlock extends NodeMaterialBlock {
         state._excludeVariableName("dataTextureSize");
     }
 
+    /**
+     * Bind data to effect
+     * @param effect - defines the effect to bind data to
+     * @param nodeMaterial - defines the node material
+     * @param mesh - defines the mesh to bind data for
+     */
     public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         if (!mesh) {
             return;
@@ -104,20 +110,21 @@ export class SplatReaderBlock extends NodeMaterialBlock {
         state._emitFunctionFromInclude("gaussianSplatting", comments);
         state._emitVaryingFromString("vPosition", NodeMaterialBlockConnectionPointTypes.Vector2);
         state._emitUniformFromString("dataTextureSize", NodeMaterialBlockConnectionPointTypes.Vector2);
-        const splatIndex = this.splatIndex;
         const splatPosition = this.splatPosition;
         const splatColor = this.splatColor;
 
         const splatVariablename = state._getFreeVariableName("splat");
 
         if (state.shaderLanguage === ShaderLanguage.WGSL) {
-            state.compilationString += `var ${splatVariablename}: Splat = readSplat(${splatIndex.associatedVariableName}, uniforms.dataTextureSize);\n`;
+            state.compilationString += `let splatIndex: f32 = getSplatIndex(i32(input.position.z + 0.5), input.splatIndex0, input.splatIndex1, input.splatIndex2, input.splatIndex3);`;
+            state.compilationString += `var ${splatVariablename}: Splat = readSplat(splatIndex, uniforms.dataTextureSize);\n`;
             state.compilationString += `var covA: vec3f = splat.covA.xyz; var covB: vec3f = vec3f(splat.covA.w, splat.covB.xy);\n`;
-            state.compilationString += "vertexOutputs.vPosition = input.position;\n";
+            state.compilationString += "vertexOutputs.vPosition = input.position.xy;\n";
         } else {
-            state.compilationString += `Splat ${splatVariablename} = readSplat(${splatIndex.associatedVariableName});\n`;
+            state.compilationString += `float splatIndex = getSplatIndex(int(position.z + 0.5));`;
+            state.compilationString += `Splat ${splatVariablename} = readSplat(splatIndex);\n`;
             state.compilationString += `vec3 covA = splat.covA.xyz; vec3 covB = vec3(splat.covA.w, splat.covB.xy);\n`;
-            state.compilationString += "vPosition = position;\n";
+            state.compilationString += "vPosition = position.xy;\n";
         }
         state.compilationString += `${state._declareOutput(splatPosition)} = ${splatVariablename}.center.xyz;\n`;
         state.compilationString += `${state._declareOutput(splatColor)} = ${splatVariablename}.color;\n`;

@@ -1,10 +1,9 @@
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import { InternalTextureSource } from "../Materials/Textures/internalTexture";
-import type { RenderTargetCreationOptions, TextureSize } from "../Materials/Textures/textureCreationOptions";
-import type { Nullable } from "../types";
+import { type InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
+import { type RenderTargetCreationOptions, type TextureSize } from "../Materials/Textures/textureCreationOptions";
+import { type Nullable } from "../types";
 import { Constants } from "./constants";
-import type { AbstractEngine } from "./abstractEngine";
-import type { IMultiRenderTargetOptions } from "../Materials/Textures/multiRenderTarget";
+import { type AbstractEngine } from "./abstractEngine";
+import { type IMultiRenderTargetOptions } from "../Materials/Textures/multiRenderTarget";
 import { HasStencilAspect } from "core/Materials/Textures/textureHelper.functions";
 
 /**
@@ -196,6 +195,16 @@ export class RenderTargetWrapper {
     public resolveMSAAStencil = false;
 
     /**
+     * Indicates if the depth texture is in read-only mode (may allow some optimizations in WebGPU)
+     */
+    public depthReadOnly = false;
+
+    /**
+     * Indicates if the stencil texture is in read-only mode (may allow some optimizations in WebGPU)
+     */
+    public stencilReadOnly = false;
+
+    /**
      * Gets the base array layer of a texture in the textures array
      * This is an number that is calculated based on the layer and face indices set for this texture at that index
      * @param index The index of the texture in the textures array to get the base array layer for
@@ -256,7 +265,11 @@ export class RenderTargetWrapper {
      */
     public generateMipMaps(): void {
         if (this._engine._currentRenderTarget === this) {
-            this._engine.unBindFramebuffer(this, true);
+            if (this.isMulti) {
+                this._engine.unBindMultiColorAttachmentFramebuffer(this, true);
+            } else {
+                this._engine.unBindFramebuffer(this, true);
+            }
         }
         if (this.isMulti) {
             this._engine.generateMipMapsMultiFramebuffer(this);

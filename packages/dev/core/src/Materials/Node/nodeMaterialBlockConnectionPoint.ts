@@ -1,10 +1,9 @@
 import { NodeMaterialBlockConnectionPointTypes } from "./Enums/nodeMaterialBlockConnectionPointTypes";
 import { NodeMaterialBlockTargets } from "./Enums/nodeMaterialBlockTargets";
-import type { Nullable } from "../../types";
-import type { InputBlock } from "./Blocks/Input/inputBlock";
-import { Observable } from "../../Misc/observable";
-import type { Observer } from "../../Misc/observable";
-import type { NodeMaterialBlock } from "./nodeMaterialBlock";
+import { type Nullable } from "../../types";
+import { type InputBlock } from "./Blocks/Input/inputBlock";
+import { Observable, type Observer } from "../../Misc/observable";
+import { type NodeMaterialBlock } from "./nodeMaterialBlock";
 
 /**
  * Enum used to define the compatibility state between two connection points
@@ -69,6 +68,16 @@ export class NodeMaterialConnectionPoint {
         }
 
         return false;
+    }
+
+    /** @internal */
+    public _isInactive: boolean = false;
+
+    /**
+     * Boolean used to provide visual clue to users when some ports are not active in the current block configuration
+     */
+    public get isInactive(): boolean {
+        return this._isInactive;
     }
 
     /** @internal */
@@ -602,8 +611,9 @@ export class NodeMaterialConnectionPoint {
      */
     public connectTo(connectionPoint: NodeMaterialConnectionPoint, ignoreConstraints = false): NodeMaterialConnectionPoint {
         if (!ignoreConstraints && !this.canConnectTo(connectionPoint)) {
-            // eslint-disable-next-line no-throw-literal
-            throw `Cannot connect these two connectors. source: "${this.ownerBlock.name}".${this.name}, target: "${connectionPoint.ownerBlock.name}".${connectionPoint.name}`;
+            throw new Error(
+                `Cannot connect these two connectors. source: "${this.ownerBlock.name}".${this.name}, target: "${connectionPoint.ownerBlock.name}".${connectionPoint.name}`
+            );
         }
 
         this._endpoints.push(connectionPoint);

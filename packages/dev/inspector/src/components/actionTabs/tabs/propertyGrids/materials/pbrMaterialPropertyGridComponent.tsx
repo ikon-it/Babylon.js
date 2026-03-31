@@ -1,10 +1,10 @@
 import * as React from "react";
 
 import { Observable } from "core/Misc/observable";
-import type { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
+import { type PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import { Constants } from "core/Engines/constants";
 
-import type { PropertyChangedEvent } from "../../../../propertyChangedEvent";
+import { type PropertyChangedEvent } from "../../../../propertyChangedEvent";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { Color3LineComponent } from "shared-ui-components/lines/color3LineComponent";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
@@ -12,8 +12,8 @@ import { SliderLineComponent } from "shared-ui-components/lines/sliderLineCompon
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { CommonMaterialPropertyGridComponent } from "./commonMaterialPropertyGridComponent";
 import { TextureLinkLineComponent } from "../../../lines/textureLinkLineComponent";
-import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
-import type { GlobalState } from "../../../../globalState";
+import { type LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
+import { type GlobalState } from "../../../../globalState";
 import { Vector2LineComponent } from "shared-ui-components/lines/vector2LineComponent";
 
 import "core/Materials/material.decalMap";
@@ -1115,18 +1115,6 @@ export class PBRMaterialPropertyGridComponent extends React.Component<IPBRMateri
                             propertyName="level"
                             minimum={0}
                             maximum={2}
-                            step={0.01}
-                            onPropertyChangedObservable={this.props.onPropertyChangedObservable}
-                        />
-                    )}
-                    {material.clearCoat.tintTexture && false /* level is not used for the clear coat tint texture */ && (
-                        <SliderLineComponent
-                            lockObject={this.props.lockObject}
-                            label="Clear coat tint"
-                            target={material.clearCoat.tintTexture}
-                            propertyName="level"
-                            minimum={0}
-                            maximum={1}
                             step={0.01}
                             onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                         />

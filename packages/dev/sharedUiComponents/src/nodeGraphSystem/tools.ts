@@ -1,7 +1,7 @@
-import type { GraphCanvasComponent } from "./graphCanvas";
-import type { GraphNode } from "./graphNode";
-import type { NodeLink } from "./nodeLink";
-import type { FramePortData } from "./types/framePortData";
+import { type GraphCanvasComponent } from "./graphCanvas";
+import { type GraphNode } from "./graphNode";
+import { type NodeLink } from "./nodeLink";
+import { type FramePortData } from "./types/framePortData";
 import * as localStyles from "./graphNode.module.scss";
 
 export const IsFramePortData = (variableToCheck: any): variableToCheck is FramePortData => {
@@ -132,7 +132,15 @@ export const BuildFloatUI = (
 
             if (numberInput.hasPointerCapture(evt.pointerId)) {
                 const delta = isInteger ? Math.sign(evt.movementX) : evt.movementX * 0.01;
-                numberInput.value = (parseFloat(numberInput.value) + delta).toFixed(isInteger ? 0 : 2);
+                let currentValue = parseFloat(numberInput.value) + delta;
+                if (min !== undefined) {
+                    currentValue = Math.max(currentValue, min);
+                }
+                if (max !== undefined) {
+                    currentValue = Math.min(currentValue, max);
+                }
+
+                numberInput.value = currentValue.toFixed(isInteger ? 0 : 2);
 
                 source[propertyName] = isInteger ? parseInt(numberInput.value) : parseFloat(numberInput.value);
                 onChange();

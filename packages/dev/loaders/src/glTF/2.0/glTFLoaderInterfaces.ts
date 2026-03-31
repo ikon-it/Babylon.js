@@ -1,12 +1,12 @@
-﻿import type { AnimationGroup } from "core/Animations/animationGroup";
-import type { Skeleton } from "core/Bones/skeleton";
-import type { Material } from "core/Materials/material";
-import type { TransformNode } from "core/Meshes/transformNode";
-import type { Buffer, VertexBuffer } from "core/Buffers/buffer";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { Mesh } from "core/Meshes/mesh";
-import type { Camera } from "core/Cameras/camera";
-import type { Light } from "core/Lights/light";
+﻿import { type AnimationGroup } from "core/Animations/animationGroup";
+import { type Skeleton } from "core/Bones/skeleton";
+import { type Material } from "core/Materials/material";
+import { type TransformNode } from "core/Meshes/transformNode";
+import { type Buffer, type VertexBuffer } from "core/Buffers/buffer";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import { type Mesh } from "core/Meshes/mesh";
+import { type Camera } from "core/Cameras/camera";
+import { type Light } from "core/Lights/light";
 
 import type * as GLTF2 from "babylonjs-gltf2interface";
 
@@ -309,6 +309,13 @@ export interface IKHRLightsPunctual_Light extends GLTF2.IKHRLightsPunctual_Light
 /** @internal */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export interface IEXTLightsIES_Light extends GLTF2.IEXTLightsIES_Light, IArrayItem {
+    /** @hidden */
+    _babylonLight?: Light;
+}
+
+/** @internal */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export interface IEXTLightsArea_Light extends GLTF2.IEXTLightsArea_Light, IArrayItem {
     /** @hidden */
     _babylonLight?: Light;
 }

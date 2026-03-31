@@ -29,7 +29,9 @@ uniform vec3 particlesInfos; // x (number of rows) y(number of columns) z(rowSiz
 // Output
 varying vec2 vUV;
 varying vec4 vColor;
+#ifdef POSITIONW_AS_VARYING
 varying vec3 vPositionW;
+#endif
 
 #ifdef RAMPGRADIENT
 varying vec4 remapRanges;
@@ -69,7 +71,7 @@ vec3 rotateAlign(vec3 toCamera, vec3 rotatedCorner) {
 	vec3 row2 = vec3(normalizedToCamera.x, normalizedToCamera.y, normalizedToCamera.z);
 
 #ifdef BILLBOARDSTRETCHED_LOCAL
-	vec3 row1 = direction;
+	vec3 row1 = normalize(direction);
 #else
 	vec3 crossProduct = normalize(cross(normalizedToCamera, normalizedCrossDirToCamera));
 	vec3 row1 = vec3(crossProduct.x, crossProduct.y, crossProduct.z);
@@ -90,6 +92,9 @@ void main(void) {
 #define CUSTOM_VERTEX_MAIN_BEGIN
 
 	vec2 cornerPos;
+#ifndef POSITIONW_AS_VARYING
+	vec3 vPositionW;
+#endif
 
 	cornerPos = (vec2(offset.x - 0.5, offset.y  - 0.5) - translationPivot) * size;
 

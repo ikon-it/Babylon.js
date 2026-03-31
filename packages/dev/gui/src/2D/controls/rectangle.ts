@@ -1,8 +1,8 @@
 import { Container } from "./container";
-import type { Measure } from "../measure";
+import { type Measure } from "../measure";
 import { RegisterClass } from "core/Misc/typeStore";
 import { serialize } from "core/Misc/decorators";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
 
 /** Class used to create rectangle container */
 export class Rectangle extends Container {
@@ -144,8 +144,8 @@ export class Rectangle extends Container {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         if (this._background || this._backgroundGradient) {

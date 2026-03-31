@@ -1,16 +1,16 @@
 import { serialize, serializeAsTexture } from "../Misc/decorators";
-import type { Nullable } from "../types";
-import type { Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Scene } from "../scene";
 import { Matrix, Vector3 } from "../Maths/math.vector";
 import { Node } from "../node";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Effect } from "../Materials/effect";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Effect } from "../Materials/effect";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Light } from "./light";
 import { ShadowLight } from "./shadowLight";
 import { Texture } from "../Materials/Textures/texture";
-import type { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
-import type { Camera } from "../Cameras/camera";
+import { type ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
+import { type Camera } from "../Cameras/camera";
 import { RegisterClass } from "../Misc/typeStore";
 import { Constants } from "core/Engines/constants";
 
@@ -41,10 +41,13 @@ export class SpotLight extends ShadowLight {
 
     private _angle: number;
     private _innerAngle: number = 0;
-    private _cosHalfAngle: number;
+    /** @internal */
+    public _cosHalfAngle: number;
 
-    private _lightAngleScale: number;
-    private _lightAngleOffset: number;
+    /** @internal */
+    public _lightAngleScale: number;
+    /** @internal */
+    public _lightAngleOffset: number;
 
     private _iesProfileTexture: Nullable<BaseTexture> = null;
 
@@ -256,9 +259,10 @@ export class SpotLight extends ShadowLight {
      * @param angle The cone angle of the light in Radians
      * @param exponent The light decay speed with the distance from the emission spot
      * @param scene The scene the lights belongs to
+     * @param dontAddToScene True to not add the light to the scene
      */
-    constructor(name: string, position: Vector3, direction: Vector3, angle: number, exponent: number, scene?: Scene) {
-        super(name, scene);
+    constructor(name: string, position: Vector3, direction: Vector3, angle: number, exponent: number, scene?: Scene, dontAddToScene?: boolean) {
+        super(name, scene, dontAddToScene);
 
         this.position = position;
         this.direction = direction;
@@ -426,13 +430,21 @@ export class SpotLight extends ShadowLight {
      */
     public transferToEffect(effect: Effect, lightIndex: string): SpotLight {
         let normalizeDirection;
+        const offset = this._scene.floatingOriginOffset;
 
         if (this.computeTransformedInformation()) {
-            this._uniformBuffer.updateFloat4("vLightData", this.transformedPosition.x, this.transformedPosition.y, this.transformedPosition.z, this.exponent, lightIndex);
+            this._uniformBuffer.updateFloat4(
+                "vLightData",
+                this.transformedPosition.x - offset.x,
+                this.transformedPosition.y - offset.y,
+                this.transformedPosition.z - offset.z,
+                this.exponent,
+                lightIndex
+            );
 
             normalizeDirection = Vector3.Normalize(this.transformedDirection);
         } else {
-            this._uniformBuffer.updateFloat4("vLightData", this.position.x, this.position.y, this.position.z, this.exponent, lightIndex);
+            this._uniformBuffer.updateFloat4("vLightData", this.position.x - offset.x, this.position.y - offset.y, this.position.z - offset.z, this.exponent, lightIndex);
 
             normalizeDirection = Vector3.Normalize(this.direction);
         }

@@ -1,12 +1,12 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
-import type { Effect } from "../../../effect";
-import type { Mesh } from "../../../../Meshes/mesh";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type AbstractMesh } from "../../../../Meshes/abstractMesh";
+import { type NodeMaterial, type NodeMaterialDefines } from "../../nodeMaterial";
+import { type Effect } from "../../../effect";
+import { type Mesh } from "../../../../Meshes/mesh";
 import { VertexBuffer } from "../../../../Buffers/buffer";
 import { InputBlock } from "../Input/inputBlock";
 import { RegisterClass } from "../../../../Misc/typeStore";
@@ -136,6 +136,10 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         return this._outputs[5];
     }
 
+    /**
+     * Initialize the block
+     * @param state - the build state
+     */
     public override initialize(state: NodeMaterialBuildState) {
         state._excludeVariableName("morphTargetInfluences");
 
@@ -166,6 +170,11 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         this.onCodeIsReadyObservable.notifyObservers(this);
     }
 
+    /**
+     * Auto configure the block based on the material
+     * @param material - the node material
+     * @param additionalFilteringInfo - additional filtering info
+     */
     public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.position.isConnected) {
             let positionInput = material.getInputBlockByPredicate((b) => b.isAttribute && b.name === "position" && additionalFilteringInfo(b));
@@ -223,7 +232,17 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         }
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    /**
+     * Prepare the list of defines
+     * @param defines - the list of defines
+     * @param nodeMaterial - the node material
+     * @param mesh - the mesh
+     */
+    public override prepareDefines(defines: NodeMaterialDefines, nodeMaterial: NodeMaterial, mesh?: AbstractMesh) {
+        if (!mesh) {
+            return;
+        }
+
         if ((<Mesh>mesh).morphTargetManager) {
             const morphTargetManager = (<Mesh>mesh).morphTargetManager;
 
@@ -239,6 +258,12 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         PrepareDefinesForMorphTargets(mesh, defines);
     }
 
+    /**
+     * Bind data to effect
+     * @param effect - the effect to bind to
+     * @param nodeMaterial - the node material
+     * @param mesh - the mesh
+     */
     public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         if (mesh && mesh.morphTargetManager && mesh.morphTargetManager.numInfluencers > 0) {
             BindMorphTargetParameters(mesh, effect);
@@ -249,12 +274,17 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         }
     }
 
-    public override replaceRepeatableContent(
-        vertexShaderState: NodeMaterialBuildState,
-        fragmentShaderState: NodeMaterialBuildState,
-        mesh: AbstractMesh,
-        defines: NodeMaterialDefines
-    ) {
+    /**
+     * Replace repeatable content
+     * @param vertexShaderState - the vertex shader build state
+     * @param defines - the list of defines
+     * @param mesh - the mesh
+     */
+    public override replaceRepeatableContent(vertexShaderState: NodeMaterialBuildState, defines: NodeMaterialDefines, mesh?: AbstractMesh) {
+        if (!mesh) {
+            return;
+        }
+
         const position = this.position;
         const normal = this.normal;
         const tangent = this.tangent;
@@ -289,7 +319,7 @@ export class MorphTargetsBlock extends NodeMaterialBlock {
         const uniformsPrefix = isWebGPU ? "uniforms." : "";
         if (manager?.isUsingTextureForTargets) {
             injectionCode += `for (${isWebGPU ? "var" : "int"} i = 0; i < NUM_MORPH_INFLUENCERS; i++) {\n`;
-            injectionCode += `if (i >= ${uniformsPrefix}morphTargetCount) { break; }\n`;
+            injectionCode += `if (${isWebGPU ? "f32" : "float"}(i) >= ${uniformsPrefix}morphTargetCount) { break; }\n`;
 
             injectionCode += `vertexID = ${isWebGPU ? "f32(vertexInputs.vertexIndex" : "float(gl_VertexID"}) * ${uniformsPrefix}morphTargetTextureInfo.x;\n`;
             if (supportPositions) {

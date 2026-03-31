@@ -1,11 +1,10 @@
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { Vector3 } from "../../Maths/math.vector";
-import type { IPhysicsEngine } from "../IPhysicsEngine";
-import type { IPhysicsEnginePluginV2 } from "./IPhysicsEnginePlugin";
-import type { IRaycastQuery } from "../physicsRaycastResult";
-import { PhysicsRaycastResult } from "../physicsRaycastResult";
+import { type IPhysicsEngine } from "../IPhysicsEngine";
+import { type IPhysicsEnginePluginV2 } from "./IPhysicsEnginePlugin";
+import { type IRaycastQuery, PhysicsRaycastResult } from "../physicsRaycastResult";
 import { _WarnImport } from "../../Misc/devTools";
-import type { PhysicsBody } from "./physicsBody";
+import { type PhysicsBody } from "./physicsBody";
 
 /**
  * Class used to control physics engine
@@ -137,12 +136,6 @@ export class PhysicsEngine implements IPhysicsEngine {
     }
 
     /**
-     * Adding a new impostor for the impostor tracking.
-     * This will be done by the impostor itself.
-     * @param impostor the impostor to add
-     */
-
-    /**
      * Called by the scene. No need to call it.
      * @param delta defines the timespan between frames
      */
@@ -192,10 +185,12 @@ export class PhysicsEngine implements IPhysicsEngine {
      * Does a raycast in the physics world
      * @param from when should the ray start?
      * @param to when should the ray end?
-     * @param result resulting PhysicsRaycastResult
+     * @param result resulting PhysicsRaycastResult or array of PhysicsRaycastResults
      * @param query raycast query object
+     * If result is an empty array, it will be populated with every detected raycast hit.
+     * If result is a populated array, it will only fill the PhysicsRaycastResults present in the array.
      */
-    public raycastToRef(from: Vector3, to: Vector3, result: PhysicsRaycastResult, query?: IRaycastQuery): void {
+    public raycastToRef(from: Vector3, to: Vector3, result: PhysicsRaycastResult | Array<PhysicsRaycastResult>, query?: IRaycastQuery): void {
         this._physicsPlugin.raycast(from, to, result, query);
     }
 
@@ -208,6 +203,19 @@ export class PhysicsEngine implements IPhysicsEngine {
      */
     public raycast(from: Vector3, to: Vector3, query?: IRaycastQuery): PhysicsRaycastResult {
         const result = new PhysicsRaycastResult();
+        this._physicsPlugin.raycast(from, to, result, query);
+        return result;
+    }
+
+    /**
+     * Does a raycast through multiple objects in the physics world
+     * @param from when should the ray start?
+     * @param to when should the ray end?
+     * @param query raycast query object
+     * @returns array of PhysicsRaycastResult
+     */
+    public raycastMulti(from: Vector3, to: Vector3, query?: IRaycastQuery): Array<PhysicsRaycastResult> {
+        const result: Array<PhysicsRaycastResult> = [];
         this._physicsPlugin.raycast(from, to, result, query);
         return result;
     }

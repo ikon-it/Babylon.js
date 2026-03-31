@@ -1,7 +1,7 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
@@ -102,8 +102,8 @@ export class FragCoordBlock extends NodeMaterialBlock {
         super._buildBlock(state);
 
         if (state.target === NodeMaterialBlockTargets.Vertex) {
-            // eslint-disable-next-line no-throw-literal
-            throw "FragCoordBlock must only be used in a fragment shader";
+            state.sharedData.raiseBuildError("FragCoordBlock must only be used in a fragment shader");
+            return this;
         }
 
         state.compilationString += this.writeOutputs(state);

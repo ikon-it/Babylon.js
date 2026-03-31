@@ -1,20 +1,20 @@
+/* eslint-disable @typescript-eslint/no-restricted-imports */
 import * as React from "react";
-import type { Scene } from "core/scene";
+import { type Scene } from "core/scene";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
-import type { GlobalState } from "../../../globalState";
+import { type GlobalState } from "../../../globalState";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { MessageLineComponent } from "shared-ui-components/lines/messageLineComponent";
 import { faCheck, faTimesCircle } from "@fortawesome/free-solid-svg-icons";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
 // TODO - does it still work if loading the modules from the correct files?
-// eslint-disable-next-line import/no-internal-modules
 import { GLTFLoaderCoordinateSystemMode, GLTFLoaderAnimationStartMode } from "loaders/glTF/index";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
-import type { IGLTFValidationResults } from "babylonjs-gltf2interface";
-import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
+import { type Nullable } from "core/types";
+import { type Observer } from "core/Misc/observable";
+import { type IGLTFValidationResults } from "babylonjs-gltf2interface";
+import { type LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
 
 interface IGLTFComponentProps {
     scene: Scene;
@@ -275,9 +275,9 @@ export class GLTFComponent extends React.Component<IGLTFComponentProps, IGLTFCom
                                 onSelect={(value) => (extensionStates["KHR_materials_dispersion"].enabled = value)}
                             />
                             <CheckBoxLineComponent
-                                label="EXT_materials_diffuse_roughness"
-                                isSelected={() => extensionStates["EXT_materials_diffuse_roughness"].enabled}
-                                onSelect={(value) => (extensionStates["EXT_materials_diffuse_roughness"].enabled = value)}
+                                label="KHR_materials_diffuse_roughness"
+                                isSelected={() => extensionStates["KHR_materials_diffuse_roughness"].enabled}
+                                onSelect={(value) => (extensionStates["KHR_materials_diffuse_roughness"].enabled = value)}
                             />
                             <CheckBoxLineComponent
                                 label="KHR_mesh_quantization"
@@ -288,6 +288,11 @@ export class GLTFComponent extends React.Component<IGLTFComponentProps, IGLTFCom
                                 label="KHR_lights_punctual"
                                 isSelected={() => extensionStates["KHR_lights_punctual"].enabled}
                                 onSelect={(value) => (extensionStates["KHR_lights_punctual"].enabled = value)}
+                            />
+                            <CheckBoxLineComponent
+                                label="EXT_lights_area"
+                                isSelected={() => extensionStates["EXT_lights_area"].enabled}
+                                onSelect={(value) => (extensionStates["EXT_lights_area"].enabled = value)}
                             />
                             <CheckBoxLineComponent
                                 label="KHR_texture_basisu"

@@ -1,22 +1,26 @@
-import type {
-    AbstractEngine,
-    AbstractMesh,
-    EffectLayer,
-    Mesh,
-    Nullable,
-    Observer,
-    Scene,
-    WebGPUDrawContext,
-    WebGPUShaderProcessor,
-    WebGPUPipelineContext,
-    GaussianSplattingMesh,
-    // eslint-disable-next-line import/no-internal-modules
+import {
+    type AbstractEngine,
+    type AbstractMesh,
+    type EffectLayer,
+    type Mesh,
+    type Nullable,
+    type Observer,
+    type Scene,
+    type WebGPUDrawContext,
+    type WebGPUShaderProcessor,
+    type WebGPUPipelineContext,
+    type GaussianSplattingMesh,
+    type DrawWrapper,
+    type Camera,
+    type SpriteManager,
 } from "core/index";
 
 import { Constants } from "core/Engines/constants";
 import { BindMorphTargetParameters } from "core/Materials/materialHelper.functions";
 import { ScenePerformancePriority } from "core/scene";
 import { Logger } from "core/Misc/logger";
+import { FrameGraphBaseLayerTask } from "../FrameGraph/Tasks/Layers/baseLayerTask";
+import { FrameGraphUtils } from "../FrameGraph/frameGraphUtils";
 
 /**
  * Options for the snapshot rendering helper
@@ -86,6 +90,15 @@ export class SnapshotRenderingHelper {
             if (this._fastSnapshotRenderingEnabled) {
                 this.disableSnapshotRendering();
                 this.enableSnapshotRendering();
+            } else if (this._isEnabling) {
+                // We are in the process of enabling snapshot rendering, but the engine got resized before we could actually enable it:
+                // * cancel all "enable" pending callbacks
+                // * increase the ref count to balance the decrease that enableSnapshotRendering() will do
+                // * call enableSnapshotRendering() again to restart the enabling process
+                this._enableCancelFunctions.forEach((cancel) => cancel());
+                this._enableCancelFunctions.clear();
+                this._disableRenderingRefCount++;
+                this.enableSnapshotRendering();
             }
 
             this._log("onResize", "end");
@@ -96,11 +109,12 @@ export class SnapshotRenderingHelper {
                 return;
             }
 
-            // Animate skeletons
+            // Animates skeletons
             for (const skeleton of scene.skeletons) {
                 skeleton.prepare(true);
             }
 
+            // Handles meshes
             for (const mesh of scene.meshes) {
                 if (mesh.infiniteDistance) {
                     mesh.transferToEffect(mesh.computeWorldMatrix(true));
@@ -131,6 +145,20 @@ export class SnapshotRenderingHelper {
                     }
                 }
             }
+
+            // Handles sprite renderers
+            let camera = scene.activeCamera;
+            if (scene.frameGraph) {
+                camera = FrameGraphUtils.FindMainCamera(scene.frameGraph) || camera;
+            }
+            if (scene.spriteManagers && camera) {
+                for (const imanager of scene.spriteManagers) {
+                    const manager = imanager as SpriteManager;
+                    const renderer = manager.spriteRenderer;
+
+                    this._spriteRendererUpdateEffects(renderer._drawWrapperBase, renderer._drawWrapperDepth, camera);
+                }
+            }
         });
     }
 
@@ -145,17 +173,21 @@ export class SnapshotRenderingHelper {
      * Enable snapshot rendering
      * Use this method instead of engine.snapshotRendering=true, to make sure everything is ready before enabling snapshot rendering.
      * Note that this method is ref-counted and works in pair with disableSnapshotRendering(): you should call enableSnapshotRendering() as many times as you call disableSnapshotRendering().
+     * @param debugMessage An optional message to display in debug logs to help identify the context of the call to enableSnapshotRendering
      */
-    public enableSnapshotRendering() {
+    public enableSnapshotRendering(debugMessage?: string) {
         if (!this._engine.isWebGPU) {
             return;
         }
+
+        this._log("enableSnapshotRendering", `called (refCount: ${this._disableRenderingRefCount - 1})${debugMessage ? ` - ${debugMessage}` : ""}`);
 
         if (--this._disableRenderingRefCount > 0) {
             return;
         }
 
-        this._log("enableSnapshotRendering", "called");
+        this._log("enableSnapshotRendering", `execute`);
+
         if (this._disableCancelFunctions.size > 0) {
             this._log("enableSnapshotRendering", `cancelling ${this._disableCancelFunctions.size} "disable" callbacks`);
         }
@@ -197,16 +229,22 @@ export class SnapshotRenderingHelper {
 
     /**
      * Disable snapshot rendering
-     * Note that this method is ref-counted and works in pair with disableSnapshotRendering(): you should call enableSnapshotRendering() as many times as you call disableSnapshotRendering().
+     * Note that this method is ref-counted and works in pair with enableSnapshotRendering(): you should call enableSnapshotRendering() as many times as you call disableSnapshotRendering().
+     * @param debugMessage An optional message to display in debug logs to help identify the context of the call to disableSnapshotRendering
      */
-    public disableSnapshotRendering() {
+    public disableSnapshotRendering(debugMessage?: string) {
         if (!this._engine.isWebGPU) {
             return;
         }
 
-        this._log("disableSnapshotRendering", "called");
+        this._log(
+            "disableSnapshotRendering",
+            `called (refCount: ${this._disableRenderingRefCount === 0 ? 0 : this._disableRenderingRefCount + 1})${debugMessage ? ` - ${debugMessage}` : ""}`
+        );
 
         if (this._disableRenderingRefCount === 0) {
+            this._log("disableSnapshotRendering", `execute (refCount set to 1 after execution)`);
+
             if (this._enableCancelFunctions.size > 0) {
                 this._log("disableSnapshotRendering", `cancelling ${this._enableCancelFunctions.size} "enable" callbacks`);
             }
@@ -301,7 +339,8 @@ export class SnapshotRenderingHelper {
             if (mesh.subMeshes) {
                 const sourceMesh = mesh as Mesh;
                 for (const subMesh of sourceMesh.subMeshes) {
-                    sourceMesh._updateInstancedBuffers(subMesh, sourceMesh._getInstancesRenderList(subMesh._id), sourceMesh._instanceDataStorage.instancesBufferSize, this._engine);
+                    const batch = sourceMesh._getInstancesRenderList(subMesh._id);
+                    sourceMesh._updateInstancedBuffers(subMesh, batch, batch.parent.instancesBufferSize, this._engine);
                 }
             }
             return true;
@@ -314,15 +353,15 @@ export class SnapshotRenderingHelper {
 
     /**
      * Update the meshes used in an effect layer to ensure that snapshot rendering works correctly for these meshes in this layer.
-     * @param effectLayer The effect layer
-     * @param autoUpdate If true, the helper will automatically update the effect layer meshes with each frame. If false, you'll need to call this method manually when the camera or layer meshes move or rotate.
+     * @param layer The effect layer or frame graph layer
+     * @param autoUpdate If true, the helper will automatically update the meshes of the layer with each frame. If false, you'll need to call this method manually when the camera or layer meshes move or rotate.
      */
-    public updateMeshesForEffectLayer(effectLayer: EffectLayer, autoUpdate = true) {
+    public updateMeshesForEffectLayer(layer: EffectLayer | FrameGraphBaseLayerTask, autoUpdate = true) {
         if (!this._engine.isWebGPU) {
             return;
         }
 
-        const renderPassId = effectLayer.mainTexture.renderPassId;
+        const renderPassId = layer instanceof FrameGraphBaseLayerTask ? layer.objectRendererForLayer.objectRenderer.renderPassId : layer.mainTexture.renderPassId;
 
         if (autoUpdate) {
             this._onBeforeRenderObserverUpdateLayer = this._scene.onBeforeRenderObservable.add(() => {
@@ -355,7 +394,8 @@ export class SnapshotRenderingHelper {
             return;
         }
 
-        const sceneTransformationMatrix = this._scene.getTransformMatrix();
+        const sceneTransformationMatrix =
+            this._scene.objectRenderers.find((renderer) => renderer.renderPassId === renderPassId)?.activeCamera?.getTransformationMatrix() ?? this._scene.getTransformMatrix();
 
         for (let i = 0; i < this._scene.meshes.length; ++i) {
             const mesh = this._scene.meshes[i];
@@ -377,6 +417,24 @@ export class SnapshotRenderingHelper {
                 }
             }
         }
+    }
+
+    private _spriteRendererDirectMatrixUpdate(dw: DrawWrapper, camera: Camera) {
+        const effect = dw?.effect;
+        if (effect) {
+            const dataBuffer = (dw.drawContext as WebGPUDrawContext).buffers["LeftOver" satisfies (typeof WebGPUShaderProcessor)["LeftOvertUBOName"]];
+            const ubLeftOver = (effect._pipelineContext as WebGPUPipelineContext)?.uniformBuffer;
+            if (dataBuffer && ubLeftOver && ubLeftOver.setDataBuffer(dataBuffer)) {
+                effect.setMatrix("view", camera.getViewMatrix());
+                effect.setMatrix("projection", camera.getProjectionMatrix());
+                ubLeftOver.update();
+            }
+        }
+    }
+
+    private _spriteRendererUpdateEffects(drawWrapperBase: DrawWrapper, drawWrapperDepth: DrawWrapper, camera: Camera) {
+        this._spriteRendererDirectMatrixUpdate(drawWrapperBase, camera);
+        this._spriteRendererDirectMatrixUpdate(drawWrapperDepth, camera);
     }
 
     private _executeAtFrame(frameId: number, func: () => void, mode: "whenEnabled" | "whenDisabled" = "whenEnabled") {

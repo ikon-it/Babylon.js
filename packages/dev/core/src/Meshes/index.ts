@@ -1,5 +1,4 @@
-/* eslint-disable import/export */
-/* eslint-disable import/no-internal-modules */
+/* eslint-disable @typescript-eslint/no-restricted-imports */
 export * from "./abstractMesh";
 import "./abstractMesh.decalMap";
 export * from "./abstractMesh.hotSpot";
@@ -36,7 +35,6 @@ export * from "./csg2";
 export * from "./mesh.vertexData.functions";
 export * from "./mesh.vertexData.subdivide";
 import "./thinInstanceMesh";
-// eslint-disable-next-line no-duplicate-imports
 export * from "./thinInstanceMesh";
 export * from "./Node/index";
 export * from "./GaussianSplatting/gaussianSplattingMesh";

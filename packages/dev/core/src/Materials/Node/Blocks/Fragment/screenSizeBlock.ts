@@ -1,11 +1,11 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../../Misc/typeStore";
-import type { Effect } from "../../../effect";
-import type { Scene } from "../../../../scene";
+import { type Effect } from "../../../effect";
+import { type Scene } from "../../../../scene";
 import { ShaderLanguage } from "../../../../Materials/shaderLanguage";
 
 /**
@@ -14,6 +14,13 @@ import { ShaderLanguage } from "../../../../Materials/shaderLanguage";
 export class ScreenSizeBlock extends NodeMaterialBlock {
     private _varName: string;
     private _scene: Scene;
+
+    /**
+     * Name of the variable in the shader that holds the screen size
+     */
+    public get associatedVariableName(): string {
+        return this._varName;
+    }
 
     /**
      * Creates a new ScreenSizeBlock
@@ -56,6 +63,10 @@ export class ScreenSizeBlock extends NodeMaterialBlock {
         return this._outputs[2];
     }
 
+    /**
+     * Bind data to effect
+     * @param effect - defines the effect to bind data to
+     */
     public override bind(effect: Effect) {
         const engine = this._scene.getEngine();
 
@@ -81,8 +92,8 @@ export class ScreenSizeBlock extends NodeMaterialBlock {
         this._scene = state.sharedData.scene;
 
         if (state.target === NodeMaterialBlockTargets.Vertex) {
-            // eslint-disable-next-line no-throw-literal
-            throw "ScreenSizeBlock must only be used in a fragment shader";
+            state.sharedData.raiseBuildError("ScreenSizeBlock must only be used in a fragment shader");
+            return this;
         }
 
         state.sharedData.bindableBlocks.push(this);

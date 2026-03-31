@@ -1,21 +1,18 @@
 import { Mesh } from "./mesh";
-import type { IDisposable, Scene } from "core/scene";
-import type { IVertexDataLike } from "./mesh.vertexData";
-import { VertexData } from "./mesh.vertexData";
+import { type IDisposable, type Scene } from "core/scene";
+import { type IVertexDataLike, VertexData } from "./mesh.vertexData";
 import { VertexBuffer } from "../Buffers/buffer";
 import { Logger } from "core/Misc/logger";
 import { MultiMaterial } from "core/Materials/multiMaterial";
 import { SubMesh } from "./subMesh";
-import type { Material } from "core/Materials/material";
+import { type Material } from "core/Materials/material";
 import { _LoadScriptModuleAsync } from "core/Misc/tools.internals";
-import type { FloatArray, Nullable } from "core/types";
-import type { Matrix } from "core/Maths/math.vector";
-import { Vector3 } from "core/Maths/math.vector";
+import { type FloatArray, type Nullable } from "core/types";
+import { type Matrix, Vector3 } from "core/Maths/math.vector";
 
 /**
  * Main manifold library
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
 let Manifold: any;
 
 /**
@@ -27,7 +24,6 @@ let ManifoldPromise: Promise<{ Manifold: any; Mesh: any }>;
 /**
  * Manifold mesh
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
 let ManifoldMesh: any;
 
 /**
@@ -163,9 +159,8 @@ export class CSG2 implements IDisposable {
      */
     public printDebug() {
         Logger.Log("Genus:" + this._manifold.genus());
-        const properties = this._manifold.getProperties();
-        Logger.Log("Volume:" + properties.volume);
-        Logger.Log("surface area:" + properties.surfaceArea);
+        Logger.Log("Volume:" + this._manifold.volume());
+        Logger.Log("surface area:" + this._manifold.surfaceArea());
     }
 
     /**
@@ -232,6 +227,10 @@ export class CSG2 implements IDisposable {
         // Rebuild mesh from vertex data
         const output = new Mesh(name, scene);
         vertexData.applyToMesh(output);
+
+        if (!vertexCount) {
+            throw new Error("Unable to build a mesh. Manifold has 0 vertex");
+        }
 
         // Center mesh
         if (localOptions.centerMesh) {
@@ -317,7 +316,7 @@ export class CSG2 implements IDisposable {
         try {
             returnValue = new CSG2(new Manifold(manifoldMesh), numProp, structure);
         } catch (e) {
-            throw new Error("Error while creating the CSG: " + e.message);
+            throw new Error("Error while creating the CSG: " + e.message, { cause: e });
         }
 
         return returnValue;
@@ -367,8 +366,16 @@ export class CSG2 implements IDisposable {
         }
 
         // UVs
+        const uvKindToPropertyName: { [key: string]: string } = {
+            [VertexBuffer.UVKind]: "uvs",
+            [VertexBuffer.UV2Kind]: "uvs2",
+            [VertexBuffer.UV3Kind]: "uvs3",
+            [VertexBuffer.UV4Kind]: "uvs4",
+            [VertexBuffer.UV5Kind]: "uvs5",
+            [VertexBuffer.UV6Kind]: "uvs6",
+        };
         for (const kind of [VertexBuffer.UVKind, VertexBuffer.UV2Kind, VertexBuffer.UV3Kind, VertexBuffer.UV4Kind, VertexBuffer.UV5Kind, VertexBuffer.UV6Kind]) {
-            const sourceUV = (data as any)[kind === VertexBuffer.UVKind ? "uvs" : kind];
+            const sourceUV = (data as any)[uvKindToPropertyName[kind]];
             if (sourceUV) {
                 numProp += 2;
                 structure.push({ stride: 2, kind: kind, data: sourceUV });
@@ -467,7 +474,7 @@ export function IsCSG2Ready() {
  */
 export async function InitializeCSG2Async(options?: Partial<ICSG2Options>) {
     const localOptions = {
-        manifoldUrl: "https://unpkg.com/manifold-3d@3.1.0",
+        manifoldUrl: "https://unpkg.com/manifold-3d@3.4.0",
         ...options,
     };
 
@@ -495,6 +502,7 @@ export async function InitializeCSG2Async(options?: Partial<ICSG2Options>) {
         );
 
         const result = await ManifoldPromise;
+        // eslint-disable-next-line require-atomic-updates
         Manifold = result.Manifold;
         ManifoldMesh = result.Mesh;
     }

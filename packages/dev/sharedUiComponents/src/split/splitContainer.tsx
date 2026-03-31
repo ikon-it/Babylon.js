@@ -1,7 +1,7 @@
-import type { PropsWithChildren } from "react";
-import { useEffect, useRef } from "react";
+import { type PropsWithChildren, useContext, useEffect, useRef } from "react";
 import * as styles from "./splitContainer.module.scss";
 import { ControlledSize, SplitDirection, SplitContext } from "./splitContext";
+import { ToolContext } from "shared-ui-components/fluent/hoc/fluentToolWrapper";
 
 /**
  * Split container properties
@@ -77,6 +77,7 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
     const controllers: number[][] = [];
     const minSizes: number[] = [];
     const maxSizes: number[] = [];
+    const useFluent = useContext(ToolContext).useFluent;
 
     const buildGridDefinition = () => {
         if (!elementRef.current) {
@@ -133,7 +134,7 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
             }
 
             const child = children[i] as HTMLElement;
-            let childsize = 0;
+            let childsize: number;
             if (props.direction === SplitDirection.Horizontal) {
                 childsize = child.getBoundingClientRect().width;
             } else {
@@ -194,7 +195,7 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
             return;
         }
 
-        let current = 0;
+        let current: number;
         if (controlledSide === ControlledSize.First) {
             current = sourceIndex - 1;
         } else {
@@ -275,8 +276,8 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
             return;
         }
 
-        let current = 0;
-        let other = 0;
+        let current: number;
+        let other: number;
         if (controlledSide === ControlledSize.First) {
             current = sourceIndex - 1;
             other = sourceIndex + 1;
@@ -287,8 +288,9 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
 
         if (size !== undefined) {
             const sizeString = `${size | 0}px`;
+            const alreadySet = props.direction === SplitDirection.Horizontal ? childArray[current].style.width : childArray[current].style.height;
 
-            if (!childArray[current].style.width) {
+            if (!alreadySet) {
                 if (props.direction === SplitDirection.Horizontal) {
                     childArray[current].style.width = sizeString;
                 } else {
@@ -319,6 +321,7 @@ export const SplitContainer: React.FC<PropsWithChildren<ISplitContainerProps>> =
             <div
                 id={props.id}
                 className={styles["split-container"] + " " + props.className}
+                style={useFluent ? { height: "100vh" } : undefined} // temporary until splitContainer is fluentized
                 ref={elementRef}
                 onPointerDown={(evt) => props.onPointerDown && props.onPointerDown(evt)}
                 onPointerMove={(evt) => props.onPointerMove && props.onPointerMove(evt)}

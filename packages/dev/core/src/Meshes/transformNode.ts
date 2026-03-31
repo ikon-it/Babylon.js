@@ -1,14 +1,14 @@
-import type { DeepImmutable, Nullable } from "../types";
+import { type DeepImmutable, type Nullable } from "../types";
 import { serialize, serializeAsVector3, serializeAsQuaternion } from "../Misc/decorators";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { Observable } from "../Misc/observable";
 
-import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
+import { type Camera } from "../Cameras/camera";
+import { type Scene } from "../scene";
 import { Quaternion, Matrix, Vector3, TmpVectors } from "../Maths/math.vector";
 import { Node } from "../node";
-import type { Bone } from "../Bones/bone";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type Bone } from "../Bones/bone";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { Space } from "../Maths/math.axis";
 import { GetClass } from "../Misc/typeStore";
 
@@ -50,6 +50,8 @@ export class TransformNode extends Node {
     private static _TmpRotation = Quaternion.Zero();
     private static _TmpScaling = Vector3.Zero();
     private static _TmpTranslation = Vector3.Zero();
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    private static _TmpRHRestore = Matrix.Scaling(1, 1, -1);
 
     private _forward = new Vector3(0, 0, 1);
     private _up = new Vector3(0, 1, 0);
@@ -160,6 +162,7 @@ export class TransformNode extends Node {
      */
     public onAfterWorldMatrixUpdateObservable = new Observable<TransformNode>();
 
+    /** @internal */
     constructor(name: string, scene: Nullable<Scene> = null, isPure = true) {
         super(name, scene, false);
 
@@ -425,7 +428,6 @@ export class TransformNode extends Node {
      * Instantiate (when possible) or clone that node with its hierarchy
      * @param newParent defines the new parent to use for the instance (or clone)
      * @param options defines options to configure how copy is done
-     * @param options.doNotInstantiate defines if the model must be instantiated or just cloned
      * @param onNewNodeCreated defines an option callback to call when a clone or an instance is created
      * @returns an instance (or a clone) of the current node with its hierarchy
      */
@@ -1206,9 +1208,18 @@ export class TransformNode extends Node {
                 const storedTranslation = TmpVectors.Vector3[0];
                 this._worldMatrix.getTranslationToRef(storedTranslation); // Save translation
 
-                // Cancel camera rotation
+                // Get camera view matrix
                 TmpVectors.Matrix[1].copyFrom(camera.getViewMatrix());
 
+                const isRH = this.getScene().useRightHandedSystem;
+
+                if (isRH) {
+                    // This operation is necessary to cancel out the scaling component of the matrix without decomposing it.
+                    // It's a trick to extract only the rotation part.
+                    TmpVectors.Matrix[1].multiplyToRef(TransformNode._TmpRHRestore, TmpVectors.Matrix[1]);
+                }
+
+                // This will cancel the camera rotation
                 TmpVectors.Matrix[1].setTranslationFromFloats(0, 0, 0);
                 TmpVectors.Matrix[1].invertToRef(TmpVectors.Matrix[0]);
 
@@ -1229,6 +1240,10 @@ export class TransformNode extends Node {
                         eulerAngles.z = 0;
                     }
 
+                    if (isRH) {
+                        eulerAngles.y += Math.PI; // Yaw correction
+                    }
+
                     Matrix.RotationYawPitchRollToRef(eulerAngles.y, eulerAngles.x, eulerAngles.z, TmpVectors.Matrix[0]);
                 }
                 this._worldMatrix.setTranslationFromFloats(0, 0, 0);
@@ -1238,7 +1253,7 @@ export class TransformNode extends Node {
                 this._worldMatrix.setTranslation(TmpVectors.Vector3[0]);
             }
             // Billboarding based on camera position
-            else if (cache.useBillboardPosition) {
+            else {
                 const storedTranslation = TmpVectors.Vector3[0];
                 // Save translation
                 this._worldMatrix.getTranslationToRef(storedTranslation);

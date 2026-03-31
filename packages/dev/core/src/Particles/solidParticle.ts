@@ -1,14 +1,13 @@
-import type { Nullable } from "../types";
-import type { Matrix } from "../Maths/math.vector";
-import { Vector3, TmpVectors, Quaternion, Vector4, Vector2 } from "../Maths/math.vector";
+import { type Nullable } from "../types";
+import { type Matrix, Vector3, TmpVectors, Quaternion, Vector4, Vector2 } from "../Maths/math.vector";
 import { Color4 } from "../Maths/math.color";
-import type { Mesh } from "../Meshes/mesh";
+import { type Mesh } from "../Meshes/mesh";
 import { BoundingInfo } from "../Culling/boundingInfo";
 import { BoundingSphere } from "../Culling/boundingSphere";
-import type { SolidParticleSystem } from "./solidParticleSystem";
+import { type SolidParticleSystem } from "./solidParticleSystem";
 import { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Plane } from "../Maths/math.plane";
-import type { Material } from "../Materials/material";
+import { type Plane } from "../Maths/math.plane";
+import { type Material } from "../Materials/material";
 /**
  * Represents one particle of a solid particle system.
  */
@@ -67,6 +66,15 @@ export class SolidParticle {
      * Is the particle visible or not ?
      */
     public isVisible: boolean = true;
+    /**
+     * Defines how long will the life of the particle be.
+     * Set to Infinity for particles that should never die (default behavior for SolidParticleSystem).
+     */
+    public lifeTime = Infinity;
+    /**
+     * The current age of the particle.
+     */
+    public age = 0;
     /**
      * Index of this particle in the global "positions" array (Internal use)
      * @internal
@@ -223,6 +231,8 @@ export class SolidParticle {
         target.isVisible = this.isVisible;
         target.parentId = this.parentId;
         target.cullingStrategy = this.cullingStrategy;
+        target.lifeTime = this.lifeTime;
+        target.age = this.age;
         if (this.materialIndex !== null) {
             target.materialIndex = this.materialIndex;
         }

@@ -20,10 +20,13 @@
         "build": "tsc -b tsconfig.build.json"
     },
     "dependencies": {
-        "@microsoft/tsdoc": "~0.14.1",
-        "@microsoft/tsdoc-config": "~0.16.1"
+        "@microsoft/tsdoc": "~0.16.0",
+        "@microsoft/tsdoc-config": "~0.18.1"
     },
     "devDependencies": {
-        "@types/eslint": "^8.56.10"
+        "@types/eslint": "^9.6.0"
+    },
+    "peerDependencies": {
+        "eslint": "^9.0.0 || ^10.0.0"
     }
 }

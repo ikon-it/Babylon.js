@@ -1,22 +1,22 @@
 /* eslint-disable github/no-then */
 /* eslint-disable @typescript-eslint/no-floating-promises */
-import type { GlobalState } from "../../globalState";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
-import type { IShadowLight } from "core/Lights/shadowLight";
+import { type GlobalState } from "../../globalState";
+import { type Nullable } from "core/types";
+import { type Observer } from "core/Misc/observable";
+import { type IShadowLight } from "core/Lights/shadowLight";
 import { Engine } from "core/Engines/engine";
 import { Scene } from "core/scene";
-import { Vector3 } from "core/Maths/math.vector";
+import { Matrix, Vector3 } from "core/Maths/math.vector";
 import { HemisphericLight } from "core/Lights/hemisphericLight";
 import { DirectionalLight } from "core/Lights/directionalLight";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { SceneLoader } from "core/Loading/sceneLoader";
 import { TransformNode } from "core/Meshes/transformNode";
-import type { FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
+import { type FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
 import { NodeRenderGraph } from "core/FrameGraph/Node/nodeRenderGraph";
-import type { NodeRenderGraphBlock } from "core/FrameGraph/Node/nodeRenderGraphBlock";
+import { type NodeRenderGraphBlock } from "core/FrameGraph/Node/nodeRenderGraphBlock";
 import { LogEntry } from "../log/logComponent";
-import type { NodeRenderGraphGUIBlock } from "gui/2D/FrameGraph/renderGraphGUIBlock";
+import { type NodeRenderGraphGUIBlock } from "gui/2D/FrameGraph/renderGraphGUIBlock";
 import { Button } from "gui/2D/controls/button";
 import { Control } from "gui/2D/controls/control";
 import { PreviewType } from "./previewType";
@@ -25,13 +25,14 @@ import { FilesInput } from "core/Misc/filesInput";
 import { Color3 } from "core/Maths/math.color";
 import { WebGPUEngine } from "core/Engines/webgpuEngine";
 import { NodeRenderGraphBlockConnectionPointTypes } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
-import type { NodeRenderGraphHighlightLayerBlock } from "core/FrameGraph/Node/Blocks/Layers/highlightLayerBlock";
+import { type NodeRenderGraphHighlightLayerBlock } from "core/FrameGraph/Node/Blocks/Layers/highlightLayerBlock";
 import { BoundingBox } from "core/Culling/boundingBox";
-import type { NodeRenderGraphExecuteBlock } from "core/FrameGraph/Node/Blocks/executeBlock";
-import type { Mesh } from "core/Meshes";
-import type { NodeRenderGraphUtilityLayerRendererBlock } from "core/FrameGraph/Node/Blocks/Rendering/utilityLayerRendererBlock";
+import { type NodeRenderGraphExecuteBlock } from "core/FrameGraph/Node/Blocks/executeBlock";
+import { type Mesh } from "core/Meshes";
+import { type NodeRenderGraphUtilityLayerRendererBlock } from "core/FrameGraph/Node/Blocks/Rendering/utilityLayerRendererBlock";
 import { GizmoManager } from "core/Gizmos/gizmoManager";
 import { Texture } from "core/Materials/Textures/texture";
+import { type NodeRenderGraphSelectionOutlineLayerBlock } from "core/FrameGraph/Node/Blocks/Layers/selectionOutlineLayerBlock";
 
 const DebugTextures = false;
 const LogErrorTrace = true;
@@ -128,9 +129,27 @@ export class PreviewManager {
     private async _initSceneAsync(scene: Scene): Promise<void> {
         (window as any).scenePreview = scene;
 
+        const oldScene = this._scene;
+        if (oldScene) {
+            // We must wait for a while before disposing the old scene because the HDR texture could be in loading state (and maybe other resources too?).
+            // Disposing the scene will dispose the HDR texture too, which will generate an error when the texture is loaded and it tries to set some rendering parameters (sampler info, ...).
+            setTimeout(() => {
+                oldScene.dispose();
+            }, 10000);
+        }
+
         this._scene = scene;
 
-        this._dummyExternalTexture?.dispose();
+        const dummyTexture = this._dummyExternalTexture;
+
+        // The texture could be used by the command buffer that will be processed at the end of the frame, so we can't dispose it immediately
+        // We must call setTimeout(0) two times to make sure we dispose the texture at the right time (the first setTimeout(0) executes just after _initSceneAsync has been processed because it is async, which is too soon)
+        setTimeout(() => {
+            setTimeout(() => {
+                dummyTexture?.dispose();
+            }, 0);
+        }, 0);
+
         this._dummyExternalTexture = new Texture("https://assets.babylonjs.com/textures/Checker_albedo.png", this._scene, true);
         this._dummyExternalTexture.name = "Dummy external texture for preview NRGE";
 
@@ -197,10 +216,6 @@ export class PreviewManager {
             light.dispose();
         }
 
-        // Create a dummy light, which will be used for a ShadowLight input in case no directional light is selected in the UI
-        const dummyLight = new DirectionalLight("dummy", new Vector3(0, 1, 0), this._scene);
-        dummyLight.intensity = 0.0;
-
         // Create new lights based on settings
         if (this._globalState.hemisphericLight) {
             new HemisphericLight("Hemispheric light", new Vector3(0, 1, 0), this._scene);
@@ -223,6 +238,8 @@ export class PreviewManager {
             dir0.shadowMinZ = 0;
             dir0.shadowMaxZ = diag;
             dir0.position = findLightPosition(dir0.direction);
+            // Forces the calculation of the orthoXXX properties of dir0
+            dir0.setShadowProjectionMatrix(new Matrix(), dir0.getViewMatrix()!, this._scene.meshes);
         }
 
         if (this._globalState.directionalLight1) {
@@ -234,6 +251,8 @@ export class PreviewManager {
             dir1.shadowMinZ = 0;
             dir1.shadowMaxZ = diag;
             dir1.position = findLightPosition(dir1.direction);
+            // Forces the calculation of the orthoXXX properties of dir1
+            dir1.setShadowProjectionMatrix(new Matrix(), dir1.getViewMatrix()!, this._scene.meshes);
         }
 
         for (const m of this._scene.meshes) {
@@ -296,7 +315,12 @@ export class PreviewManager {
         this._scene.cameras.length = 0;
         this._scene.cameraToUseForPointers = null;
 
-        const dummyLight = this._scene.getLightByName("dummy") as IShadowLight;
+        let dummyLight = this._scene.getLightByName("dummy") as IShadowLight;
+        if (!dummyLight) {
+            // Create a dummy light, which will be used for a ShadowLight input in case no directional light is selected in the UI
+            dummyLight = new DirectionalLight("dummy", new Vector3(0, 1, 0), this._scene);
+            dummyLight.intensity = 0.0;
+        }
 
         const directionalLights: DirectionalLight[] = [];
         for (const light of this._scene.lights) {
@@ -364,6 +388,14 @@ export class PreviewManager {
                     }
                     break;
                 }
+                case "NodeRenderGraphSelectionOutlineLayerBlock": {
+                    const layer = (block as NodeRenderGraphSelectionOutlineLayerBlock).task.layer;
+                    const mesh = this._getMesh();
+                    if (mesh) {
+                        layer.addSelection(mesh);
+                    }
+                    break;
+                }
                 case "NodeRenderGraphUtilityLayerRendererBlock": {
                     const layer = (block as NodeRenderGraphUtilityLayerRendererBlock).task.layer;
                     const gizmoManager = new GizmoManager(this._scene, undefined, layer, layer);
@@ -421,9 +453,8 @@ export class PreviewManager {
         }
 
         try {
-            this._nodeRenderGraph.build();
-            await this._nodeRenderGraph.whenReadyAsync(16, 5000);
             this._scene.frameGraph = this._nodeRenderGraph.frameGraph;
+            await this._nodeRenderGraph.buildAsync();
         } catch (err) {
             if (LogErrorTrace) {
                 (console as any).log(err);
@@ -561,6 +592,7 @@ export class PreviewManager {
         this._globalState.onResetRequiredObservable.remove(this._onResetRequiredObserver);
         this._globalState.onLightUpdated.remove(this._onLightUpdatedObserver);
 
+        this._scene.frameGraph = null;
         this._nodeRenderGraph?.dispose();
 
         this._scene.dispose();

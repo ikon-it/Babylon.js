@@ -1,11 +1,8 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { IDisposable, Nullable } from "core/index";
-import type { ServiceContainer } from "../modularity/serviceContainer";
-import type { IExtensionFeed, ExtensionMetadata, ExtensionModule } from "./extensionFeed";
+import { type IDisposable, type Nullable } from "core/index";
+import { type ServiceContainer } from "../modularity/serviceContainer";
+import { type IExtensionFeed, type ExtensionMetadata, type ExtensionModule } from "./extensionFeed";
 
 import { Logger } from "core/Misc/logger";
-
-import { Assert } from "../misc/assert";
 
 /**
  * Represents a loaded extension.
@@ -44,6 +41,21 @@ export interface IExtension {
     addStateChangedHandler(handler: () => void): IDisposable;
 }
 
+/**
+ * Provides information about an extension installation failure.
+ */
+export type InstallFailedInfo = {
+    /**
+     * The metadata of the extension that failed to install.
+     */
+    extension: ExtensionMetadata;
+
+    /**
+     * The error that occurred during the installation.
+     */
+    error: unknown;
+};
+
 type InstalledExtension = {
     metadata: ExtensionMetadata;
     feed: IExtensionFeed;
@@ -52,9 +64,9 @@ type InstalledExtension = {
     registrationToken?: IDisposable;
 };
 
-const InstalledExtensionsKey = "Babylon/Extensions/InstalledExtensions";
+const InstalledExtensionsKey = "Extensions/InstalledExtensions";
 
-const ExtensionInstalledKeyPrefix = "Babylon/Extensions/IsExtensionInstalled";
+const ExtensionInstalledKeyPrefix = "Extensions/IsExtensionInstalled";
 function GetExtensionInstalledKey(name: string): string {
     return `${ExtensionInstalledKeyPrefix}/${name}`;
 }
@@ -78,7 +90,7 @@ export interface IExtensionQuery {
 }
 
 function GetExtensionIdentity(feed: string, name: string) {
-    return `${feed}|${name}`;
+    return `${feed}/${name}`;
 }
 
 /**
@@ -90,24 +102,35 @@ export class ExtensionManager implements IDisposable {
     private readonly _stateChangedHandlers = new Map<string, Set<() => void>>();
 
     private constructor(
+        private readonly _namespace: string,
         private readonly _serviceContainer: ServiceContainer,
-        private readonly _feeds: readonly IExtensionFeed[]
+        private readonly _feeds: readonly IExtensionFeed[],
+        private readonly _onInstallFailed: (info: InstallFailedInfo) => void
     ) {}
 
     /**
      * Creates a new instance of the ExtensionManager.
      * This will automatically rehydrate previously installed and enabled extensions.
+     * @param namespace The namespace to use for storing extension state in local storage.
      * @param serviceContainer The service container to use.
      * @param feeds The extension feeds to include.
+     * @param onInstallFailed A callback that is called when an extension installation fails.
      * @returns A promise that resolves to the new instance of the ExtensionManager.
      */
-    public static async CreateAsync(serviceContainer: ServiceContainer, feeds: readonly IExtensionFeed[]) {
-        const extensionManager = new ExtensionManager(serviceContainer, feeds);
+    public static async CreateAsync(
+        namespace: string,
+        serviceContainer: ServiceContainer,
+        feeds: readonly IExtensionFeed[],
+        onInstallFailed: (info: InstallFailedInfo) => void
+    ): Promise<ExtensionManager> {
+        namespace = `Babylon/${namespace}`;
+
+        const extensionManager = new ExtensionManager(namespace, serviceContainer, feeds, onInstallFailed);
 
         // Rehydrate installed extensions.
-        const installedExtensionNames = JSON.parse(localStorage.getItem(InstalledExtensionsKey) ?? "[]") as string[];
+        const installedExtensionNames = JSON.parse(localStorage.getItem(`${namespace}/${InstalledExtensionsKey}`) ?? "[]") as string[];
         for (const installedExtensionName of installedExtensionNames) {
-            const installedExtensionRaw = localStorage.getItem(GetExtensionInstalledKey(installedExtensionName));
+            const installedExtensionRaw = localStorage.getItem(`${namespace}/${GetExtensionInstalledKey(installedExtensionName)}`);
             if (installedExtensionRaw) {
                 const installedExtensionData = JSON.parse(installedExtensionRaw) as {
                     feed: string;
@@ -125,7 +148,17 @@ export class ExtensionManager implements IDisposable {
         // Load installed and enabled extensions.
         const enablePromises: Promise<void>[] = [];
         for (const extension of extensionManager._installedExtensions.values()) {
-            enablePromises.push(extensionManager._enableAsync(extension.metadata, false));
+            enablePromises.push(
+                (async () => {
+                    try {
+                        await extensionManager._enableAsync(extension.metadata, false, false);
+                    } catch {
+                        // If enabling the extension fails, uninstall it. The extension install fail callback will still be called,
+                        // so the owner of the ExtensionManager instance can decide what to do with the error.
+                        await extensionManager._uninstallAsync(extension.metadata, false);
+                    }
+                })()
+            );
         }
 
         await Promise.all(enablePromises);
@@ -207,6 +240,17 @@ export class ExtensionManager implements IDisposable {
         this._stateChangedHandlers.clear();
     }
 
+    private _getInstalledExtensionStorageKey(metadata: ExtensionMetadata, feed: IExtensionFeed): string {
+        return `${this._namespace}/${GetExtensionInstalledKey(GetExtensionIdentity(feed.name, metadata.name))}`;
+    }
+
+    private _updateInstalledExtensionsStorage() {
+        localStorage.setItem(
+            `${this._namespace}/${InstalledExtensionsKey}`,
+            JSON.stringify(Array.from(this._installedExtensions.values()).map((extension) => GetExtensionIdentity(extension.feed.name, extension.metadata.name)))
+        );
+    }
+
     private async _installAsync(metadata: ExtensionMetadata, feed: IExtensionFeed, isNestedStateChange: boolean): Promise<InstalledExtension> {
         let installedExtension = this._installedExtensions.get(metadata.name);
 
@@ -215,28 +259,25 @@ export class ExtensionManager implements IDisposable {
             installedExtension.isStateChanging = true;
             this._installedExtensions.set(metadata.name, installedExtension);
 
-            // Mark the extension as being installed.
-            localStorage.setItem(
-                GetExtensionInstalledKey(GetExtensionIdentity(feed.name, metadata.name)),
-                JSON.stringify({
-                    feed: feed.name,
-                    metadata,
-                })
-            );
-            localStorage.setItem(
-                InstalledExtensionsKey,
-                JSON.stringify(Array.from(this._installedExtensions.values()).map((extension) => GetExtensionIdentity(extension.feed.name, extension.metadata.name)))
-            );
-
             try {
                 // Enable the extension.
-                await this._enableAsync(metadata, true);
+                await this._enableAsync(metadata, true, true);
             } catch (error) {
                 this._installedExtensions.delete(metadata.name);
                 throw error;
             } finally {
                 !isNestedStateChange && (installedExtension.isStateChanging = false);
             }
+
+            // Mark the extension as being installed.
+            localStorage.setItem(
+                this._getInstalledExtensionStorageKey(metadata, feed),
+                JSON.stringify({
+                    feed: feed.name,
+                    metadata,
+                })
+            );
+            this._updateInstalledExtensionsStorage();
         }
 
         return installedExtension;
@@ -255,15 +296,15 @@ export class ExtensionManager implements IDisposable {
                 this._installedExtensions.delete(metadata.name);
 
                 // Mark the extension as being uninstalled.
-                localStorage.removeItem(GetExtensionInstalledKey(GetExtensionIdentity(installedExtension.feed.name, metadata.name)));
-                localStorage.setItem(InstalledExtensionsKey, JSON.stringify(Array.from(this._installedExtensions.keys())));
+                localStorage.removeItem(this._getInstalledExtensionStorageKey(metadata, installedExtension.feed));
+                this._updateInstalledExtensionsStorage();
             } finally {
                 !isNestedStateChange && (installedExtension.isStateChanging = false);
             }
         }
     }
 
-    private async _enableAsync(metadata: ExtensionMetadata, isNestedStateChange: boolean): Promise<void> {
+    private async _enableAsync(metadata: ExtensionMetadata, isInitialInstall: boolean, isNestedStateChange: boolean): Promise<void> {
         const installedExtension = this._installedExtensions.get(metadata.name);
         if (installedExtension && (isNestedStateChange || !installedExtension.isStateChanging)) {
             try {
@@ -274,7 +315,9 @@ export class ExtensionManager implements IDisposable {
                     installedExtension.extensionModule = await installedExtension.feed.getExtensionModuleAsync(metadata.name);
                 }
 
-                Assert(installedExtension.extensionModule);
+                if (!installedExtension.extensionModule) {
+                    throw new Error(`Unable to load extension module for "${metadata.name}" from feed "${installedExtension.feed.name}".`);
+                }
 
                 // Register the ServiceDefinitions.
                 let servicesRegistrationToken: Nullable<IDisposable> = null;
@@ -288,6 +331,12 @@ export class ExtensionManager implements IDisposable {
                         servicesRegistrationToken?.dispose();
                     },
                 };
+            } catch (error: unknown) {
+                this._onInstallFailed({
+                    extension: metadata,
+                    error,
+                });
+                throw error;
             } finally {
                 !isNestedStateChange && (installedExtension.isStateChanging = false);
             }

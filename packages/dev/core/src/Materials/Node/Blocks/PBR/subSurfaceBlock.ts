@@ -1,16 +1,14 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import { NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint, NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { InputBlock } from "../Input/inputBlock";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { ReflectionBlock } from "./reflectionBlock";
-import type { Nullable } from "../../../../types";
+import { type NodeMaterialDefines } from "../../nodeMaterial";
+import { type ReflectionBlock } from "./reflectionBlock";
+import { type Nullable } from "../../../../types";
 import { RefractionBlock } from "./refractionBlock";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Decorators/nodeDecorator";
@@ -126,6 +124,9 @@ export class SubSurfaceBlock extends NodeMaterialBlock {
         return this._outputs[0];
     }
 
+    /**
+     * Auto configure the block based on the material
+     */
     public override autoConfigure() {
         if (!this.thickness.isConnected) {
             const thicknessInput = new InputBlock("SubSurface thickness", NodeMaterialBlockTargets.Fragment, NodeMaterialBlockConnectionPointTypes.Float);
@@ -134,9 +135,11 @@ export class SubSurfaceBlock extends NodeMaterialBlock {
         }
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
-        super.prepareDefines(mesh, nodeMaterial, defines);
-
+    /**
+     * Prepare the list of defines
+     * @param defines - the list of defines
+     */
+    public override prepareDefines(defines: NodeMaterialDefines) {
         const translucencyEnabled = this.translucencyDiffusionDist.isConnected || this.translucencyIntensity.isConnected;
 
         defines.setValue("SUBSURFACE", translucencyEnabled || this.refraction.isConnected, true);
@@ -183,17 +186,19 @@ export class SubSurfaceBlock extends NodeMaterialBlock {
             ${state._declareLocalVar("vTintColor", NodeMaterialBlockConnectionPointTypes.Vector4)} = vec4${state.fSuffix}(${tintColor}, ${refractionTintAtDistance});
             ${state._declareLocalVar("vSubSurfaceIntensity", NodeMaterialBlockConnectionPointTypes.Vector3)} = vec3(${refractionIntensity}, ${translucencyIntensity}, 0.);
             ${state._declareLocalVar("dispersion", NodeMaterialBlockConnectionPointTypes.Float)} = ${dispersion};
-            #ifdef LEGACY_SPECULAR_ENERGY_CONSERVATION
-                vec3 vSpecularEnvironmentReflectance = vec3(max(colorSpecularEnvironmentReflectance.r, max(colorSpecularEnvironmentReflectance.g, colorSpecularEnvironmentReflectance.b)));
-            #endif
             subSurfaceOut = subSurfaceBlock(
                 vSubSurfaceIntensity
                 , vThicknessParam
                 , vTintColor
                 , normalW
             #ifdef LEGACY_SPECULAR_ENERGY_CONSERVATION
-                , vSpecularEnvironmentReflectance
-            #else
+        `;
+
+        code += isWebGPU
+            ? `, vec3f(max(colorSpecularEnvironmentReflectance.r, max(colorSpecularEnvironmentReflectance.g, colorSpecularEnvironmentReflectance.b)))/n`
+            : `, vec3(max(colorSpecularEnvironmentReflectance.r, max(colorSpecularEnvironmentReflectance.g, colorSpecularEnvironmentReflectance.b)))/n`;
+
+        code += `#else
                 , baseSpecularEnvironmentReflectance
             #endif
             #ifdef SS_THICKNESSANDMASK_TEXTURE

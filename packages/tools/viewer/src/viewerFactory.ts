@@ -1,9 +1,8 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { AbstractEngine, AbstractEngineOptions, EngineOptions, IDisposable, Nullable, WebGPUEngineOptions } from "core/index";
-import type { ViewerDetails, ViewerOptions } from "./viewer";
+import { type AbstractEngine, type AbstractEngineOptions, type EngineOptions, type IDisposable, type Nullable, type WebGPUEngineOptions } from "core/index";
+import { type ViewerDetails, type ViewerOptions, Viewer } from "./viewer";
 
 import { Deferred } from "core/Misc/deferred";
-import { Viewer } from "./viewer";
+import { Logger } from "core/Misc/logger";
 
 /**
  * Options for creating a Viewer instance that is bound to an HTML canvas.
@@ -39,7 +38,6 @@ export function GetDefaultEngine(): NonNullable<CanvasViewerOptions["engine"]> {
 }
 
 /**
- * @experimental
  * Creates a Viewer instance that is bound to an HTML canvas.
  * @remarks
  * This function can be shared across multiple UI integrations (e.g. Web Components, React, etc.).
@@ -96,18 +94,21 @@ export async function CreateViewerForCanvas(
     // Create an engine instance.
     let engine: AbstractEngine;
     switch (options.engine ?? GetDefaultEngine()) {
-        case "WebGL": {
-            // eslint-disable-next-line @typescript-eslint/naming-convention, no-case-declarations
-            const { Engine } = await import("core/Engines/engine");
-            engine = new Engine(canvas, undefined, options);
-            break;
-        }
         case "WebGPU": {
-            // eslint-disable-next-line @typescript-eslint/naming-convention, no-case-declarations
             const { WebGPUEngine } = await import("core/Engines/webgpuEngine");
             const webGPUEngine = new WebGPUEngine(canvas, options);
-            await webGPUEngine.initAsync();
-            engine = webGPUEngine;
+            try {
+                await webGPUEngine.initAsync();
+                engine = webGPUEngine;
+                break;
+            } catch {
+                Logger.Warn("Failed to initialize WebGPU engine. Falling back to WebGL.");
+            }
+        }
+        // eslint-disable-next-line no-fallthrough
+        case "WebGL": {
+            const { Engine } = await import("core/Engines/engine");
+            engine = new Engine(canvas, undefined, options);
             break;
         }
     }

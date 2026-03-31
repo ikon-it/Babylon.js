@@ -1,7 +1,8 @@
-import type { TransformNode } from "../Meshes/transformNode";
-import type { Vector3 } from "../Maths/math";
-import type { Mesh } from "../Meshes/mesh";
-import type { Scene } from "../scene";
+import { type TransformNode } from "../Meshes/transformNode";
+import { type Vector3 } from "../Maths/math";
+import { type Mesh } from "../Meshes/mesh";
+import { type Scene } from "../scene";
+import { type Nullable } from "../types";
 
 /**
  * Navigation plugin interface to add navigation constrained by a navigation mesh
@@ -153,7 +154,7 @@ export interface INavigationEnginePlugin {
 
     /**
      * If delta time in navigation tick update is greater than the time step
-     * a number of sub iterations are done. If more iterations are need to reach deltatime
+     * a number of sub iterations are done. If more iterations are needed to reach deltatime
      * they will be discarded.
      * A value of 0 will set to no maximum and update will use as many substeps as needed
      * @param newStepCount the maximum number of iterations
@@ -173,7 +174,7 @@ export interface INavigationEnginePlugin {
      * @param height cylinder height
      * @returns the obstacle freshly created
      */
-    addCylinderObstacle(position: Vector3, radius: number, height: number): IObstacle;
+    addCylinderObstacle(position: Vector3, radius: number, height: number): Nullable<IObstacle>;
 
     /**
      * Creates an oriented box obstacle and add it to the navigation
@@ -182,7 +183,7 @@ export interface INavigationEnginePlugin {
      * @param angle angle in radians of the box orientation on Y axis
      * @returns the obstacle freshly created
      */
-    addBoxObstacle(position: Vector3, extent: Vector3, angle: number): IObstacle;
+    addBoxObstacle(position: Vector3, extent: Vector3, angle: number): Nullable<IObstacle>;
 
     /**
      * Removes an obstacle created by addCylinderObstacle or addBoxObstacle
@@ -197,9 +198,24 @@ export interface INavigationEnginePlugin {
 }
 
 /**
- * Obstacle interface
+ * Obstacle type
  */
-export interface IObstacle {}
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export type IObstacle =
+    | {
+          type: "box";
+          ref: unknown;
+          position: Vector3;
+          halfExtents: Vector3;
+          angle: number;
+      }
+    | {
+          type: "cylinder";
+          ref: unknown;
+          position: Vector3;
+          radius: number;
+          height: number;
+      };
 
 /**
  * Crowd Interface. A Crowd is a collection of moving agents constrained by a navigation mesh
@@ -466,7 +482,7 @@ export interface INavMeshParameters {
     detailSampleMaxError: number;
 
     /**
-     * If using obstacles, the navmesh must be subdivided internaly by tiles.
+     * If using obstacles, the navmesh must be subdivided internally by tiles.
      * This member defines the tile cube side length in world units.
      * If no obstacles are needed, leave it undefined or 0.
      */

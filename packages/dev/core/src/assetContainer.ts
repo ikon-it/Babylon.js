@@ -1,36 +1,37 @@
-import type { Scene } from "./scene";
+import { type Scene } from "./scene";
 import { Mesh } from "./Meshes/mesh";
 import { TransformNode } from "./Meshes/transformNode";
-import type { Skeleton } from "./Bones/skeleton";
-import type { AnimationGroup } from "./Animations/animationGroup";
+import { type Skeleton } from "./Bones/skeleton";
+import { type AnimationGroup } from "./Animations/animationGroup";
 import { type Animatable } from "./Animations/animatable.core";
 import { AbstractMesh } from "./Meshes/abstractMesh";
-import type { MultiMaterial } from "./Materials/multiMaterial";
-import type { Material } from "./Materials/material";
+import { type MultiMaterial } from "./Materials/multiMaterial";
+import { type Material } from "./Materials/material";
 import { Logger } from "./Misc/logger";
 import { EngineStore } from "./Engines/engineStore";
-import type { Nullable } from "./types";
-import type { Node } from "./node";
-import type { Observer } from "./Misc/observable";
-import type { AbstractEngine } from "./Engines/abstractEngine";
+import { type Nullable } from "./types";
+import { type Node } from "./node";
+import { type Observer } from "./Misc/observable";
+import { type AbstractEngine } from "./Engines/abstractEngine";
 import { InstancedMesh } from "./Meshes/instancedMesh";
 import { Light } from "./Lights/light";
 import { Camera } from "./Cameras/camera";
 import { Tools } from "./Misc/tools";
-import type { IParticleSystem } from "./Particles/IParticleSystem";
-import type { IAssetContainer } from "./IAssetContainer";
-import type { Animation } from "./Animations/animation";
-import type { MorphTargetManager } from "./Morph/morphTargetManager";
-import type { Geometry } from "./Meshes/geometry";
-import type { AbstractActionManager } from "./Actions/abstractActionManager";
-import type { BaseTexture } from "./Materials/Textures/baseTexture";
-import type { PostProcess } from "./PostProcesses/postProcess";
-import type { Sound } from "./Audio/sound";
-import type { Layer } from "./Layers/layer";
-import type { EffectLayer } from "./Layers/effectLayer";
-import type { ReflectionProbe } from "./Probes/reflectionProbe";
-import type { LensFlareSystem } from "./LensFlares/lensFlareSystem";
-import type { ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
+import { type IParticleSystem } from "./Particles/IParticleSystem";
+import { type IAssetContainer } from "./IAssetContainer";
+import { type Animation } from "./Animations/animation";
+import { type MorphTargetManager } from "./Morph/morphTargetManager";
+import { type Geometry } from "./Meshes/geometry";
+import { type AbstractActionManager } from "./Actions/abstractActionManager";
+import { type BaseTexture } from "./Materials/Textures/baseTexture";
+import { type PostProcess } from "./PostProcesses/postProcess";
+import { type Sound } from "./Audio/sound";
+import { type Layer } from "./Layers/layer";
+import { type EffectLayer } from "./Layers/effectLayer";
+import { type ReflectionProbe } from "./Probes/reflectionProbe";
+import { type LensFlareSystem } from "./LensFlares/lensFlareSystem";
+import { type ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
+import { type SpriteManager } from "./Sprites/spriteManager";
 import { Tags } from "./Misc/tags";
 
 /**
@@ -178,6 +179,11 @@ export class AbstractAssetContainer implements IAssetContainer {
     public proceduralTextures: ProceduralTexture[];
 
     /**
+     * The list of sprite managers added to the scene
+     */
+    public spriteManagers: SpriteManager[] = [];
+
+    /**
      * @returns all meshes, lights, cameras, transformNodes and bones
      */
     public getNodes(): Array<Node> {
@@ -287,6 +293,10 @@ export class AssetContainer extends AbstractAssetContainer {
 
             for (const texture of this.textures) {
                 texture._rebuild();
+            }
+
+            for (const spriteManager of this.spriteManagers) {
+                spriteManager.rebuild();
             }
         });
     }
@@ -816,14 +826,45 @@ export class AssetContainer extends AbstractAssetContainer {
             this.scene.addReflectionProbe(o);
         }
 
-        for (const addedNode of addedNodes) {
-            // If node was added to the scene, but parent is not in the scene, break the relationship
-            if (addedNode.parent && this.scene.getNodes().indexOf(addedNode.parent) === -1) {
-                // Use setParent to keep transform if possible
-                if ((addedNode as TransformNode).setParent) {
-                    (addedNode as TransformNode).setParent(null);
-                } else {
-                    addedNode.parent = null;
+        for (const o of this.spriteManagers) {
+            if (predicate && !predicate(o)) {
+                continue;
+            }
+            if (!this.scene.spriteManagers) {
+                this.scene.spriteManagers = [];
+            }
+            this.scene.spriteManagers.push(o);
+        }
+
+        // No more nodes added to scene after this line, so it's safe to make a "snapshot" of nodes
+        if (addedNodes.length) {
+            // build the nodeSet only if needed
+            const nodeSet = new Set<Node>(this.scene.meshes);
+            // benchmark shows Set constructor and Set.add have similar performance,
+            // but using Set.add here avoids another allocate in scene.getNodes().
+            for (const light of this.scene.lights) {
+                nodeSet.add(light);
+            }
+            for (const camera of this.scene.cameras) {
+                nodeSet.add(camera);
+            }
+            for (const transformNode of this.scene.transformNodes) {
+                nodeSet.add(transformNode);
+            }
+            for (const skeleton of this.skeletons) {
+                for (const bone of skeleton.bones) {
+                    nodeSet.add(bone);
+                }
+            }
+            for (const addedNode of addedNodes) {
+                // If node was added to the scene, but parent is not in the scene, break the relationship
+                if (addedNode.parent && !nodeSet.has(addedNode.parent)) {
+                    // Use setParent to keep transform if possible
+                    if ((addedNode as TransformNode).setParent) {
+                        (addedNode as TransformNode).setParent(null);
+                    } else {
+                        addedNode.parent = null;
+                    }
                 }
             }
         }
@@ -939,6 +980,17 @@ export class AssetContainer extends AbstractAssetContainer {
             }
             this.scene.removeReflectionProbe(o);
         }
+        for (const o of this.spriteManagers) {
+            if (predicate && !predicate(o)) {
+                continue;
+            }
+            if (this.scene.spriteManagers) {
+                const index = this.scene.spriteManagers.indexOf(o);
+                if (index !== -1) {
+                    this.scene.spriteManagers.splice(index, 1);
+                }
+            }
+        }
     }
 
     /**
@@ -1022,6 +1074,12 @@ export class AssetContainer extends AbstractAssetContainer {
             morphTargetManager.dispose();
         }
         this.morphTargetManagers.length = 0;
+
+        const spriteManagers = this.spriteManagers.slice(0);
+        for (const spriteManager of spriteManagers) {
+            spriteManager.dispose();
+        }
+        this.spriteManagers.length = 0;
 
         if (this.environmentTexture) {
             this.environmentTexture.dispose();
@@ -1119,7 +1177,7 @@ export class AssetContainer extends AbstractAssetContainer {
         const _targetConverter = targetConverter
             ? targetConverter
             : (target: any) => {
-                  let node = null;
+                  let node: any;
 
                   const targetProperty = target.animations.length ? target.animations[0].targetProperty : "";
                   /*
@@ -1155,7 +1213,7 @@ export class AssetContainer extends AbstractAssetContainer {
                 // Remove old animations with same target property as a new one
                 for (const animationInAC of nodeInAC.animations) {
                     // Doing treatment on an array for safety measure
-                    const animationsWithSameProperty = nodeInScene.animations.filter((animationInScene) => {
+                    const animationsWithSameProperty = nodeInScene.animations.filter((animationInScene: Animation) => {
                         return animationInScene.targetProperty === animationInAC.targetProperty;
                     });
                     for (const animationWithSameProperty of animationsWithSameProperty) {
@@ -1244,7 +1302,7 @@ export class AssetContainer extends AbstractAssetContainer {
 
     /**
      * @since 6.26.0
-     * Given a root asset, this method will traverse its hierarchy and add it, its children and any materials/skeletons/animation groups to the container.
+     * Given a root asset, this method will traverse its hierarchy and add it, its children and any materials/skeletons to the container.
      * @param root root node
      */
     public addAllAssetsToContainer(root: Node) {

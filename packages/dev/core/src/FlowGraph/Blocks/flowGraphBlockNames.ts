@@ -127,6 +127,11 @@ export const enum FlowGraphBlockNames {
     ExtractMatrix3D = "FlowGraphExtractMatrix3DBlock",
     TransformVector = "FlowGraphTransformVectorBlock",
     TransformCoordinates = "FlowGraphTransformCoordinatesBlock",
+    Conjugate = "FlowGraphConjugateBlock",
+    AngleBetween = "FlowGraphAngleBetweenBlock",
+    QuaternionFromAxisAngle = "FlowGraphQuaternionFromAxisAngleBlock",
+    AxisAngleFromQuaternion = "FlowGraphAxisAngleFromQuaternionBlock",
+    QuaternionFromDirections = "FlowGraphQuaternionFromDirectionsBlock",
     MatrixDecompose = "FlowGraphMatrixDecompose",
     MatrixCompose = "FlowGraphMatrixCompose",
     BooleanToFloat = "FlowGraphBooleanToFloat",
@@ -143,4 +148,5 @@ export const enum FlowGraphBlockNames {
     FunctionReference = "FlowGraphFunctionReference",
     BezierCurveEasing = "FlowGraphBezierCurveEasing",
     DataSwitch = "FlowGraphDataSwitchBlock",
+    DebugBlock = "FlowGraphDebugBlock",
 }

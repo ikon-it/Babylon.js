@@ -73,6 +73,9 @@ varying vec3 vReflectionMapTexCoord;
 // Fog
 #include<fogFragmentDeclaration>
 
+#if defined(CLUSTLIGHT_BATCH) && CLUSTLIGHT_BATCH > 0
+varying float vViewDepth;
+#endif
 
 #define CUSTOM_FRAGMENT_DEFINITIONS
 
@@ -139,10 +142,10 @@ void main(void) {
             refractiveColor.rgb = toGammaSpace(refractiveColor.rgb);
         #endif
 
-        vec2 projectedReflectionTexCoords = clamp(vec2(
+        vec2 projectedReflectionTexCoords = vec2(
             vReflectionMapTexCoord.x / vReflectionMapTexCoord.z + perturbation.x * 0.3,
             vReflectionMapTexCoord.y / vReflectionMapTexCoord.z + perturbation.y
-        ),0.0, 1.0);
+        );
 
         vec4 reflectiveColor = texture2D(reflectionSampler, projectedReflectionTexCoords);
         #ifdef IS_REFLECTION_LINEAR
@@ -200,7 +203,7 @@ void main(void) {
             refractiveColor.rgb = toGammaSpace(refractiveColor.rgb);
         #endif
 
-        vec2 projectedReflectionTexCoords = clamp(vReflectionMapTexCoord.xy / vReflectionMapTexCoord.z + perturbation, 0.0, 1.0);
+        vec2 projectedReflectionTexCoords = vReflectionMapTexCoord.xy / vReflectionMapTexCoord.z + perturbation;
         vec4 reflectiveColor = texture2D(reflectionSampler, projectedReflectionTexCoords);
         #ifdef IS_REFLECTION_LINEAR
             reflectiveColor.rgb = toGammaSpace(reflectiveColor.rgb);

@@ -2,9 +2,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { WebRequest } from "./webRequest";
 import { IsWindowObjectExist } from "./domManagement";
-import type { Nullable } from "../types";
-import type { IOfflineProvider } from "../Offline/IOfflineProvider";
-import type { IFileRequest } from "./fileRequest";
+import { type Nullable } from "../types";
+import { type IOfflineProvider } from "../Offline/IOfflineProvider";
+import { type IFileRequest } from "./fileRequest";
 import { Observable } from "./observable";
 import { FilesInputStore } from "./filesInputStore";
 import { RetryStrategy } from "./retryStrategy";
@@ -14,12 +14,11 @@ import { _FunctionContainer } from "../Engines/Processors/shaderProcessor";
 import { EngineStore } from "../Engines/engineStore";
 import { Logger } from "./logger";
 import { TimingTools } from "./timingTools";
-import type { INative } from "../Engines/Native/nativeInterfaces";
 import { EngineFunctionContext } from "core/Engines/abstractEngine.functions";
 import { AbstractEngine } from "../Engines/abstractEngine";
+import { GetBlobBufferSource } from "../Buffers/bufferUtils";
 
 const Base64DataUrlRegEx = new RegExp(/^data:([^,]+\/[^,]+)?;base64,/i);
-declare const _native: INative;
 
 /** @ignore */
 export class LoadFileError extends RuntimeError {
@@ -220,7 +219,15 @@ export const LoadImage = (
 
     if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) {
         if (typeof Blob !== "undefined" && typeof URL !== "undefined") {
-            url = URL.createObjectURL(new Blob([input], { type: mimeType }));
+            let source: BufferSource;
+
+            if (input instanceof ArrayBuffer) {
+                source = input;
+            } else {
+                source = GetBlobBufferSource(input);
+            }
+
+            url = URL.createObjectURL(new Blob([source], { type: mimeType }));
             usingObjectURL = true;
         } else {
             url = `data:${mimeType};base64,` + EncodeArrayBufferToBase64(input);
@@ -246,7 +253,7 @@ export const LoadImage = (
             url,
             (data) => {
                 engine
-                    .createImageBitmap(new Blob([data], { type: mimeType }), { premultiplyAlpha: "none", ...imageBitmapOptions })
+                    .createImageBitmap(new Blob([data], { type: mimeType }), { premultiplyAlpha: "none", colorSpaceConversion: "none", ...imageBitmapOptions })
                     // eslint-disable-next-line github/no-then
                     .then((imgBmp) => {
                         onLoad(imgBmp);
@@ -467,7 +474,7 @@ export const LoadFile = (
     fileOrUrl: File | string,
     onSuccess: (data: string | ArrayBuffer, responseURL?: string, contentType?: Nullable<string>) => void,
     onProgress?: (ev: ProgressEvent) => void,
-    offlineProvider?: IOfflineProvider,
+    offlineProvider?: Nullable<IOfflineProvider>,
     useArrayBuffer?: boolean,
     onError?: (request?: WebRequest, exception?: LoadFileError) => void,
     onOpened?: (request: WebRequest) => void
@@ -559,11 +566,14 @@ export const RequestFile = (
     url: string,
     onSuccess?: (data: string | ArrayBuffer, request?: WebRequest) => void,
     onProgress?: (event: ProgressEvent) => void,
-    offlineProvider?: IOfflineProvider,
+    offlineProvider?: Nullable<IOfflineProvider>,
     useArrayBuffer?: boolean,
     onError?: (error: RequestFileError) => void,
     onOpened?: (request: WebRequest) => void
 ): IFileRequest => {
+    if (offlineProvider !== null) {
+        offlineProvider ??= EngineStore.LastCreatedScene?.offlineProvider;
+    }
     url = FileToolsOptions.CleanUrl(url);
     url = FileToolsOptions.PreprocessUrl(url);
 
@@ -722,7 +732,7 @@ export const RequestFile = (
     };
 
     // Caching all files
-    if (offlineProvider && offlineProvider.enableSceneOffline) {
+    if (offlineProvider && offlineProvider.enableSceneOffline && !url.startsWith("blob:")) {
         const noOfflineSupport = (request?: any) => {
             if (request && request.status > 400) {
                 if (onError) {
@@ -795,6 +805,12 @@ export const GetMimeType = (url: string): string | undefined => {
             return "image/png";
         case "webp":
             return "image/webp";
+        case "ktx":
+            return "image/ktx";
+        case "ktx2":
+            return "image/ktx2";
+        case "avif":
+            return "image/avif";
         default:
             return undefined;
     }
@@ -824,7 +840,7 @@ export const TestBase64DataUrl = (uri: string): { match: boolean; type: string }
     if (results === null || results.length === 0) {
         return { match: false, type: "" };
     } else {
-        const type = results[0].replace("data:", "").replace("base64,", "");
+        const type = results[0].replace("data:", "").replace(";base64,", "");
         return { match: true, type };
     }
 };

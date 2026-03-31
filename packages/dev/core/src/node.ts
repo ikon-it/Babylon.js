@@ -1,24 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Scene } from "./scene";
-import type { Nullable } from "./types";
+import { type Scene } from "./scene";
+import { type Nullable } from "./types";
 import { Matrix, Vector3 } from "./Maths/math.vector";
-import type { AbstractEngine } from "./Engines/abstractEngine";
-import type { IBehaviorAware, Behavior } from "./Behaviors/behavior";
+import { type AbstractEngine } from "./Engines/abstractEngine";
+import { type IBehaviorAware, type Behavior } from "./Behaviors/behavior";
 import { serialize } from "./Misc/decorators";
-import type { Observer } from "./Misc/observable";
-import { Observable } from "./Misc/observable";
+import { type Observer, Observable } from "./Misc/observable";
 import { EngineStore } from "./Engines/engineStore";
 import { _WarnImport } from "./Misc/devTools";
-import type { AbstractActionManager } from "./Actions/abstractActionManager";
-import type { IInspectable } from "./Misc/iInspectable";
-import type { IAccessibilityTag } from "./IAccessibilityTag";
-import type { AnimationRange } from "./Animations/animationRange";
-import type { AnimationPropertiesOverride } from "./Animations/animationPropertiesOverride";
-import type { AbstractMesh } from "./Meshes/abstractMesh";
-import type { Animation } from "./Animations/animation";
-import type { Animatable } from "./Animations/animatable.core";
+import { type AbstractActionManager } from "./Actions/abstractActionManager";
+import { type IInspectable } from "./Misc/iInspectable";
+import { type IAccessibilityTag } from "./IAccessibilityTag";
+import { type AnimationRange } from "./Animations/animationRange";
+import { type AnimationPropertiesOverride } from "./Animations/animationPropertiesOverride";
+import { type AbstractMesh } from "./Meshes/abstractMesh";
+import { type Animation } from "./Animations/animation";
+import { type Animatable } from "./Animations/animatable.core";
 import { SerializationHelper } from "./Misc/decorators.serialization";
-import type { IAssetContainer } from "./IAssetContainer";
+import { type IAssetContainer } from "./IAssetContainer";
 
 /**
  * Defines how a node can be built from a string name.
@@ -35,6 +34,8 @@ class _InternalNodeDataInfo {
     public _isReady = true;
     public _onEnabledStateChangedObservable = new Observable<boolean>();
     public _onClonedObservable = new Observable<Node>();
+    public _inheritVisibility = false;
+    public _isVisible = true;
 }
 
 /**
@@ -262,6 +263,34 @@ export class Node implements IBehaviorAware<Node> {
     }
 
     /**
+     * If set to true, this node, when renderable, will only be visible if its parent(s) are also visible.
+     * @default false
+     */
+    public get inheritVisibility(): boolean {
+        return this._nodeDataStorage._inheritVisibility;
+    }
+
+    public set inheritVisibility(value: boolean) {
+        this._nodeDataStorage._inheritVisibility = value;
+    }
+
+    /**
+     * Gets or sets a boolean indicating whether this node is visible, either this node itself when it is renderable or its renderable child nodes when `inheritVisibility` is true.
+     * @default true
+     */
+    public get isVisible(): boolean {
+        if (this.inheritVisibility && this._parentNode && !this._parentNode.isVisible) {
+            return false;
+        }
+
+        return this._nodeDataStorage._isVisible;
+    }
+
+    public set isVisible(value: boolean) {
+        this._nodeDataStorage._isVisible = value;
+    }
+
+    /**
      * @internal
      */
     public _serializeAsParent(serializationObject: any): void {
@@ -400,7 +429,10 @@ export class Node implements IBehaviorAware<Node> {
         if (this._scene.isLoading && !attachImmediately) {
             // We defer the attach when the scene will be loaded
             this._scene.onDataLoadedObservable.addOnce(() => {
-                behavior.attach(this);
+                // Make sure the behavior has not been removed.
+                if (this._behaviors.includes(behavior)) {
+                    behavior.attach(this);
+                }
             });
         } else {
             behavior.attach(this);

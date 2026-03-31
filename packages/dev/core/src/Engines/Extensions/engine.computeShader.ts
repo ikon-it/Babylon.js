@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { ComputeEffect, IComputeEffectCreationOptions, IComputeShaderPath } from "../../Compute/computeEffect";
-import type { IComputeContext } from "../../Compute/IComputeContext";
-import type { IComputePipelineContext } from "../../Compute/IComputePipelineContext";
+import { type ComputeEffect, type IComputeEffectCreationOptions, type IComputeShaderPath } from "../../Compute/computeEffect";
+import { type IComputeContext } from "../../Compute/IComputeContext";
+import { type IComputePipelineContext } from "../../Compute/IComputePipelineContext";
 import { ThinEngine } from "../../Engines/thinEngine";
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { AbstractEngine } from "../abstractEngine";
-import type { WebGPUPerfCounter } from "../WebGPU/webgpuPerfCounter";
-import type { DataBuffer } from "../../Buffers/dataBuffer";
+import { type WebGPUPerfCounter } from "../WebGPU/webgpuPerfCounter";
+import { type DataBuffer } from "../../Buffers/dataBuffer";
 
 /**
  * Type used to locate a resource in a compute shader.
@@ -57,6 +57,7 @@ export const enum ComputeBindingType {
     Sampler = 5,
     ExternalTexture = 6,
     DataBuffer = 7,
+    InternalTexture = 8,
 }
 
 /** @internal */
@@ -122,9 +123,8 @@ declare module "../../Engines/abstractEngine" {
          * @param effect The compute effect
          * @param context The compute context
          * @param bindings The list of resources to bind to the shader
-         * @param x The number of workgroups to execute on the X dimension
-         * @param y The number of workgroups to execute on the Y dimension
-         * @param z The number of workgroups to execute on the Z dimension
+         * @param buffer The buffer containing the dispatch parameters
+         * @param offset The offset in the buffer where the dispatch parameters start
          * @param bindingsMapping list of bindings mapping (key is property name, value is binding location)
          * @param gpuPerfCounter GPU time computed for the compute shader will be assigned to this object
          */

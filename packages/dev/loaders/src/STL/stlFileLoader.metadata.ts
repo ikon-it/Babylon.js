@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { ISceneLoaderPluginExtensions, ISceneLoaderPluginMetadata } from "core/index";
+import { type ISceneLoaderPluginExtensions, type ISceneLoaderPluginMetadata } from "core/index";
 
 export const STLFileLoaderMetadata = {
     name: "stl",

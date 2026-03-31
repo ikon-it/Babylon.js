@@ -1,114 +1,385 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Observer, Scene } from "core/index";
+import { type FrameGraphTask, type IDisposable, type Nullable } from "core/index";
+import { type ServiceDefinition } from "../../../modularity/serviceDefinition";
+import { type IGizmoService, GizmoServiceIdentity } from "../../gizmoService";
+import { type ISceneContext, SceneContextIdentity } from "../../sceneContext";
+import { type IWatcherService, WatcherServiceIdentity } from "../../watcherService";
+import { type ISceneExplorerService, SceneExplorerServiceIdentity } from "./sceneExplorerService";
 
-import type { ServiceDefinition } from "../../../modularity/serviceDefinition";
-import type { ISceneExplorerService } from "./sceneExplorerService";
-
-import { BoxRegular, BranchRegular, CameraRegular, EyeRegular, LightbulbRegular } from "@fluentui/react-icons";
+import { tokens } from "@fluentui/react-components";
+import {
+    BorderNoneRegular,
+    BorderOutsideRegular,
+    BubbleMultipleRegular,
+    CameraRegular,
+    EditRegular,
+    EyeOffRegular,
+    EyeRegular,
+    FlashlightOffRegular,
+    FlashlightRegular,
+    LightbulbRegular,
+    MyLocationRegular,
+    VideoFilled,
+    VideoRegular,
+} from "@fluentui/react-icons";
 
 import { Camera } from "core/Cameras/camera";
+import { FindMainCamera } from "core/FrameGraph/frameGraphUtils";
+import { ClusteredLightContainer } from "core/Lights/Clustered/clusteredLightContainer";
 import { Light } from "core/Lights/light";
 import { AbstractMesh } from "core/Meshes/abstractMesh";
+import { Mesh } from "core/Meshes/mesh";
 import { TransformNode } from "core/Meshes/transformNode";
-import { SceneExplorerServiceIdentity } from "./sceneExplorerService";
+import { Observable } from "core/Misc/observable";
+import { Node } from "core/node";
+import { MeshIcon } from "shared-ui-components/fluent/icons";
+import { EditNodeGeometry, GetNodeGeometry } from "../../../misc/nodeGeometryEditor";
+import { DefaultCommandsOrder, DefaultSectionsOrder } from "./defaultSectionsMetadata";
 
-export const NodeHierarchyServiceDefinition: ServiceDefinition<[], [ISceneExplorerService]> = {
-    friendlyName: "Node Hierarchy",
-    consumes: [SceneExplorerServiceIdentity],
-    factory: (sceneExplorerService) => {
+import "core/Rendering/boundingBoxRenderer";
+
+function IsCameraFrameGraphTask(task: FrameGraphTask): task is FrameGraphTask & { camera: Camera } {
+    return (task as Partial<{ camera: Camera }>).camera instanceof Camera;
+}
+
+export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService, ISceneContext, IGizmoService, IWatcherService]> = {
+    friendlyName: "Node Explorer",
+    consumes: [SceneExplorerServiceIdentity, SceneContextIdentity, GizmoServiceIdentity, WatcherServiceIdentity],
+    factory: (sceneExplorerService, sceneContext, gizmoService, watcherService) => {
+        const scene = sceneContext.currentScene;
+        if (!scene) {
+            return undefined;
+        }
+
+        const nodeMovedObservable = new Observable<Node>();
+
         const sectionRegistration = sceneExplorerService.addSection({
             displayName: "Nodes",
-            order: 0,
-            getRootEntities: (scene) => scene.rootNodes,
+            order: DefaultSectionsOrder.Nodes,
+            getRootEntities: () => {
+                const rootNodes = [...scene.rootNodes];
+
+                // If any non-root node has a parent and that parent is not one of the node types shown in the Nodes section,
+                // then we should treat it as a root node, otherwise it won't show up anywhere in scene explorer.
+                // An example of this is when a Mesh or a TransformNode is parented under a Bone.
+                for (const node of [...scene.meshes, ...scene.transformNodes, ...scene.cameras, ...scene.lights]) {
+                    if (
+                        node.parent &&
+                        !(node.parent instanceof AbstractMesh) &&
+                        !(node.parent instanceof TransformNode) &&
+                        !(node.parent instanceof Camera) &&
+                        !(node.parent instanceof Light)
+                    ) {
+                        rootNodes.push(node);
+                    }
+                }
+
+                // Lights within a clustered light container are not included in Scene.lights or Scene.rootNodes.
+                // If they also have no parent, then they won't show up anywhere, so show them as root nodes.
+                for (const light of scene.lights) {
+                    if (light instanceof ClusteredLightContainer) {
+                        for (const childLight of light.lights) {
+                            if (!childLight.parent && !rootNodes.includes(childLight)) {
+                                rootNodes.push(childLight);
+                            }
+                        }
+                    }
+                }
+
+                return rootNodes;
+            },
             getEntityChildren: (node) => node.getChildren(),
-            getEntityDisplayName: (node) => node.name,
+            getEntityDisplayInfo: (node) => {
+                const onChangeObservable = new Observable<void>();
+
+                const nameHookToken = watcherService.watchProperty(node, "name", () => onChangeObservable.notifyObservers());
+
+                const parentHookToken = watcherService.watchProperty(node, "parent", () => nodeMovedObservable.notifyObservers(node));
+
+                return {
+                    get name() {
+                        return node.name || `Unnamed ${node.getClassName()}`;
+                    },
+                    onChange: onChangeObservable,
+                    dispose: () => {
+                        nameHookToken.dispose();
+                        parentHookToken.dispose();
+                        onChangeObservable.clear();
+                    },
+                };
+            },
             entityIcon: ({ entity: node }) =>
                 node instanceof AbstractMesh ? (
-                    <BoxRegular />
+                    <MeshIcon color={tokens.colorPaletteBlueForeground2} />
                 ) : node instanceof TransformNode ? (
-                    <BranchRegular />
+                    <MyLocationRegular color={tokens.colorPaletteBlueForeground2} />
                 ) : node instanceof Camera ? (
-                    <CameraRegular />
+                    <CameraRegular color={tokens.colorPaletteGreenForeground2} />
+                ) : node instanceof ClusteredLightContainer ? (
+                    <BubbleMultipleRegular color={tokens.colorPaletteYellowForeground2} />
                 ) : node instanceof Light ? (
-                    <LightbulbRegular />
+                    <LightbulbRegular color={tokens.colorPaletteYellowForeground2} />
                 ) : (
                     <></>
                 ),
-            watch: (scene, onAdded, onRemoved) => {
-                const observers: Observer<unknown>[] = [];
+            getEntityAddedObservables: () => [
+                scene.onNewMeshAddedObservable,
+                scene.onNewTransformNodeAddedObservable,
+                scene.onNewCameraAddedObservable,
+                scene.onNewLightAddedObservable,
+            ],
+            getEntityRemovedObservables: () => [
+                scene.onMeshRemovedObservable,
+                scene.onTransformNodeRemovedObservable,
+                scene.onCameraRemovedObservable,
+                scene.onLightRemovedObservable,
+            ],
+            getEntityMovedObservables: () => [nodeMovedObservable],
+            dragDropConfig: {
+                canDrag: (node) => node instanceof Node,
+                canDrop: (draggedNode, targetNode) => {
+                    // Can't drop on self
+                    if (targetNode === draggedNode) {
+                        return false;
+                    }
+                    // Can't drop on a descendant
+                    if (targetNode !== null && targetNode.isDescendantOf(draggedNode)) {
+                        return false;
+                    }
+                    // Can drop onto section root (null) only if node has a parent
+                    if (targetNode === null) {
+                        return draggedNode.parent !== null;
+                    }
+                    return true;
+                },
+                onDrop: (draggedNode, targetNode) => {
+                    if (draggedNode.parent === targetNode) {
+                        return;
+                    }
+                    // Use setParent for TransformNodes to preserve world transform
+                    if (draggedNode instanceof TransformNode) {
+                        draggedNode.setParent(targetNode);
+                    } else {
+                        draggedNode.parent = targetNode;
+                    }
+                },
+            },
+        });
 
-                observers.push(
-                    scene.onNewMeshAddedObservable.add((mesh) => {
-                        onAdded(mesh);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onNewTransformNodeAddedObservable.add((node) => {
-                        onAdded(node);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onNewCameraAddedObservable.add((camera) => {
-                        onAdded(camera);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onNewLightAddedObservable.add((light) => {
-                        onAdded(light);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onMeshRemovedObservable.add((mesh) => {
-                        onRemoved(mesh);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onTransformNodeRemovedObservable.add((node) => {
-                        onRemoved(node);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onCameraRemovedObservable.add((camera) => {
-                        onRemoved(camera);
-                    }) as Observer<unknown>
-                );
-
-                observers.push(
-                    scene.onLightRemovedObservable.add((light) => {
-                        onRemoved(light);
-                    }) as Observer<unknown>
-                );
+        const abstractMeshBoundingBoxCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown): entity is AbstractMesh => entity instanceof AbstractMesh && entity.getTotalVertices() > 0,
+            order: DefaultCommandsOrder.MeshBoundingBox,
+            getCommand: (mesh) => {
+                const onChangeObservable = new Observable<void>();
+                const showBoundingBoxHook = watcherService.watchProperty(mesh, "showBoundingBox", () => onChangeObservable.notifyObservers());
 
                 return {
+                    type: "toggle",
+                    get displayName() {
+                        return `${mesh.showBoundingBox ? "Hide" : "Show"} Bounding Box`;
+                    },
+                    icon: () => (mesh.showBoundingBox ? <BorderOutsideRegular /> : <BorderNoneRegular />),
+                    get isEnabled() {
+                        return mesh.showBoundingBox;
+                    },
+                    set isEnabled(enabled: boolean) {
+                        mesh.showBoundingBox = enabled;
+                    },
+                    onChange: onChangeObservable,
                     dispose: () => {
-                        for (const observer of observers) {
-                            observer.remove();
+                        showBoundingBoxHook.dispose();
+                        onChangeObservable.clear();
+                    },
+                };
+            },
+        });
+
+        const abstractMeshVisibilityCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown): entity is AbstractMesh => entity instanceof AbstractMesh && entity.getTotalVertices() > 0,
+            order: DefaultCommandsOrder.MeshVisibility,
+            getCommand: (mesh) => {
+                const onChangeObservable = new Observable<void>();
+                const isVisibleHook = watcherService.watchProperty(mesh, "isVisible", () => onChangeObservable.notifyObservers());
+
+                return {
+                    type: "toggle",
+                    get displayName() {
+                        return `${mesh.isVisible ? "Hide" : "Show"} Mesh`;
+                    },
+                    icon: () => (mesh.isVisible ? <EyeRegular /> : <EyeOffRegular />),
+                    hotKey: {
+                        keyCode: "Space",
+                        control: true,
+                    },
+                    get isEnabled() {
+                        return !mesh.isVisible;
+                    },
+                    set isEnabled(enabled: boolean) {
+                        mesh.isVisible = !enabled;
+                    },
+                    onChange: onChangeObservable,
+                    dispose: () => {
+                        isVisibleHook.dispose();
+                        onChangeObservable.clear();
+                    },
+                };
+            },
+        });
+
+        const getActiveCamera = () => (scene.frameGraph ? FindMainCamera(scene.frameGraph) : scene.activeCamera);
+
+        const activeCameraCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown) => entity instanceof Camera,
+            order: DefaultCommandsOrder.CameraActive,
+            getCommand: (camera) => {
+                const scene = camera.getScene();
+                const onChangeObservable = new Observable<void>();
+                const activeCameraChangedObserver = scene.onActiveCameraChanged.add(() => {
+                    onChangeObservable.notifyObservers();
+                });
+
+                return {
+                    type: "toggle",
+                    displayName: "Activate and Attach Controls",
+                    icon: () => {
+                        return getActiveCamera() === camera ? <VideoFilled /> : <VideoRegular />;
+                    },
+                    get isEnabled() {
+                        return getActiveCamera() === camera;
+                    },
+                    set isEnabled(enabled: boolean) {
+                        const activeCamera = getActiveCamera();
+                        if (enabled && activeCamera !== camera) {
+                            if (scene.frameGraph) {
+                                void (async (frameGraph) => {
+                                    let updated = false;
+                                    const nrg = frameGraph.getLinkedNodeRenderGraph();
+                                    if (nrg) {
+                                        updated = await nrg.replaceCameraAsync(activeCamera, camera);
+                                    } else {
+                                        for (const task of frameGraph.tasks) {
+                                            if (IsCameraFrameGraphTask(task)) {
+                                                task.camera = camera;
+                                                updated = true;
+                                            }
+                                        }
+                                    }
+                                    if (updated) {
+                                        activeCamera?.detachControl();
+                                        camera.attachControl(true);
+                                        onChangeObservable.notifyObservers();
+                                    }
+                                })(scene.frameGraph);
+                            } else {
+                                activeCamera?.detachControl();
+                                scene.activeCamera = camera;
+                                camera.attachControl(true);
+                            }
+                        }
+                    },
+                    onChange: onChangeObservable,
+                    dispose: () => {
+                        activeCameraChangedObserver.remove();
+                        onChangeObservable.clear();
+                    },
+                };
+            },
+        });
+
+        function addGizmoCommand<NodeT extends Node>(nodeClass: abstract new (...args: any[]) => NodeT, getGizmoRef: (node: NodeT) => IDisposable) {
+            return sceneExplorerService.addEntityCommand({
+                predicate: (entity: unknown): entity is NodeT => entity instanceof nodeClass,
+                order: DefaultCommandsOrder.GizmoActive,
+                getCommand: (node) => {
+                    const onChangeObservable = new Observable<void>();
+
+                    let gizmoRef: Nullable<IDisposable> = null;
+
+                    return {
+                        type: "toggle",
+                        get displayName() {
+                            return `Turn ${gizmoRef ? "Off" : "On"} Gizmo`;
+                        },
+                        icon: () => (gizmoRef ? <EyeRegular /> : <EyeOffRegular />),
+                        get isEnabled() {
+                            return !!gizmoRef;
+                        },
+                        set isEnabled(enabled: boolean) {
+                            if (enabled) {
+                                if (!gizmoRef) {
+                                    gizmoRef = getGizmoRef(node);
+                                    onChangeObservable.notifyObservers();
+                                }
+                            } else {
+                                if (gizmoRef) {
+                                    gizmoRef.dispose();
+                                    gizmoRef = null;
+                                    onChangeObservable.notifyObservers();
+                                }
+                            }
+                        },
+                        onChange: onChangeObservable,
+                        dispose: () => {
+                            onChangeObservable.clear();
+                        },
+                    };
+                },
+            });
+        }
+
+        const cameraGizmoCommandRegistration = addGizmoCommand(Camera, gizmoService.getCameraGizmo.bind(gizmoService));
+
+        const lightEnabledCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown): entity is Light => entity instanceof Light,
+            order: DefaultCommandsOrder.LightActive,
+            getCommand: (light) => {
+                return {
+                    type: "toggle",
+                    get displayName() {
+                        return `Turn Light ${light.isEnabled() ? "Off" : "On"}`;
+                    },
+                    icon: () => (light.isEnabled() ? <FlashlightRegular /> : <FlashlightOffRegular />),
+                    get isEnabled() {
+                        return !light.isEnabled();
+                    },
+                    set isEnabled(enabled: boolean) {
+                        light.setEnabled(!enabled);
+                    },
+                    onChange: light.onEnabledStateChangedObservable,
+                };
+            },
+        });
+
+        const lightGizmoCommandRegistration = addGizmoCommand(Light, gizmoService.getLightGizmo.bind(gizmoService));
+
+        const editNodeGeometryCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown): entity is Mesh => entity instanceof Mesh && !!GetNodeGeometry(entity),
+            order: DefaultCommandsOrder.EditNodeGeometry,
+            getCommand: (mesh) => {
+                return {
+                    type: "action",
+                    displayName: "Edit in Node Geometry Editor",
+                    icon: () => <EditRegular />,
+                    // eslint-disable-next-line @typescript-eslint/naming-convention
+                    execute: async () => {
+                        const nodeGeometry = GetNodeGeometry(mesh);
+                        if (nodeGeometry) {
+                            await EditNodeGeometry(nodeGeometry, mesh.getScene());
                         }
                     },
                 };
             },
         });
 
-        const visibilityCommandRegistration = sceneExplorerService.addCommand({
-            order: 0,
-            predicate: (entity: unknown) => entity instanceof AbstractMesh,
-            execute: (scene: Scene, mesh: AbstractMesh) => {
-                // TODO
-            },
-            displayName: "Show/Hide Mesh",
-            icon: () => <EyeRegular />,
-        });
-
         return {
             dispose: () => {
-                visibilityCommandRegistration.dispose();
                 sectionRegistration.dispose();
+                abstractMeshBoundingBoxCommandRegistration.dispose();
+                abstractMeshVisibilityCommandRegistration.dispose();
+                activeCameraCommandRegistration.dispose();
+                cameraGizmoCommandRegistration.dispose();
+                lightEnabledCommandRegistration.dispose();
+                lightGizmoCommandRegistration.dispose();
+                editNodeGeometryCommandRegistration.dispose();
             },
         };
     },

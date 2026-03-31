@@ -1,28 +1,24 @@
 import { Logger } from "../../Misc/logger";
 import { Tools } from "../../Misc/tools";
-import type { Nullable } from "../../types";
-import type { AbstractAudioNode } from "../abstractAudio/abstractAudioNode";
+import { type Nullable } from "../../types";
+import { type AbstractAudioNode } from "../abstractAudio/abstractAudioNode";
 import type {} from "../abstractAudio/abstractSound";
-import type { IStreamingSoundOptions, IStreamingSoundPlayOptions, IStreamingSoundStoredOptions } from "../abstractAudio/streamingSound";
-import { StreamingSound } from "../abstractAudio/streamingSound";
+import { type IStreamingSoundOptions, type IStreamingSoundPlayOptions, type IStreamingSoundStoredOptions, StreamingSound } from "../abstractAudio/streamingSound";
 import { _StreamingSoundInstance } from "../abstractAudio/streamingSoundInstance";
-import { _HasSpatialAudioOptions } from "../abstractAudio/subProperties/abstractSpatialAudio";
-import type { _SpatialAudio } from "../abstractAudio/subProperties/spatialAudio";
+import { _HasSpatialAudioOptions, type AbstractSpatialAudio } from "../abstractAudio/subProperties/abstractSpatialAudio";
 import { _StereoAudio } from "../abstractAudio/subProperties/stereoAudio";
-import { _CleanUrl } from "../audioUtils";
+import { _CleanUrl, _GetUrlForStreaming } from "../audioUtils";
+import { WebRequest } from "../../Misc/webRequest";
 import { SoundState } from "../soundState";
 import { _WebAudioBusAndSoundSubGraph } from "./subNodes/webAudioBusAndSoundSubGraph";
 import { _SpatialWebAudio } from "./subProperties/spatialWebAudio";
-import type { _WebAudioEngine } from "./webAudioEngine";
-import type { IWebAudioInNode, IWebAudioOutNode, IWebAudioSuperNode } from "./webAudioNode";
+import { type _WebAudioEngine } from "./webAudioEngine";
+import { type IWebAudioInNode, type IWebAudioOutNode, type IWebAudioSuperNode } from "./webAudioNode";
 
 type StreamingSoundSourceType = HTMLMediaElement | string | string[];
 
 /** @internal */
 export class _WebAudioStreamingSound extends StreamingSound implements IWebAudioSuperNode {
-    private _spatial: Nullable<_SpatialAudio> = null;
-    private readonly _spatialAutoUpdate: boolean = true;
-    private readonly _spatialMinUpdateTime: number = 0;
     private _stereo: Nullable<_StereoAudio> = null;
 
     protected override readonly _options: IStreamingSoundStoredOptions;
@@ -39,15 +35,7 @@ export class _WebAudioStreamingSound extends StreamingSound implements IWebAudio
 
     /** @internal */
     public constructor(name: string, engine: _WebAudioEngine, options: Partial<IStreamingSoundOptions>) {
-        super(name, engine);
-
-        if (typeof options.spatialAutoUpdate === "boolean") {
-            this._spatialAutoUpdate = options.spatialAutoUpdate;
-        }
-
-        if (typeof options.spatialMinUpdateTime === "number") {
-            this._spatialMinUpdateTime = options.spatialMinUpdateTime;
-        }
+        super(name, engine, options);
 
         this._options = {
             autoplay: options.autoplay ?? false,
@@ -92,7 +80,7 @@ export class _WebAudioStreamingSound extends StreamingSound implements IWebAudio
             this.play(options);
         }
 
-        this.engine._addNode(this);
+        this.engine._addSound(this);
     }
 
     /** @internal */
@@ -106,14 +94,6 @@ export class _WebAudioStreamingSound extends StreamingSound implements IWebAudio
     }
 
     /** @internal */
-    public override get spatial(): _SpatialAudio {
-        if (this._spatial) {
-            return this._spatial;
-        }
-        return this._initSpatialProperty();
-    }
-
-    /** @internal */
     public override get stereo(): _StereoAudio {
         return this._stereo ?? (this._stereo = new _StereoAudio(this._subGraph));
     }
@@ -122,12 +102,11 @@ export class _WebAudioStreamingSound extends StreamingSound implements IWebAudio
     public override dispose(): void {
         super.dispose();
 
-        this._spatial = null;
         this._stereo = null;
 
         this._subGraph.dispose();
 
-        this.engine._removeNode(this);
+        this.engine._removeSound(this);
     }
 
     /** @internal */
@@ -168,12 +147,12 @@ export class _WebAudioStreamingSound extends StreamingSound implements IWebAudio
         return true;
     }
 
-    private _initSpatialProperty(): _SpatialAudio {
-        if (!this._spatial) {
-            this._spatial = new _SpatialWebAudio(this._subGraph, this._spatialAutoUpdate, this._spatialMinUpdateTime);
-        }
+    protected override _createSpatialProperty(autoUpdate: boolean, minUpdateTime: number): AbstractSpatialAudio {
+        return new _SpatialWebAudio(this._subGraph, autoUpdate, minUpdateTime);
+    }
 
-        return this._spatial;
+    public _getOptions(): IStreamingSoundStoredOptions {
+        return this._options;
     }
 
     private static _SubGraph = class extends _WebAudioBusAndSoundSubGraph {
@@ -221,6 +200,8 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
             this._initFromUrls(sound._source);
         } else if (sound._source instanceof HTMLMediaElement) {
             this._initFromMediaElement(sound._source);
+        } else {
+            throw new Error(`Invalid streaming sound source (${sound._source}).`);
         }
     }
 
@@ -239,7 +220,7 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
 
         if (restart) {
             this._mediaElement.pause();
-            this._setState(SoundState.Stopped);
+            this._state = SoundState.Stopped;
         }
 
         this._options.startOffset = value;
@@ -302,7 +283,7 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
             startOffset = this._options.startOffset;
             this._currentTimeChangedWhilePaused = false;
         } else if (this._state === SoundState.Paused) {
-            startOffset = this.currentTime + this._options.startOffset;
+            startOffset = this.currentTime;
         }
 
         if (startOffset && startOffset > 0) {
@@ -402,16 +383,22 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
     }
 
     private _initFromUrl(url: string): void {
-        const audio = new Audio(_CleanUrl(url));
+        // Apply any WebRequest URL modifiers (but do NOT download the content — the <audio> element streams natively).
+        // Custom headers cannot be forwarded to HTMLMediaElement; _GetUrlForStreaming logs a warning if any are present.
+        const resolvedUrl = WebRequest.IsCustomRequestAvailable ? _GetUrlForStreaming(_CleanUrl(url)) : _CleanUrl(url);
+        const audio = new Audio(resolvedUrl);
         this._initFromMediaElement(audio);
     }
 
     private _initFromUrls(urls: string[]): void {
         const audio = new Audio();
 
+        // Apply any WebRequest URL modifiers to each candidate URL (but do NOT download the content —
+        // the <audio> element picks the first compatible format and streams natively).
+        // Custom headers cannot be forwarded to HTMLMediaElement; _GetUrlForStreaming logs a warning if any are present.
         for (const url of urls) {
             const source = document.createElement("source");
-            source.src = _CleanUrl(url);
+            source.src = WebRequest.IsCustomRequestAvailable ? _GetUrlForStreaming(_CleanUrl(url)) : _CleanUrl(url);
             audio.appendChild(source);
         }
 
@@ -425,8 +412,7 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
     };
 
     private _onEnded: () => void = () => {
-        this.onEndedObservable.notifyObservers(this);
-        this.dispose();
+        this._setState(SoundState.Stopped);
     };
 
     private _onError: (reason: any) => void = (reason: any) => {
@@ -507,7 +493,6 @@ class _WebAudioStreamingSoundInstance extends _StreamingSoundInstance implements
 
     private _stop(): void {
         this._mediaElement.pause();
-        this._setState(SoundState.Stopped);
         this._onEnded();
         this.engine.stateChangedObservable.removeCallback(this._onEngineStateChanged);
     }

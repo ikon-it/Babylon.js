@@ -1,6 +1,6 @@
-import type { Nullable } from "core/types";
-import type { Particle } from "../particle";
-import type { ThinParticleSystem } from "../thinParticleSystem";
+import { type Nullable } from "core/types";
+import { type Particle } from "../particle";
+import { type ThinParticleSystem } from "../thinParticleSystem";
 
 /** @internal */
 export interface _IExecutionQueueItem {
@@ -29,6 +29,17 @@ export function _ConnectAfter(newOne: _IExecutionQueueItem, activeOne: _IExecuti
     if (activeOne.nextItem) {
         activeOne.nextItem.previousItem = newOne;
     }
+    activeOne.nextItem = newOne;
+}
+
+/** @internal */
+export function _ConnectAtTheEnd(newOne: _IExecutionQueueItem, root: _IExecutionQueueItem) {
+    let activeOne = root;
+    while (activeOne.nextItem) {
+        activeOne = activeOne.nextItem;
+    }
+    newOne.previousItem = activeOne;
+    newOne.nextItem = activeOne.nextItem;
     activeOne.nextItem = newOne;
 }
 

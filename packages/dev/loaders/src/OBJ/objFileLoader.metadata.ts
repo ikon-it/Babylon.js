@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { ISceneLoaderPluginMetadata } from "core/index";
+import { type ISceneLoaderPluginMetadata } from "core/index";
 
 export const OBJFileLoaderMetadata = {
     name: "obj",

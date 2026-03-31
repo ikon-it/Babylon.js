@@ -1,11 +1,10 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
 
 import { NullEngine } from "core/Engines";
 import { Scene } from "core/scene";
 import { WebXRFeaturesManager, WebXRSessionManager, WebXRMotionControllerTeleportation, WebXRControllerMovement } from "core/XR";
-// eslint-disable-next-line import/no-internal-modules
 import "core/Animations/index";
 /**
  * WebXR Features Manager test suite.
@@ -55,9 +54,9 @@ describe("Babylon WebXR Features Manager", function () {
     describe("Conflicting Features cannot be enabled simultaneously", () => {
         it("Cannot enable Movement feature while Teleportation feature is enabled", () => {
             const teleportationFeature = subject.enableFeature(WebXRMotionControllerTeleportation.Name, undefined, {
-                xrInput: { xrCamera: {} },
-                defaultTargetMeshOptions: { teleportationCircleMaterial: {} },
-            });
+                xrInput: { xrCamera: {} as any },
+                defaultTargetMeshOptions: { teleportationCircleMaterial: {} as any },
+            } as any);
             expect(teleportationFeature).toBeDefined();
             expect(subject.getEnabledFeatures()).toStrictEqual([WebXRMotionControllerTeleportation.Name]);
 
@@ -69,7 +68,7 @@ describe("Babylon WebXR Features Manager", function () {
         });
 
         it("Cannot enable Teleportation feature while Movement feature is enabled", () => {
-            const teleportationFeature = subject.enableFeature(WebXRControllerMovement.Name, undefined, { xrInput: {} });
+            const teleportationFeature = subject.enableFeature(WebXRControllerMovement.Name, undefined, { xrInput: {} as any } as any);
             expect(teleportationFeature).toBeDefined();
             expect(subject.getEnabledFeatures()).toStrictEqual([WebXRControllerMovement.Name]);
 

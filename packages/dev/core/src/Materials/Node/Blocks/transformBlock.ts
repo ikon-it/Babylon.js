@@ -1,13 +1,13 @@
 import { NodeMaterialBlock } from "../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialConnectionPoint } from "../nodeMaterialBlockConnectionPoint";
 import { RegisterClass } from "../../../Misc/typeStore";
-import type { Scene } from "../../../scene";
-import type { InputBlock } from "./Input/inputBlock";
-import type { AbstractMesh } from "../../../Meshes/abstractMesh";
-import type { NodeMaterial, NodeMaterialDefines } from "../nodeMaterial";
+import { type Scene } from "../../../scene";
+import { type InputBlock } from "./Input/inputBlock";
+import { type AbstractMesh } from "../../../Meshes/abstractMesh";
+import { type NodeMaterial, type NodeMaterialDefines } from "../nodeMaterial";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { editableInPropertyPage, PropertyTypeForEdition } from "core/Decorators/nodeDecorator";
 
@@ -169,17 +169,20 @@ export class TransformBlock extends NodeMaterialBlock {
 
     /**
      * Update defines for shader compilation
-     * @param mesh defines the mesh to be rendered
-     * @param nodeMaterial defines the node material requesting the update
      * @param defines defines the material defines to update
+     * @param nodeMaterial defines the node material requesting the update
+     * @param mesh defines the mesh to be rendered
      */
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
-        // Do nothing
-        if (mesh.nonUniformScaling) {
+    public override prepareDefines(defines: NodeMaterialDefines, nodeMaterial: NodeMaterial, mesh?: AbstractMesh) {
+        if (mesh && mesh.nonUniformScaling) {
             defines.setValue("NONUNIFORMSCALING", true);
         }
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -189,6 +192,12 @@ export class TransformBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block from a serialization object
+     * @param serializationObject - the object to deserialize from
+     * @param scene - the current scene
+     * @param rootUrl - the root URL for loading
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

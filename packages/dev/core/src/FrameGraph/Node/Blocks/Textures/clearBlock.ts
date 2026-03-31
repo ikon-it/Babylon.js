@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { NodeRenderGraphConnectionPoint, Scene, FrameGraphTextureHandle, FrameGraph, NodeRenderGraphBuildState } from "core/index";
+import { type Scene, type FrameGraphTextureHandle, type FrameGraph, type NodeRenderGraphBuildState, type NodeRenderGraphConnectionPoint } from "core/index";
 import { NodeRenderGraphBlock } from "../../nodeRenderGraphBlock";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { NodeRenderGraphBlockConnectionPointTypes } from "../../Types/nodeRenderGraphTypes";
@@ -36,7 +35,7 @@ export class NodeRenderGraphClearBlock extends NodeRenderGraphBlock {
         this.registerOutput("output", NodeRenderGraphBlockConnectionPointTypes.BasedOnInput);
         this.registerOutput("outputDepth", NodeRenderGraphBlockConnectionPointTypes.BasedOnInput);
 
-        this.target.addExcludedConnectionPointFromAllowedTypes(NodeRenderGraphBlockConnectionPointTypes.TextureAll);
+        this.target.addExcludedConnectionPointFromAllowedTypes(NodeRenderGraphBlockConnectionPointTypes.TextureAll | NodeRenderGraphBlockConnectionPointTypes.ResourceContainer);
         this.depth.addExcludedConnectionPointFromAllowedTypes(
             NodeRenderGraphBlockConnectionPointTypes.TextureDepthStencilAttachment | NodeRenderGraphBlockConnectionPointTypes.TextureBackBufferDepthStencilAttachment
         );
@@ -136,10 +135,10 @@ export class NodeRenderGraphClearBlock extends NodeRenderGraphBlock {
     protected override _buildBlock(state: NodeRenderGraphBuildState) {
         super._buildBlock(state);
 
-        this._propagateInputValueToOutput(this.target, this.output);
-        this._propagateInputValueToOutput(this.depth, this.outputDepth);
+        this.output.value = this._frameGraphTask.outputTexture;
+        this.outputDepth.value = this._frameGraphTask.outputDepthTexture;
 
-        this._frameGraphTask.targetTexture = this.target.connectedPoint?.value as FrameGraphTextureHandle;
+        this._frameGraphTask.targetTexture = this._getConnectedTextures(this.target.connectedPoint);
         this._frameGraphTask.depthTexture = this.depth.connectedPoint?.value as FrameGraphTextureHandle;
     }
 

@@ -1,16 +1,16 @@
 import * as React from "react";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
-import type { GlobalState } from "../../globalState";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
-import type { StateManager } from "shared-ui-components/nodeGraphSystem/stateManager";
-import type { ISelectionChangedOptions } from "shared-ui-components/nodeGraphSystem/interfaces/selectionChangedOptions";
+import { type GlobalState } from "../../globalState";
+import { type Nullable } from "core/types";
+import { type Observer } from "core/Misc/observable";
+import { type StateManager } from "shared-ui-components/nodeGraphSystem/stateManager";
+import { type ISelectionChangedOptions } from "shared-ui-components/nodeGraphSystem/interfaces/selectionChangedOptions";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
-import type { GraphFrame } from "shared-ui-components/nodeGraphSystem/graphFrame";
-import { FramePortPosition } from "shared-ui-components/nodeGraphSystem/graphFrame";
+import { type GraphFrame, FramePortPosition } from "shared-ui-components/nodeGraphSystem/graphFrame";
 import { IsFramePortData } from "shared-ui-components/nodeGraphSystem/tools";
-import type { FrameNodePort } from "shared-ui-components/nodeGraphSystem/frameNodePort";
+import { type FrameNodePort } from "shared-ui-components/nodeGraphSystem/frameNodePort";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
+import { PropertyTabComponentBase } from "shared-ui-components/components/propertyTabComponentBase";
 
 export interface IFrameNodePortPropertyTabComponentProps {
     stateManager: StateManager;
@@ -53,34 +53,28 @@ export class FrameNodePortPropertyTabComponent extends React.Component<IFrameNod
 
     override render() {
         return (
-            <div id="propertyTab">
-                <div id="header">
-                    <img id="logo" src="https://www.babylonjs.com/Assets/logo-babylonjs-social-twitter.png" />
-                    <div id="title">NODE MATERIAL EDITOR</div>
-                </div>
-                <div>
-                    <LineContainerComponent title="GENERAL">
-                        <TextInputLineComponent label="Port Name" lockObject={this.props.stateManager.lockObject} propertyName="portName" target={this.props.frameNodePort} />
-                        {this.props.frameNodePort.framePortPosition !== FramePortPosition.Top && (
-                            <ButtonLineComponent
-                                label="Move Port Up"
-                                onClick={() => {
-                                    this.props.frame.moveFramePortUp(this.props.frameNodePort);
-                                }}
-                            />
-                        )}
+            <PropertyTabComponentBase>
+                <LineContainerComponent title="GENERAL">
+                    <TextInputLineComponent label="Port Name" lockObject={this.props.stateManager.lockObject} propertyName="portName" target={this.props.frameNodePort} />
+                    {this.props.frameNodePort.framePortPosition !== FramePortPosition.Top && (
+                        <ButtonLineComponent
+                            label="Move Port Up"
+                            onClick={() => {
+                                this.props.frame.moveFramePortUp(this.props.frameNodePort);
+                            }}
+                        />
+                    )}
 
-                        {this.props.frameNodePort.framePortPosition !== FramePortPosition.Bottom && (
-                            <ButtonLineComponent
-                                label="Move Port Down"
-                                onClick={() => {
-                                    this.props.frame.moveFramePortDown(this.props.frameNodePort);
-                                }}
-                            />
-                        )}
-                    </LineContainerComponent>
-                </div>
-            </div>
+                    {this.props.frameNodePort.framePortPosition !== FramePortPosition.Bottom && (
+                        <ButtonLineComponent
+                            label="Move Port Down"
+                            onClick={() => {
+                                this.props.frame.moveFramePortDown(this.props.frameNodePort);
+                            }}
+                        />
+                    )}
+                </LineContainerComponent>
+            </PropertyTabComponentBase>
         );
     }
 }

@@ -1,9 +1,9 @@
 import { Vector3, Matrix, Quaternion, TmpVectors } from "../Maths/math.vector";
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
 import { Camera } from "../Cameras/camera";
 import { FreeCamera } from "../Cameras/freeCamera";
 import { TargetCamera } from "../Cameras/targetCamera";
-import type { WebXRSessionManager } from "./webXRSessionManager";
+import { type WebXRSessionManager } from "./webXRSessionManager";
 import { Viewport } from "../Maths/math.viewport";
 import { Observable } from "../Misc/observable";
 import { WebXRTrackingState } from "./webXRTypes";
@@ -19,6 +19,14 @@ export class WebXRCamera extends FreeCamera {
     private _referenceQuaternion: Quaternion = Quaternion.Identity();
     private _referencedPosition: Vector3 = new Vector3();
     private _trackingState: WebXRTrackingState = WebXRTrackingState.NOT_TRACKING;
+
+    private _onWorldScaleFactorChanged = () => {
+        // only run if in session
+        if (!this._xrSessionManager.currentFrame) {
+            return;
+        }
+        this._updateDepthNearFar();
+    };
 
     /**
      * This will be triggered after the first XR Frame initialized the camera,
@@ -57,6 +65,11 @@ export class WebXRCamera extends FreeCamera {
     public _lastXRViewerPose?: XRViewerPose;
 
     /**
+     * webXRCamera relies on rotationQuaternion and doesn't use camera rotation property
+     */
+    public override rotationQuaternion: Quaternion;
+
+    /**
      * Creates a new webXRCamera, this should only be set at the camera after it has been updated by the xrSessionManager
      * @param name the name of the camera
      * @param scene the scene to add the camera to
@@ -84,14 +97,9 @@ export class WebXRCamera extends FreeCamera {
             this._referenceQuaternion.copyFromFloats(0, 0, 0, 1);
             // first frame - camera's y position should be 0 for the correct offset
             this._firstFrame = this.compensateOnFirstFrame;
-            this._xrSessionManager.onWorldScaleFactorChangedObservable.add(() => {
-                // only run if in session
-                if (!this._xrSessionManager.currentFrame) {
-                    return;
-                }
-                this._updateDepthNearFar();
-            });
         });
+
+        this._xrSessionManager.onWorldScaleFactorChangedObservable.add(this._onWorldScaleFactorChanged);
 
         // Check transformation changes on each frame. Callback is added to be first so that the transformation will be
         // applied to the rest of the elements using the referenceSpace object
@@ -198,12 +206,13 @@ export class WebXRCamera extends FreeCamera {
         target.subtractToRef(this.position, tmpVector);
         tmpVector.y = 0;
         tmpVector.normalize();
-        const yRotation = Math.atan2(tmpVector.x, tmpVector.z);
+        const yRotation = Math.atan2(tmpVector.x, tmpVector.z) + (this._scene.useRightHandedSystem ? Math.PI : 0);
         this.rotationQuaternion.toEulerAnglesToRef(tmpVector);
         Quaternion.FromEulerAnglesToRef(tmpVector.x, yRotation, tmpVector.z, this.rotationQuaternion);
     }
 
     public override dispose() {
+        this._xrSessionManager.onWorldScaleFactorChangedObservable.removeCallback(this._onWorldScaleFactorChanged);
         super.dispose();
         this._lastXRViewerPose = undefined;
         this.onTrackingStateChanged.clear();
@@ -221,8 +230,6 @@ export class WebXRCamera extends FreeCamera {
         this._cache.minZ = this.minZ;
         this._cache.maxZ = far;
     }
-
-    private _rotate180 = new Quaternion(0, 1, 0, 0);
 
     private _updateFromXRSession() {
         const pose = this._xrSessionManager.currentFrame && this._xrSessionManager.currentFrame.getViewerPose(this._xrSessionManager.referenceSpace);
@@ -256,8 +263,6 @@ export class WebXRCamera extends FreeCamera {
                 this._referencedPosition.z *= -1;
                 this._referenceQuaternion.z *= -1;
                 this._referenceQuaternion.w *= -1;
-            } else {
-                this._referenceQuaternion.multiplyInPlace(this._rotate180);
             }
 
             if (this._firstFrame) {
@@ -309,13 +314,11 @@ export class WebXRCamera extends FreeCamera {
             currentRig.parent = this.parent;
 
             currentRig.position.set(pos.x, pos.y, pos.z).scaleInPlace(this._xrSessionManager.worldScalingFactor);
-            currentRig.rotationQuaternion.set(orientation.x, orientation.y, orientation.z, orientation.w);
-            if (!this._scene.useRightHandedSystem) {
+            currentRig.rotationQuaternion?.set(orientation.x, orientation.y, orientation.z, orientation.w);
+            if (!this._scene.useRightHandedSystem && currentRig.rotationQuaternion) {
                 currentRig.position.z *= -1;
                 currentRig.rotationQuaternion.z *= -1;
                 currentRig.rotationQuaternion.w *= -1;
-            } else {
-                currentRig.rotationQuaternion.multiplyInPlace(this._rotate180);
             }
             Matrix.FromFloat32ArrayToRefScaled(view.projectionMatrix, 0, 1, currentRig._projectionMatrix);
 
@@ -396,6 +399,7 @@ export class WebXRCamera extends FreeCamera {
                     x: this._referencedPosition.x / this._xrSessionManager.worldScalingFactor,
                     y: this._referencedPosition.y / this._xrSessionManager.worldScalingFactor,
                     z: this._referencedPosition.z / this._xrSessionManager.worldScalingFactor,
+                    w: 1,
                 },
                 {
                     x: this._referenceQuaternion.x,

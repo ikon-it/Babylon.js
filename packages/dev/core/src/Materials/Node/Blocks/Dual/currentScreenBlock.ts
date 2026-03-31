@@ -1,16 +1,15 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { NodeMaterialDefines, NodeMaterial } from "../../nodeMaterial";
-import type { BaseTexture } from "../../../Textures/baseTexture";
-import type { Nullable } from "../../../../types";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialDefines } from "../../nodeMaterial";
+import { type BaseTexture } from "../../../Textures/baseTexture";
+import { type Nullable } from "../../../../types";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { Texture } from "../../../Textures/texture";
-import type { Scene } from "../../../../scene";
-import type { InputBlock } from "../Input/inputBlock";
+import { type Scene } from "../../../../scene";
+import { type InputBlock } from "../Input/inputBlock";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { Constants } from "core/Engines/constants";
 
@@ -23,6 +22,7 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
     protected _gammaDefineName: string;
     protected _mainUVName: string;
     protected _tempTextureRead: string;
+    protected _texture: Nullable<BaseTexture>;
 
     /**
      * The name of the sampler to read the screen texture from.
@@ -34,7 +34,12 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
     /**
      * Gets or sets the texture associated with the node
      */
-    public texture: Nullable<BaseTexture>;
+    public get texture(): Nullable<BaseTexture> {
+        return this._texture;
+    }
+    public set texture(value: Nullable<BaseTexture>) {
+        this._texture = value;
+    }
 
     /**
      * Gets or sets a boolean indicating if content needs to be converted to gamma space
@@ -133,9 +138,10 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
      * @param state defines the state that will be used for the build
      */
     public override initialize(state: NodeMaterialBuildState) {
-        state._excludeVariableName(this._samplerName);
+        state._excludeVariableName(this.samplerName);
     }
 
+    /** {@inheritDoc} */
     public override get target() {
         if (!this.uv.isConnected) {
             return NodeMaterialBlockTargets.VertexAndFragment;
@@ -148,11 +154,19 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
         return NodeMaterialBlockTargets.Fragment;
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    /**
+     * Prepare the list of defines
+     * @param defines - the material defines
+     */
+    public override prepareDefines(defines: NodeMaterialDefines) {
         defines.setValue(this._linearDefineName, this.convertToGammaSpace, true);
         defines.setValue(this._gammaDefineName, this.convertToLinearSpace, true);
     }
 
+    /**
+     * Checks if the block is ready
+     * @returns true if ready
+     */
     public override isReady() {
         if (this.texture && !this.texture.isReadyOrNotBlocking()) {
             return false;
@@ -161,7 +175,7 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
         return true;
     }
 
-    protected _getMainUvName(state: NodeMaterialBuildState): string {
+    protected _getMainUvName(_state: NodeMaterialBuildState): string {
         return "vMain" + this.uv.associatedVariableName;
     }
 
@@ -200,8 +214,8 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
             }
             const textureReadFunc =
                 state.shaderLanguage === ShaderLanguage.GLSL
-                    ? `texture2D(${this._samplerName},`
-                    : `textureSampleLevel(${this._samplerName}, ${this._samplerName + Constants.AUTOSAMPLERSUFFIX},`;
+                    ? `texture2D(${this.samplerName},`
+                    : `textureSampleLevel(${this.samplerName}, ${this.samplerName + Constants.AUTOSAMPLERSUFFIX},`;
 
             const complement = state.shaderLanguage === ShaderLanguage.GLSL ? "" : ", 0";
 
@@ -211,8 +225,8 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
 
         const textureReadFunc =
             state.shaderLanguage === ShaderLanguage.GLSL
-                ? `texture2D(${this._samplerName},`
-                : `textureSample(${this._samplerName}, ${this._samplerName + Constants.AUTOSAMPLERSUFFIX},`;
+                ? `texture2D(${this.samplerName},`
+                : `textureSample(${this.samplerName}, ${this.samplerName + Constants.AUTOSAMPLERSUFFIX},`;
 
         if (this.uv.ownerBlock.target === NodeMaterialBlockTargets.Fragment) {
             state.compilationString += `${state._declareLocalVar(this._tempTextureRead, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${textureReadFunc} ${uvInput.associatedVariableName});\n`;
@@ -251,7 +265,7 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
 
     protected _emitUvAndSampler(state: NodeMaterialBuildState) {
         state._emitVaryingFromString(this._mainUVName, NodeMaterialBlockConnectionPointTypes.Vector2);
-        state._emit2DSampler(this._samplerName);
+        state._emit2DSampler(this.samplerName);
     }
 
     protected override _buildBlock(state: NodeMaterialBuildState) {
@@ -300,6 +314,10 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
         return this;
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -312,6 +330,12 @@ export class CurrentScreenBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block
+     * @param serializationObject - the serialization object
+     * @param scene - the scene
+     * @param rootUrl - the root url
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

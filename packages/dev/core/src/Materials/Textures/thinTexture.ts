@@ -1,12 +1,11 @@
-import type { Nullable } from "../../types";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type Nullable } from "../../types";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
 import { Constants } from "../../Engines/constants";
 
-import type { ISize } from "../../Maths/math.size";
-import { Size } from "../../Maths/math.size";
+import { type ISize, Size } from "../../Maths/math.size";
 
-import type { AbstractEngine } from "../../Engines/abstractEngine";
-import type { RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
+import { type AbstractEngine } from "../../Engines/abstractEngine";
+import { type RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
 
 /**
  * Base class of all the textures in babylon.
@@ -283,10 +282,11 @@ export class ThinTexture {
      *    > _min_: minification filter (far from the viewer)
      *    > _mip_: filter used between mip map levels
      *@param samplingMode Define the new sampling mode of the texture
+     *@param generateMipMaps Define if the texture should generate mip maps or not. Default is false.
      */
-    public updateSamplingMode(samplingMode: number): void {
+    public updateSamplingMode(samplingMode: number, generateMipMaps = false): void {
         if (this._texture && this._engine) {
-            this._engine.updateTextureSamplingMode(samplingMode, this._texture, this._texture.generateMipMaps);
+            this._engine.updateTextureSamplingMode(samplingMode, this._texture, this._texture.generateMipMaps && generateMipMaps);
         }
     }
 

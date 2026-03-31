@@ -1,17 +1,15 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import { NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint, NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Decorators/nodeDecorator";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { ReflectionBlock } from "./reflectionBlock";
-import type { Scene } from "../../../../scene";
-import type { Nullable } from "../../../../types";
+import { type NodeMaterialDefines } from "../../nodeMaterial";
+import { type ReflectionBlock } from "./reflectionBlock";
+import { type Scene } from "../../../../scene";
+import { type Nullable } from "../../../../types";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
@@ -100,9 +98,11 @@ export class SheenBlock extends NodeMaterialBlock {
         return this._outputs[0];
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
-        super.prepareDefines(mesh, nodeMaterial, defines);
-
+    /**
+     * Prepare the list of defines
+     * @param defines - the list of defines
+     */
+    public override prepareDefines(defines: NodeMaterialDefines) {
         defines.setValue("SHEEN", true);
         defines.setValue("SHEEN_USE_ROUGHNESS_FROM_MAINTEXTURE", true, true);
         defines.setValue("SHEEN_LINKWITHALBEDO", this.linkSheenWithAlbedo, true);
@@ -117,15 +117,13 @@ export class SheenBlock extends NodeMaterialBlock {
      * @returns the shader code
      */
     public getCode(reflectionBlock: Nullable<ReflectionBlock>, state: NodeMaterialBuildState): string {
-        let code = "";
-
         const color = this.color.isConnected ? this.color.associatedVariableName : `vec3${state.fSuffix}(1.)`;
         const intensity = this.intensity.isConnected ? this.intensity.associatedVariableName : "1.";
         const roughness = this.roughness.isConnected ? this.roughness.associatedVariableName : "0.";
         const texture = `vec4${state.fSuffix}(0.)`;
         const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
 
-        code = `#ifdef SHEEN
+        const code = `#ifdef SHEEN
             ${isWebGPU ? "var sheenOut: sheenOutParams" : "sheenOutParams sheenOut"};
 
             ${state._declareLocalVar("vSheenColor", NodeMaterialBlockConnectionPointTypes.Vector4)} = vec4${state.fSuffix}(${color}, ${intensity});
@@ -212,6 +210,10 @@ export class SheenBlock extends NodeMaterialBlock {
         return codeString;
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -221,6 +223,12 @@ export class SheenBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block
+     * @param serializationObject - the serialization object
+     * @param scene - the scene
+     * @param rootUrl - the root URL
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

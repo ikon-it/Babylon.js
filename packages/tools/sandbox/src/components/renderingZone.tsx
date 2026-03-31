@@ -1,15 +1,15 @@
 /* eslint-disable github/no-then */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 import * as React from "react";
-import type { GlobalState } from "../globalState";
+import { type GlobalState } from "../globalState";
 
 import { Engine } from "core/Engines/engine";
 import { WebGPUEngine } from "core/Engines/webgpuEngine";
 import { SceneLoader } from "core/Loading/sceneLoader";
 import { GLTFFileLoader } from "loaders/glTF/glTFFileLoader";
 import { Scene } from "core/scene";
-import type { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
-import type { FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
+import { type ArcRotateCamera } from "core/Cameras/arcRotateCamera";
+import { type FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
 import { EnvironmentTools } from "../tools/environmentTools";
 import { Tools } from "core/Misc/tools";
 import { FilesInput } from "core/Misc/filesInput";
@@ -20,10 +20,9 @@ import "core/Helpers/sceneHelpers";
 
 import "../scss/renderingZone.scss";
 import { PBRBaseMaterial } from "core/Materials/PBR/pbrBaseMaterial";
-import { Texture } from "core/Materials/Textures/texture";
-import type { ITextureCreationOptions } from "core/Materials/Textures/texture";
+import { Texture, type ITextureCreationOptions } from "core/Materials/Textures/texture";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import type { AbstractEngine } from "core/Engines/abstractEngine";
+import { type AbstractEngine } from "core/Engines/abstractEngine";
 import { setOpenGLOrientationForUV, useOpenGLOrientationForUV } from "core/Compat/compatibilityOptions";
 import { ImageProcessingConfiguration } from "core/Materials/imageProcessingConfiguration";
 
@@ -38,7 +37,6 @@ function IsTextureAsset(extension: string): boolean {
         case "png":
         case "jpg":
         case "jpeg":
-        case "exr":
         case "webp": {
             return true;
         }
@@ -61,6 +59,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
     private _engine: AbstractEngine;
     private _scene: Scene;
     private _canvas: HTMLCanvasElement;
+    private _restoreInspector = false;
 
     public constructor(props: IRenderingZoneProps) {
         super(props);
@@ -86,7 +85,6 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
                 premultipliedAlpha: false,
                 preserveDrawingBuffer: true,
                 antialias: antialias,
-                forceSRGBBufferSupportState: this.props.globalState.commerceMode,
             });
         }
 
@@ -115,10 +113,9 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
             () => {
                 Tools.ClearLogCache();
                 if (this._scene) {
-                    this.props.globalState.isDebugLayerEnabled = this.props.globalState.currentScene.debugLayer.isVisible();
-
                     if (this.props.globalState.isDebugLayerEnabled) {
-                        this._scene.debugLayer.hide();
+                        this.props.globalState.hideDebugLayer();
+                        this._restoreInspector = true;
                     }
                 }
             },
@@ -140,6 +137,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
                 switch (extension.toLowerCase()) {
                     case "dds":
                     case "env":
+                    case "exr":
                     case "hdr": {
                         FilesInput.FilesToLoad[name] = file;
                         EnvironmentTools.SkyboxPath = "file:" + (file as any).correctName;
@@ -177,6 +175,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         filesInput.monitorElementForDragNDrop(this._canvas);
 
         this.props.globalState.filesInput = filesInput;
+        this.props.globalState.onFilesInputReady.notifyObservers();
 
         window.addEventListener("keydown", (event) => {
             // Press R to reload
@@ -309,14 +308,20 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         this.prepareLighting();
         this.handleErrors();
 
-        if (this.props.globalState.isDebugLayerEnabled) {
+        if (this._restoreInspector) {
+            this._restoreInspector = false;
             this.props.globalState.showDebugLayer();
         }
 
         this._scene.executeWhenReady(() => {
             this._engine.runRenderLoop(() => {
+                // NOTE: this logic to adjust camera parameters based on radius is copied in viewer.ts.
+                // Please keep them in sync.
                 // Adapt the camera sensibility based on the distance to the object
                 camera.panningSensibility = 5000 / camera.radius;
+                // Update the camera speed based on the camera's distance from the target.
+                // TODO: This makes mouse wheel zooming behave well, but makes mouse based rotation a bit worse.
+                camera.speed = camera.radius * 0.2;
                 this._scene.render();
             });
         });
@@ -415,6 +420,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
             if (this._currentPluginName === "gltf") {
                 const loader = plugin as GLTFFileLoader;
                 loader.transparencyAsCoverage = this.props.globalState.commerceMode;
+
                 loader.validate = true;
 
                 loader.onExtensionLoadedObservable.add((extension: import("loaders/glTF/index").IGLTFLoaderExtension) => {

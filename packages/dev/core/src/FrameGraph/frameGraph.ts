@@ -1,29 +1,34 @@
-/* eslint-disable import/no-internal-modules */
-import type { Scene, AbstractEngine, FrameGraphTask, Nullable, NodeRenderGraph } from "core/index";
+import {
+    type Scene,
+    type AbstractEngine,
+    type FrameGraphTask,
+    type Nullable,
+    type NodeRenderGraph,
+    type IDisposable,
+    type Camera,
+    type FrameGraphObjectRendererTask,
+} from "core/index";
 import { FrameGraphPass } from "./Passes/pass";
 import { FrameGraphRenderPass } from "./Passes/renderPass";
-import { FrameGraphCullPass } from "./Passes/cullPass";
+import { FrameGraphObjectListPass } from "./Passes/objectListPass";
 import { FrameGraphRenderContext } from "./frameGraphRenderContext";
 import { FrameGraphContext } from "./frameGraphContext";
 import { FrameGraphTextureManager } from "./frameGraphTextureManager";
 import { Observable } from "core/Misc/observable";
 import { _RetryWithInterval } from "core/Misc/timingTools";
 import { Logger } from "core/Misc/logger";
-
-import "core/Engines/Extensions/engine.multiRender";
-import "core/Engines/WebGPU/Extensions/engine.multiRender";
+import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
 
 enum FrameGraphPassType {
     Normal = 0,
     Render = 1,
-    Cull = 2,
+    ObjectList = 2,
 }
 
 /**
  * Class used to implement a frame graph
- * @experimental
  */
-export class FrameGraph {
+export class FrameGraph implements IDisposable {
     /**
      * Gets the texture manager used by the frame graph
      */
@@ -34,13 +39,20 @@ export class FrameGraph {
     private readonly _tasks: FrameGraphTask[] = [];
     private readonly _passContext: FrameGraphContext;
     private readonly _renderContext: FrameGraphRenderContext;
+    private readonly _initAsyncPromises: Promise<unknown>[] = [];
     private _currentProcessedTask: FrameGraphTask | null = null;
     private _whenReadyAsyncCancel: Nullable<() => void> = null;
+    private _importPromise: Promise<any>;
 
     /**
      * Name of the frame graph
      */
     public name = "Frame Graph";
+
+    /**
+     * Gets the unique id of the frame graph
+     */
+    public readonly uniqueId = UniqueIdGenerator.UniqueId;
 
     /**
      * Gets or sets a boolean indicating that texture allocation should be optimized (that is, reuse existing textures when possible to limit GPU memory usage) (default: true)
@@ -74,6 +86,11 @@ export class FrameGraph {
     }
 
     /**
+     * Indicates whether the execution of the frame graph is paused (default is false)
+     */
+    public pausedExecution = false;
+
+    /**
      * Gets the node render graph linked to the frame graph (if any)
      * @returns the linked node render graph or null if none
      */
@@ -94,11 +111,12 @@ export class FrameGraph {
     ) {
         this._scene = scene;
         this._engine = scene.getEngine();
+        this._importPromise = this._engine.isWebGPU ? import("../Engines/WebGPU/Extensions/engine.multiRender") : import("../Engines/Extensions/engine.multiRender");
         this.textureManager = new FrameGraphTextureManager(this._engine, debugTextures, scene);
-        this._passContext = new FrameGraphContext();
+        this._passContext = new FrameGraphContext(this._engine, this.textureManager, scene);
         this._renderContext = new FrameGraphRenderContext(this._engine, this.textureManager, scene);
 
-        this._scene.frameGraphs.push(this);
+        this._scene.addFrameGraph(this);
     }
 
     /**
@@ -119,6 +137,35 @@ export class FrameGraph {
     }
 
     /**
+     * Gets all tasks of a specific class name(s)
+     * @param name Class name(s) of the task to get
+     * @returns The list of tasks or an empty array if none found
+     */
+    public getTasksByClassNames<T extends FrameGraphTask>(name: string | string[]): T[] {
+        return this._tasks.filter((t) => (Array.isArray(name) ? name.includes(t.getClassName()) : t.getClassName() === name)) as T[];
+    }
+
+    /**
+     * Gets all tasks of a specific type
+     * @param taskType Type of the task(s) to get
+     * @returns The list of tasks of the specified type
+     */
+    public getTasksByType<T extends FrameGraphTask>(taskType: new (...args: any[]) => T): T[] {
+        return this._tasks.filter((t) => t instanceof taskType) as T[];
+    }
+
+    /**
+     * Gets all tasks of a specific type, based on their class name
+     * @param taskClassName Class name(s) of the task(s) to get
+     * @returns The list of tasks of the specified type
+     */
+    public getTasksByClassName<T extends FrameGraphTask>(taskClassName: string | string[]): T[] {
+        return Array.isArray(taskClassName)
+            ? (this._tasks.filter((t) => taskClassName.includes(t.getClassName())) as T[])
+            : (this._tasks.filter((t) => t.getClassName() === taskClassName) as T[]);
+    }
+
+    /**
      * Adds a task to the frame graph
      * @param task Task to add
      */
@@ -127,7 +174,12 @@ export class FrameGraph {
             throw new Error(`FrameGraph.addTask: Can't add the task "${task.name}" while another task is currently building (task: ${this._currentProcessedTask.name}).`);
         }
 
+        if (this._tasks.includes(task)) {
+            return;
+        }
+
         this._tasks.push(task);
+        this._initAsyncPromises.push(task.initAsync());
     }
 
     /**
@@ -151,13 +203,13 @@ export class FrameGraph {
     }
 
     /**
-     * Adds a cull pass to a task. This method can only be called during a Task.record execution.
+     * Adds an object list pass to a task. This method can only be called during a Task.record execution.
      * @param name The name of the pass
      * @param whenTaskDisabled If true, the pass will be added to the list of passes to execute when the task is disabled (default is false)
-     * @returns The cull pass created
+     * @returns The object list pass created
      */
-    public addCullPass(name: string, whenTaskDisabled = false): FrameGraphCullPass {
-        return this._addPass(name, FrameGraphPassType.Cull, whenTaskDisabled) as FrameGraphCullPass;
+    public addObjectListPass(name: string, whenTaskDisabled = false): FrameGraphObjectListPass {
+        return this._addPass(name, FrameGraphPassType.ObjectList, whenTaskDisabled) as FrameGraphObjectListPass;
     }
 
     private _addPass(name: string, passType: FrameGraphPassType, whenTaskDisabled = false): FrameGraphPass<FrameGraphContext> | FrameGraphRenderPass {
@@ -171,8 +223,8 @@ export class FrameGraph {
             case FrameGraphPassType.Render:
                 pass = new FrameGraphRenderPass(name, this._currentProcessedTask, this._renderContext, this._engine);
                 break;
-            case FrameGraphPassType.Cull:
-                pass = new FrameGraphCullPass(name, this._currentProcessedTask, this._passContext, this._engine);
+            case FrameGraphPassType.ObjectList:
+                pass = new FrameGraphObjectListPass(name, this._currentProcessedTask, this._passContext, this._engine);
                 break;
             default:
                 pass = new FrameGraphPass(name, this._currentProcessedTask, this._passContext);
@@ -184,14 +236,29 @@ export class FrameGraph {
         return pass;
     }
 
+    /** @internal */
+    public async _whenAsynchronousInitializationDoneAsync(): Promise<void> {
+        if (this._initAsyncPromises.length > 0) {
+            await Promise.all(this._initAsyncPromises);
+            this._initAsyncPromises.length = 0;
+        }
+    }
+
     /**
      * Builds the frame graph.
      * This method should be called after all tasks have been added to the frame graph (FrameGraph.addTask) and before the graph is executed (FrameGraph.execute).
+     * @param waitForReadiness If true, the method will wait for the frame graph to be ready before returning (default is true)
      */
-    public build(): void {
+    public async buildAsync(waitForReadiness = true): Promise<void> {
         this.textureManager._releaseTextures(false);
 
+        this.pausedExecution = true;
+
         try {
+            await this._importPromise;
+
+            await this._whenAsynchronousInitializationDoneAsync();
+
             for (const task of this._tasks) {
                 task._reset();
 
@@ -214,25 +281,49 @@ export class FrameGraph {
                 task.onTexturesAllocatedObservable.notifyObservers(this._renderContext);
             }
 
+            for (const task of this._tasks) {
+                task._initializePasses();
+            }
+
             this.onBuildObservable.notifyObservers(this);
+
+            if (waitForReadiness) {
+                await this.whenReadyAsync();
+            }
         } catch (e) {
             this._tasks.length = 0;
             this._currentProcessedTask = null;
             this.textureManager._isRecordingTask = false;
             throw e;
+        } finally {
+            this.pausedExecution = false;
         }
     }
 
     /**
-     * Returns a promise that resolves when the frame graph is ready to be executed
-     * This method must be called after the graph has been built (FrameGraph.build called)!
+     * Checks if the frame graph is ready to be executed.
+     * Note that you can use the whenReadyAsync method to wait for the frame graph to be ready.
+     * @returns True if the frame graph is ready to be executed, else false
+     */
+    public isReady(): boolean {
+        let ready = this._renderContext._isReady();
+        for (const task of this._tasks) {
+            ready &&= task.isReady();
+        }
+        return ready;
+    }
+
+    /**
+     * Returns a promise that resolves when the frame graph is ready to be executed.
+     * In general, calling “await buildAsync()” should suffice, as this function also waits for readiness by default.
      * @param timeStep Time step in ms between retries (default is 16)
-     * @param maxTimeout Maximum time in ms to wait for the graph to be ready (default is 30000)
+     * @param maxTimeout Maximum time in ms to wait for the graph to be ready (default is 10000)
      * @returns The promise that resolves when the graph is ready
      */
-    public async whenReadyAsync(timeStep = 16, maxTimeout = 30000): Promise<void> {
+    public async whenReadyAsync(timeStep = 16, maxTimeout = 10000): Promise<void> {
         let firstNotReadyTask: FrameGraphTask | null = null;
-        return await new Promise((resolve) => {
+
+        return await new Promise((resolve, reject) => {
             this._whenReadyAsyncCancel = _RetryWithInterval(
                 () => {
                     let ready = this._renderContext._isReady();
@@ -267,6 +358,7 @@ export class FrameGraph {
                             Logger.Error(err);
                         }
                     }
+                    reject(new Error(err));
                 },
                 timeStep,
                 maxTimeout
@@ -278,17 +370,19 @@ export class FrameGraph {
      * Executes the frame graph.
      */
     public execute(): void {
-        this._renderContext.bindRenderTarget();
+        if (this.pausedExecution) {
+            return;
+        }
+
+        this._renderContext.restoreDefaultFramebuffer();
 
         this.textureManager._updateHistoryTextures();
 
         for (const task of this._tasks) {
-            const passes = task._getPasses();
-
-            for (const pass of passes) {
-                pass._execute();
-            }
+            task._execute();
         }
+
+        this._renderContext.restoreDefaultFramebuffer();
     }
 
     /**
@@ -309,6 +403,53 @@ export class FrameGraph {
     }
 
     /**
+     * Looks for the main camera used by the frame graph.
+     * By default, this is the camera used by the main object renderer task.
+     * If no such task, we try to find a camera in a utility layer renderer tasks.
+     * @returns The main camera used by the frame graph, or null if not found
+     */
+    public findMainCamera(): Nullable<Camera> {
+        const mainObjectRenderer = this.findMainObjectRenderer();
+        if (mainObjectRenderer) {
+            return mainObjectRenderer.camera;
+        }
+
+        // Try to find a camera in the utility layer renderer tasks
+        const tasks = this.tasks;
+
+        for (let i = tasks.length - 1; i >= 0; i--) {
+            const task = tasks[i];
+            if (task.getClassName() === "FrameGraphUtilityLayerRendererTask") {
+                return (task as unknown as { camera: Camera }).camera;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Looks for the main object renderer task in the frame graph.
+     * By default, this is the object/geometry renderer task with isMainObjectRenderer set to true.
+     * If no such task, we return the last object/geometry renderer task that has an object list with meshes (or null if none found).
+     * @returns The main object renderer of the frame graph, or null if not found
+     */
+    public findMainObjectRenderer(): Nullable<FrameGraphObjectRendererTask> {
+        const objectRenderers = this.getTasksByClassNames<FrameGraphObjectRendererTask>(["FrameGraphObjectRendererTask", "FrameGraphGeometryRendererTask"]);
+
+        let fallbackRenderer: Nullable<FrameGraphObjectRendererTask> = null;
+        for (let i = objectRenderers.length - 1; i >= 0; --i) {
+            const meshes = objectRenderers[i].objectList.meshes;
+            if (objectRenderers[i].isMainObjectRenderer) {
+                return objectRenderers[i];
+            }
+            if ((!meshes || meshes.length > 0) && !fallbackRenderer) {
+                fallbackRenderer = objectRenderers[i];
+            }
+        }
+        return fallbackRenderer;
+    }
+
+    /**
      * Disposes the frame graph
      */
     public dispose(): void {
@@ -318,9 +459,6 @@ export class FrameGraph {
         this.textureManager._dispose();
         this._renderContext._dispose();
 
-        const index = this._scene.frameGraphs.indexOf(this);
-        if (index !== -1) {
-            this._scene.frameGraphs.splice(index, 1);
-        }
+        this._scene.removeFrameGraph(this);
     }
 }

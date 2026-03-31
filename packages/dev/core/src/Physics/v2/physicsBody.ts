@@ -1,19 +1,25 @@
-import type { IBasePhysicsCollisionEvent, IPhysicsCollisionEvent, IPhysicsEnginePluginV2, PhysicsMassProperties } from "./IPhysicsEnginePlugin";
-import { PhysicsMotionType, PhysicsPrestepType } from "./IPhysicsEnginePlugin";
-import type { PhysicsShape } from "./physicsShape";
+import {
+    type IBasePhysicsCollisionEvent,
+    type IPhysicsCollisionEvent,
+    type IPhysicsEnginePluginV2,
+    type PhysicsMassProperties,
+    PhysicsMotionType,
+    PhysicsPrestepType,
+} from "./IPhysicsEnginePlugin";
+import { type PhysicsShape } from "./physicsShape";
 import { Vector3, Quaternion, TmpVectors } from "../../Maths/math.vector";
-import type { Scene } from "../../scene";
-import type { PhysicsEngine } from "./physicsEngine";
-import type { Nullable } from "core/types";
-import type { PhysicsConstraint } from "./physicsConstraint";
-import type { Bone } from "core/Bones/bone";
-import { Space } from "core/Maths/math.axis";
-import type { Observable, Observer } from "../../Misc/observable";
-import type { Node } from "../../node";
-import type { Mesh } from "core/Meshes/mesh";
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
-import type { TransformNode } from "../../Meshes/transformNode";
-import type { BoundingBox } from "core/Culling/boundingBox";
+import { type Scene } from "../../scene";
+import { type PhysicsEngine } from "./physicsEngine";
+import { type Nullable } from "../../types";
+import { type PhysicsConstraint } from "./physicsConstraint";
+import { type Bone } from "../../Bones/bone";
+import { Space } from "../../Maths/math.axis";
+import { type Observable, type Observer } from "../../Misc/observable";
+import { type Node } from "../../node";
+import { type Mesh } from "../../Meshes/mesh";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
+import { type TransformNode } from "../../Meshes/transformNode";
+import { type BoundingBox } from "../../Culling/boundingBox";
 
 /**
  * PhysicsBody is useful for creating a physics body that can be used in a physics engine. It allows
@@ -78,8 +84,6 @@ export class PhysicsBody {
 
     private _shape: Nullable<PhysicsShape> = null;
 
-    private _motionType: PhysicsMotionType;
-
     private _prestepType: PhysicsPrestepType = PhysicsPrestepType.DISABLED;
     /**
      * Constructs a new physics body for the given node.
@@ -118,8 +122,6 @@ export class PhysicsBody {
         }
 
         this.startAsleep = startsAsleep;
-
-        this._motionType = motionType;
 
         // only dynamic and animated body needs sync from physics to transformNode
         this.disableSync = motionType == PhysicsMotionType.STATIC;
@@ -188,7 +190,7 @@ export class PhysicsBody {
      * Get the motion type of the physics body. Can be STATIC, DYNAMIC, or ANIMATED.
      */
     public get motionType(): PhysicsMotionType {
-        return this._motionType;
+        return this._physicsPlugin.getMotionType(this);
     }
 
     /**
@@ -256,10 +258,10 @@ export class PhysicsBody {
     /**
      * Sets the motion type of the physics body. Can be STATIC, DYNAMIC, or ANIMATED.
      * @param motionType - The motion type to set.
-     * @param instanceIndex - If this body is instanced, the index of the instance to set the motion type for.
+     * @param instanceIndex - If this body is instanced, the index of the instance to set the motion type for. If body is instanced but instanceIndex is undefined, the motion type will be set for all instances.
      */
     public setMotionType(motionType: PhysicsMotionType, instanceIndex?: number) {
-        this.disableSync = motionType == PhysicsMotionType.STATIC;
+        this.disableSync = instanceIndex === undefined && motionType == PhysicsMotionType.STATIC;
         this._physicsPlugin.setMotionType(this, motionType, instanceIndex);
     }
 
@@ -485,6 +487,19 @@ export class PhysicsBody {
     }
 
     /**
+     * Applies a torque to the physics body.
+     *
+     * @param torque The torque vector.
+     * @param instanceIndex For a instanced body, the instance to where the torque should be applied. If not specified, the torque is applied to all instances.
+     *
+     * This method is useful for applying a torque to a physics body, which can be used to simulate rotational forces such as motors,
+     * angular momentum, and rotational dynamics. This can be used to create realistic physics simulations in a game or other application.
+     */
+    public applyTorque(torque: Vector3, instanceIndex?: number): void {
+        this._physicsPlugin.applyTorque(this, torque, instanceIndex);
+    }
+
+    /**
      * Applies a force to the physics object.
      *
      * @param force The force vector.
@@ -511,18 +526,20 @@ export class PhysicsBody {
 
     /**
      * Returns an observable that will be notified for when a collision starts or continues for this PhysicsBody
+     * @param instanceIndex - optionally, the index of the instance in the body
      * @returns Observable
      */
-    public getCollisionObservable(): Observable<IPhysicsCollisionEvent> {
-        return this._physicsPlugin.getCollisionObservable(this);
+    public getCollisionObservable(instanceIndex?: number): Observable<IPhysicsCollisionEvent> {
+        return this._physicsPlugin.getCollisionObservable(this, instanceIndex);
     }
 
     /**
      * Returns an observable that will be notified when the body has finished colliding with another body
-     * @returns
+     * @param instanceIndex - optionally, the index of the instance in the body
+     * @returns Observable
      */
-    public getCollisionEndedObservable(): Observable<IBasePhysicsCollisionEvent> {
-        return this._physicsPlugin.getCollisionEndedObservable(this);
+    public getCollisionEndedObservable(instanceIndex?: number): Observable<IBasePhysicsCollisionEvent> {
+        return this._physicsPlugin.getCollisionEndedObservable(this, instanceIndex);
     }
 
     /**

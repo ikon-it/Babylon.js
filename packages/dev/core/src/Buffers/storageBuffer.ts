@@ -1,6 +1,6 @@
-import type { DataBuffer } from "../Buffers/dataBuffer";
-import type { DataArray } from "../types";
-import type { WebGPUEngine } from "core/Engines/webgpuEngine";
+import { type DataBuffer } from "../Buffers/dataBuffer";
+import { type DataArray } from "../types";
+import { type WebGPUEngine } from "core/Engines/webgpuEngine";
 import { Constants } from "../Engines/constants";
 
 /**
@@ -44,6 +44,15 @@ export class StorageBuffer {
      */
     public getBuffer(): DataBuffer {
         return this._buffer;
+    }
+
+    /**
+     * Clears the storage buffer to zeros
+     * @param byteOffset the byte offset to start clearing (optional)
+     * @param byteLength the byte length to clear (optional)
+     */
+    public clear(byteOffset?: number, byteLength?: number): void {
+        this._engine.clearStorageBuffer(this._buffer, byteOffset, byteLength);
     }
 
     /**

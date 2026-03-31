@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { DeviceType } from "../../DeviceInput/InputDevices/deviceEnums";
-import type { IDeviceInputSystem } from "../../DeviceInput/inputInterfaces";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
-import type { Nullable } from "../../types";
-import type { ICanvas, IImage, IPath2D } from "../ICanvas";
-import type { NativeData, NativeDataStream } from "./nativeDataStream";
+import { type DeviceType } from "../../DeviceInput/InputDevices/deviceEnums";
+import { type IDeviceInputSystem } from "../../DeviceInput/inputInterfaces";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type Nullable } from "../../types";
+import { type ICanvas, type IImage, type IPath2D } from "../ICanvas";
+import { type NativeData, type NativeDataStream } from "./nativeDataStream";
+import { type Matrix } from "../../Maths/math.vector";
 
 export type NativeTexture = NativeData;
 export type NativeFramebuffer = NativeData;
@@ -27,11 +28,11 @@ export interface INativeEngine {
 
     createVertexArray(): NativeData;
 
-    createIndexBuffer(dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, is32Bits: boolean, dynamic: boolean): NativeData;
+    createIndexBuffer(dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, is32Bits: boolean, dynamic: boolean): NativeData;
     recordIndexBuffer(vertexArray: NativeData, indexBuffer: NativeData): void;
-    updateDynamicIndexBuffer(indexBuffer: NativeData, data: ArrayBuffer, dataByteOffset: number, dataByteLength: number, startIndex: number): void;
+    updateDynamicIndexBuffer(indexBuffer: NativeData, data: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, startIndex: number): void;
 
-    createVertexBuffer(dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, dynamic: boolean): NativeData;
+    createVertexBuffer(dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, dynamic: boolean): NativeData;
     recordVertexBuffer(
         vertexArray: NativeData,
         vertexBuffer: NativeData,
@@ -43,7 +44,7 @@ export interface INativeEngine {
         normalized: boolean,
         instanceDivisor: number
     ): void;
-    updateDynamicVertexBuffer(vertexBuffer: NativeData, dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, vertexByteOffset?: number): void;
+    updateDynamicVertexBuffer(vertexBuffer: NativeData, dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, vertexByteOffset?: number): void;
 
     createProgram(vertexShader: string, fragmentShader: string): NativeProgram;
     createProgramAsync(vertexShader: string, fragmentShader: string, onSuccess: () => void, onError: (error: Error) => void): NativeProgram;
@@ -81,7 +82,7 @@ export interface INativeEngine {
         bufferLength: number
     ): Promise<ArrayBuffer>;
 
-    createImageBitmap(data: ArrayBufferView | IImage): ImageBitmap;
+    createImageBitmap(data: ArrayBuffer | IImage): ImageBitmap;
     resizeImageBitmap(image: ImageBitmap, bufferWidth: number, bufferHeight: number): Uint8Array;
 
     createFrameBuffer(
@@ -414,14 +415,38 @@ interface INativeDataStreamConstructor {
     readonly VALIDATION_BOOLEAN: number;
 }
 
+// Note: These values need to match those in Babylon Native's NativeTracing plugin.
+export const enum NativeTraceLevel {
+    Mark = 1,
+    Log = 2,
+}
+
 /** @internal */
 export interface INative {
+    // NativeEngine plugin
     Engine: INativeEngineConstructor;
-    Camera: INativeCameraConstructor;
-    Canvas: INativeCanvasConstructor;
-    Image: INativeImageConstructor;
-    Path2D: INativePath2DConstructor;
-    XMLHttpRequest: any; // TODO: how to do this?
-    DeviceInputSystem: IDeviceInputSystemConstructor;
     NativeDataStream: INativeDataStreamConstructor;
+
+    // NativeCamera plugin
+    Camera?: INativeCameraConstructor;
+
+    // NativeCanvas plugin
+    Canvas?: INativeCanvasConstructor;
+    Image?: INativeImageConstructor;
+    Path2D?: INativePath2DConstructor;
+
+    // Native XMLHttpRequest polyfill
+    XMLHttpRequest?: typeof XMLHttpRequest;
+
+    // NativeInput plugin
+    DeviceInputSystem?: IDeviceInputSystemConstructor;
+
+    // NativeTracing plugin
+    enablePerformanceLogging?(level?: NativeTraceLevel): void;
+    disablePerformanceLogging?(): void;
+    startPerformanceCounter?(counter: string): unknown;
+    endPerformanceCounter?(counter: unknown): void;
+
+    // GaussianSplatting
+    sortSplats?(modelViewMatrix: Matrix, splatPositions: Float32Array, splatIndex: Float32Array, useRightHandedSystem: boolean): void;
 }

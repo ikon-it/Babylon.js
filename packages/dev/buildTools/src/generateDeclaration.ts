@@ -1,3 +1,4 @@
+/* eslint-disable jsdoc/require-param */
 /* eslint-disable no-console */
 import { globSync } from "glob";
 import * as fs from "fs";
@@ -5,8 +6,7 @@ import * as path from "path";
 import * as chokidar from "chokidar";
 
 import { camelize, checkArgs, checkDirectorySync, debounce, findRootDirectory, getHashOfContent, getHashOfFile, kebabize } from "./utils.js";
-import type { BuildType, DevPackageName } from "./packageMapping.js";
-import { getAllPackageMappingsByDevNames, getPackageMappingByDevName, getPublicPackageName, isValidDevPackageName } from "./packageMapping.js";
+import { type BuildType, type DevPackageName, getAllPackageMappingsByDevNames, getPackageMappingByDevName, getPublicPackageName, isValidDevPackageName } from "./packageMapping.js";
 
 export interface IGenerateDeclarationConfig {
     devPackageName: DevPackageName;
@@ -20,6 +20,10 @@ export interface IGenerateDeclarationConfig {
     addToDocumentation?: boolean;
     initDocumentation?: boolean;
     fileFilterRegex?: string;
+    /** Maps declarationLib names to source directory paths (relative to packages/ folder).
+     * Only needed for libs where folder name doesn't match the camelized lib name.
+     * e.g., { "@dev/inspector": "dev/inspector-v2" } */
+    sourceDirectoryOverrides?: { [key: string]: string };
 }
 
 function GetModuleDeclaration(
@@ -50,6 +54,8 @@ function GetModuleDeclaration(
     let processedLines = lines
         .map((line: string) => {
             line = line.replace("import type ", "import ");
+            // Strip inline type qualifiers from import specifiers (e.g. "import { type Foo }" -> "import { Foo }")
+            line = line.replace(/\{\s*type /g, "{ ").replace(/,\s*type /g, ", ");
             // Replace Type Imports
             const regexTypeImport = /(.*)type ([A-Za-z0-9]*) = import\("(.*)"\)\.(.*);/g;
             let match = regexTypeImport.exec(line);
@@ -76,45 +82,56 @@ function GetModuleDeclaration(
                     line = line.startsWith("    ") ? "    //" + line.substring(3) : "// " + line;
                 }
 
+                // replace type imports from directories with index (mixins are generating them)
+                line = line.replace(/import\("([./]+)"\)/g, `import("$1/index")`);
+
                 [
                     // Declaration
-                    /declare module ['"](.*)['"]/,
+                    /declare module ['"](.*)['"]/g,
                     // From
-                    / from ['"](.*)['"]/,
+                    / from ['"](.*)['"]/g,
                     // Module augmentation
-                    / {4}module ['"](.*)['"]/,
-                    /^module ['"](\..*)['"]/,
+                    / {4}module ['"](.*)['"]/g,
+                    /^module ['"](\..*)['"]/g,
                     // Inlined Import
-                    /import\(['"](.*)['"]/,
+                    /import\(['"]([^'"]*)['"]/g,
                     // Side Effect Import
-                    /import ['"](.*)['"]/,
+                    /import ['"](.*)['"]/g,
                 ].forEach((regex) => {
-                    const match = line.match(regex);
-                    if (match) {
-                        if (match[1][0] === ".") {
-                            const newLocation = path.join(sourceDir, match[1]).replace(/\\/g, "/");
-                            line = line.replace(match[1], newLocation);
-                        } else {
-                            let found = false;
-                            Object.keys(mapping).forEach((devPackageName) => {
-                                if (match[1].startsWith(devPackageName)) {
-                                    line = line.replace(
-                                        match[1],
-                                        getPublicPackageName(
-                                            mapping[(isValidDevPackageName(devPackageName, true) ? devPackageName : kebabize(config.devPackageName)) as DevPackageName][buildType],
-                                            match[1]
-                                        ) + match[1].substring(devPackageName.length)
-                                    );
-                                    found = true;
-                                }
-                            });
-                            if (!found) {
-                                // not a dev dependency
-                                // TODO - make a list of external dependencies per package
-                                // for now - we support react
-                                if (match[1] !== "react") {
-                                    // check what the line imports
-                                    line = "";
+                    const matches = line.matchAll(regex);
+                    if (matches) {
+                        for (const match of matches) {
+                            const group = match[1];
+                            if (group[0] === ".") {
+                                const newLocation = path.join(sourceDir, group).replace(/\\/g, "/");
+                                // replaceAll only avaialable by modifying the typescript lib
+                                // which we prefered to not change for now
+                                line = (line as any).replace(group, newLocation);
+                                // while (line.indexOf("//") > -1) {}
+                            } else {
+                                let found = false;
+                                Object.keys(mapping).forEach((devPackageName) => {
+                                    if (group.startsWith(devPackageName)) {
+                                        line = line.replace(
+                                            group,
+                                            getPublicPackageName(
+                                                mapping[(isValidDevPackageName(devPackageName, true) ? devPackageName : kebabize(config.devPackageName)) as DevPackageName][
+                                                    buildType
+                                                ],
+                                                group
+                                            ) + group.substring(devPackageName.length)
+                                        );
+                                        found = true;
+                                    }
+                                });
+                                if (!found) {
+                                    // not a dev dependency
+                                    // TODO - make a list of external dependencies per package
+                                    // for now - we support react (including react/jsx-runtime, etc.)
+                                    if (!group.startsWith("react") /* && !group.startsWith("@fluentui")*/) {
+                                        // check what the line imports
+                                        line = "";
+                                    }
                                 }
                             }
                         }
@@ -163,10 +180,17 @@ function GetModuleDeclaration(
         // TODO - make a list of dependencies that are accepted by each package
         if (!devPackageName) {
             if (externalName) {
-                if (externalName === "@fortawesome" || externalName === "react-contextmenu") {
-                    // replace with any
-                    const matchRegex = new RegExp(`([ <])(${alias}[^;\n ]*)([^\\w])`, "g");
-                    processedLines = processedLines.replace(matchRegex, `$1any$3`);
+                if (externalName === "@fortawesome" || externalName === "@fluentui" || externalName === "@recast-navigation") {
+                    // Replace type references with "any", but skip declaration sites (e.g. "export type ThemeMode")
+                    // to avoid producing invalid syntax like "export type any = ...".
+                    const matchRegex = new RegExp(`([ <])(${alias})([^\\w])`, "g");
+                    processedLines = processedLines.replace(matchRegex, (match, p1: string, _alias: string, p3: string, offset: number) => {
+                        const precedingText = processedLines.slice(0, offset + p1.length);
+                        if (/\b(?:type|class|var|const|let|function|interface|enum|namespace)\s+$/.test(precedingText)) {
+                            return match;
+                        }
+                        return `${p1}any${p3}`;
+                    });
                     return;
                 }
             }
@@ -211,8 +235,10 @@ function GetClassesMap(source: string, originalDevPackageName: string, originalS
             if (parts.length === 2) {
                 console.log(`${parts[0]} as ${parts[1]}`);
             }
-            const realClassName = parts[0].trim();
-            const alias = parts[1] ? parts[1].trim() : realClassName;
+            // Strip inline "type" qualifier from import specifiers (e.g. "type Foo" -> "Foo")
+            // to prevent "type" from leaking into namespace references like "BABYLON.type Foo".
+            const realClassName = parts[0].trim().replace(/^type /, "");
+            const alias = parts[1] ? parts[1].trim().replace(/^type /, "") : realClassName;
             const firstSplit = matches[2].split("/")[0];
             const devPackageName = firstSplit[0] === "." ? originalDevPackageName : firstSplit;
             // if (alias !== realClassName) {
@@ -273,8 +299,10 @@ function GetClassesMap(source: string, originalDevPackageName: string, originalS
                 const parts = className.split(" as ");
                 if (parts.length === 2) {
                     console.log(`aliasing ${parts[0]} as ${parts[1]}`);
-                    const realClassName = parts[1].trim();
-                    const alias = parts[0] ? parts[0].trim() : realClassName;
+                    // Strip inline "type" qualifier from re-export specifiers (e.g. "type Foo" -> "Foo")
+                    // to prevent "type" from leaking into namespace references like "BABYLON.type Foo".
+                    const realClassName = parts[1].trim().replace(/^type /, "");
+                    const alias = parts[0] ? parts[0].trim().replace(/^type /, "") : realClassName;
                     const devPackageName = originalDevPackageName;
                     if (isValidDevPackageName(devPackageName)) {
                         mappingArray.push({
@@ -319,8 +347,9 @@ function GetPackageDeclaration(
     while (i < lines.length) {
         let line = lines[i];
 
-        if (/import\("\.(.*)\)./g.test(line) && !/^declare type (.*) import/g.test(line)) {
-            line = line.replace(/import\((.*)\)./, "");
+        if (/import\("\.([^)]*)\)./g.test(line) && !/^declare type (.*) import/g.test(line)) {
+            // Only remove relative imports (starting with "."), not external imports like "react"
+            line = line.replace(/import\("\.([^)]*)\)\./g, "");
         }
 
         if (!line.includes("const enum") && !line.includes("=")) {
@@ -366,6 +395,11 @@ function GetPackageDeclaration(
             }
         }
 
+        // if the import is a return-type import from core or local dir, we remove the import and the dot
+        if (line.match(/import\("core(.*)"\)\./g) || line.match(/import\("\.(.*)"\)\./g)) {
+            line = line.replace(/import\("(.*)"\)\./g, "");
+        }
+
         if (excludeLine) {
             lines[i] = "";
         } else {
@@ -394,10 +428,17 @@ function GetPackageDeclaration(
             // TODO - make a list of dependencies that are accepted by each package
             if (!localDevPackageMap) {
                 if (externalName) {
-                    if (externalName === "@fortawesome" || externalName === "react-contextmenu") {
-                        // replace with any
-                        const matchRegex = new RegExp(`([ <])(${alias}[^;\n ]*)([^\\w])`, "g");
-                        processedSource = processedSource.replace(matchRegex, `$1any$3`);
+                    if (externalName === "@fortawesome" || externalName === "@fluentui" || externalName === "@recast-navigation") {
+                        // Replace type references with "any", but skip declaration sites (e.g. "export type ThemeMode")
+                        // to avoid producing invalid syntax like "export type any = ...".
+                        const matchRegex = new RegExp(`([ <])(${alias})([^\\w])`, "g");
+                        processedSource = processedSource.replace(matchRegex, (match, p1: string, _alias: string, p3: string, offset: number) => {
+                            const precedingText = processedSource.slice(0, offset + p1.length);
+                            if (/\b(?:type|class|var|const|let|function|interface|enum|namespace)\s+$/.test(precedingText)) {
+                                return match;
+                            }
+                            return `${p1}any${p3}`;
+                        });
                         return;
                     } else if (externalName === "react") {
                         const matchRegex = new RegExp(`([ <])(${alias})([^\\w])`, "g");
@@ -409,7 +450,7 @@ function GetPackageDeclaration(
             }
             const devPackageToUse = isValidDevPackageName(localDevPackageMap, true) ? localDevPackageMap : devPackageName;
             const originalNamespace = getPublicPackageName(getPackageMappingByDevName(devPackageToUse).namespace);
-            const namespace = getPublicPackageName(getPackageMappingByDevName(devPackageToUse).namespace, fullPath /*, fullPath*/);
+            const namespace = getPublicPackageName(getPackageMappingByDevName(devPackageToUse).namespace, fullPath);
             if (namespace !== defaultModuleName || originalNamespace !== namespace || alias !== realClassName) {
                 const matchRegex = new RegExp(`([ <])(${alias})([^\\w])`, "g");
                 if (exported) {
@@ -437,7 +478,7 @@ function GetPackageDeclaration(
     if (globalIndex !== -1) {
         // find where the ending } is. What we do is we count +1 if we find a { and -1 if we find a }. when we get to 0, this is the end of the global
         let count = 1;
-        let i = -1;
+        let i: number;
         for (i = globalIndex + 9; i < processedSource.length; i++) {
             if (processedSource[i] === "{") {
                 count++;
@@ -578,8 +619,15 @@ export function generateDeclaration() {
         }
         const outputDir = config.outputDirectory || "./dist";
         checkDirectorySync(outputDir);
-        const directoriesToWatch = config.declarationLibs.map((lib: string) => path.join(rootDir, "packages", `${camelize(lib).replace(/@/g, "")}/dist/**/*.d.ts`));
-        const looseDeclarations = config.declarationLibs.map((lib: string) => path.join(rootDir, "packages", `${camelize(lib).replace(/@/g, "")}/**/LibDeclarations/**/*.d.ts`));
+        // Map declarationLibs to source directories, using overrides where specified
+        const sourceDirs = config.declarationLibs.map((lib: string) => {
+            if (config.sourceDirectoryOverrides?.[lib]) {
+                return config.sourceDirectoryOverrides[lib];
+            }
+            return camelize(lib).replace(/@/g, "");
+        });
+        const directoriesToWatch = sourceDirs.map((dir: string) => path.join(rootDir, "packages", `${dir}/dist/**/*.d.ts`));
+        const looseDeclarations = sourceDirs.map((dir: string) => path.join(rootDir, "packages", `${dir}/**/LibDeclarations/**/*.d.ts`));
 
         const debounced = debounce(() => {
             const { output, namespaceDeclaration, looseDeclarationsString } = generateCombinedDeclaration(

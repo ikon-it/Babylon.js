@@ -1,19 +1,19 @@
 import { Matrix } from "../Maths/math.vector";
 import { VertexBuffer } from "../Buffers/buffer";
-import type { SubMesh } from "../Meshes/subMesh";
+import { type SubMesh } from "../Meshes/subMesh";
 import { Constants } from "../Engines/constants";
-import type { SmartArray } from "../Misc/smartArray";
+import { type SmartArray } from "../Misc/smartArray";
 import { Texture } from "../Materials/Textures/texture";
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
 import { MultiRenderTarget } from "../Materials/Textures/multiRenderTarget";
-import type { PrePassRenderer } from "../Rendering/prePassRenderer";
-import type { Scene } from "../scene";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type PrePassRenderer } from "../Rendering/prePassRenderer";
+import { type Scene } from "../scene";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { Color4 } from "../Maths/math.color";
 import { _WarnImport } from "../Misc/devTools";
-import type { Observer } from "../Misc/observable";
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { Nullable } from "../types";
+import { type Observer } from "../Misc/observable";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable } from "../types";
 import { Material } from "../Materials/material";
 
 import "../Shaders/geometry.fragment";
@@ -24,6 +24,7 @@ import { BindMorphTargetParameters, BindSceneUniformBuffer, PrepareDefinesAndAtt
 
 import "../Engines/Extensions/engine.multiRender";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { type OpenPBRMaterial } from "../Materials/PBR/openpbrMaterial";
 
 /** @internal */
 interface ISavedTransformationMatrix {
@@ -54,7 +55,7 @@ const Uniforms = [
     "morphTargetCount",
     "morphTargetTextureInfo",
     "morphTargetTextureIndices",
-    "boneTextureWidth",
+    "boneTextureInfo",
 ];
 AddClipPlaneUniforms(Uniforms);
 
@@ -551,8 +552,14 @@ export class GeometryBufferRenderer {
         }
 
         const defines = [];
-        const attribs = [VertexBuffer.PositionKind, VertexBuffer.NormalKind];
+        const attribs = [VertexBuffer.PositionKind];
         const mesh = subMesh.getMesh();
+        const hasNormals = mesh.isVerticesDataPresent(VertexBuffer.NormalKind);
+
+        if (hasNormals) {
+            defines.push("#define HAS_NORMAL_ATTRIBUTE");
+            attribs.push(VertexBuffer.NormalKind);
+        }
 
         let uv1 = false;
         let uv2 = false;
@@ -568,8 +575,8 @@ export class GeometryBufferRenderer {
             }
 
             // Normal map texture
-            if ((material.bumpTexture || material.normalTexture) && MaterialFlags.BumpTextureEnabled) {
-                const texture = material.bumpTexture || material.normalTexture;
+            if ((material.bumpTexture || material.normalTexture || material.geometryNormalTexture) && MaterialFlags.BumpTextureEnabled) {
+                const texture = material.bumpTexture || material.normalTexture || material.geometryNormalTexture;
                 defines.push("#define BUMP");
                 defines.push(`#define BUMP_UV${texture.coordinatesIndex + 1}`);
                 needUv = true;
@@ -694,6 +701,37 @@ export class GeometryBufferRenderer {
                     }
                     if (material.specularColor) {
                         defines.push("#define REFLECTIVITYCOLOR");
+                    }
+                } else if (material.getClassName() === "OpenPBRMaterial") {
+                    const pbrMaterial = material as OpenPBRMaterial;
+
+                    defines.push("#define METALLICWORKFLOW");
+                    defines.push("#define METALLIC");
+                    defines.push("#define ROUGHNESS");
+                    if (pbrMaterial._useRoughnessFromMetallicTextureGreen && pbrMaterial.baseMetalnessTexture) {
+                        defines.push("#define ORMTEXTURE");
+                        defines.push(`#define REFLECTIVITY_UV${pbrMaterial.baseMetalnessTexture.coordinatesIndex + 1}`);
+                        needUv = true;
+                    } else if (pbrMaterial.baseMetalnessTexture) {
+                        defines.push("#define METALLIC_TEXTURE");
+                        defines.push(`#define METALLIC_UV${pbrMaterial.baseMetalnessTexture.coordinatesIndex + 1}`);
+                        needUv = true;
+                    } else if (pbrMaterial.specularRoughnessTexture) {
+                        defines.push("#define ROUGHNESS_TEXTURE");
+                        defines.push(`#define ROUGHNESS_UV${pbrMaterial.specularRoughnessTexture.coordinatesIndex + 1}`);
+                        needUv = true;
+                    }
+
+                    if (pbrMaterial.baseColorTexture) {
+                        defines.push("#define ALBEDOTEXTURE");
+                        defines.push(`#define ALBEDO_UV${pbrMaterial.baseColorTexture.coordinatesIndex + 1}`);
+                        if (pbrMaterial.baseColorTexture.gammaSpace) {
+                            defines.push("#define GAMMAALBEDO");
+                        }
+                        needUv = true;
+                    }
+                    if (pbrMaterial.baseColor) {
+                        defines.push("#define ALBEDOCOLOR");
                     }
                 }
             }
@@ -876,6 +914,9 @@ export class GeometryBufferRenderer {
             const engine = this._scene.getEngine();
             engine.onResizeObservable.remove(this._resizeObserver);
             this._resizeObserver = null;
+        }
+        if (this._multiRenderTarget?.renderTarget && this.scene.getEngine()._currentRenderTarget === this._multiRenderTarget.renderTarget) {
+            this.scene.getEngine().unBindFramebuffer(this._multiRenderTarget?.renderTarget);
         }
         this.getGBuffer().dispose();
     }
@@ -1095,7 +1136,7 @@ export class GeometryBufferRenderer {
                         sideOrientation = sideOrientation === Material.ClockWiseSideOrientation ? Material.CounterClockWiseSideOrientation : Material.ClockWiseSideOrientation;
                     }
                 } else {
-                    sideOrientation = instanceDataStorage.sideOrientation;
+                    sideOrientation = renderingMesh._effectiveSideOrientation;
                 }
 
                 material._preBind(drawWrapper, sideOrientation);
@@ -1110,8 +1151,12 @@ export class GeometryBufferRenderer {
                 }
 
                 // Bump
-                if ((material.bumpTexture || material.normalTexture) && scene.getEngine().getCaps().standardDerivatives && MaterialFlags.BumpTextureEnabled) {
-                    const texture = material.bumpTexture || material.normalTexture;
+                if (
+                    (material.bumpTexture || material.normalTexture || material.geometryNormalTexture) &&
+                    scene.getEngine().getCaps().standardDerivatives &&
+                    MaterialFlags.BumpTextureEnabled
+                ) {
+                    const texture = material.bumpTexture || material.normalTexture || material.geometryNormalTexture;
                     effect.setFloat3("vBumpInfos", texture.coordinatesIndex, 1.0 / texture.level, material.parallaxScaleBias);
                     effect.setMatrix("bumpMatrix", texture.getTextureMatrix());
                     effect.setTexture("bumpSampler", texture);
@@ -1197,6 +1242,28 @@ export class GeometryBufferRenderer {
                         if (material.specularColor !== null) {
                             effect.setColor3("reflectivityColor", material.specularColor);
                         }
+                    } else if (material.getClassName() === "OpenPBRMaterial") {
+                        // if it is a OpenPBR material:
+                        const openpbrMaterial = material as OpenPBRMaterial;
+                        if (openpbrMaterial._useRoughnessFromMetallicTextureGreen && openpbrMaterial.baseMetalnessTexture) {
+                            effect.setTexture("reflectivitySampler", openpbrMaterial.baseMetalnessTexture);
+                            effect.setMatrix("reflectivityMatrix", openpbrMaterial.baseMetalnessTexture.getTextureMatrix());
+                        } else if (openpbrMaterial.baseMetalnessTexture) {
+                            effect.setTexture("metallicSampler", openpbrMaterial.baseMetalnessTexture);
+                            effect.setMatrix("metallicMatrix", openpbrMaterial.baseMetalnessTexture.getTextureMatrix());
+                        } else if (openpbrMaterial.specularRoughnessTexture) {
+                            effect.setTexture("roughnessSampler", openpbrMaterial.specularRoughnessTexture);
+                            effect.setMatrix("roughnessMatrix", openpbrMaterial.specularRoughnessTexture.getTextureMatrix());
+                        }
+                        effect.setFloat("metallic", openpbrMaterial.baseMetalness);
+                        effect.setFloat("glossiness", 1.0 - openpbrMaterial.specularRoughness);
+                        if (openpbrMaterial.baseColorTexture !== null) {
+                            effect.setTexture("albedoSampler", openpbrMaterial.baseColorTexture);
+                            effect.setMatrix("albedoMatrix", openpbrMaterial.baseColorTexture.getTextureMatrix());
+                        }
+                        if (openpbrMaterial.baseColor !== null) {
+                            effect.setColor3("albedoColor", openpbrMaterial.baseColor);
+                        }
                     }
                 }
 
@@ -1207,10 +1274,10 @@ export class GeometryBufferRenderer {
                 if (renderingMesh.useBones && renderingMesh.computeBonesUsingShaders && renderingMesh.skeleton) {
                     const skeleton = renderingMesh.skeleton;
 
-                    if (skeleton.isUsingTextureForMatrices && effect.getUniformIndex("boneTextureWidth") > -1) {
+                    if (skeleton.isUsingTextureForMatrices && effect.getUniformIndex("boneTextureInfo") > -1) {
                         const boneTexture = skeleton.getTransformMatrixTexture(renderingMesh);
                         effect.setTexture("boneSampler", boneTexture);
-                        effect.setFloat("boneTextureWidth", 4.0 * (skeleton.bones.length + 1));
+                        effect.setFloat2("boneTextureInfo", skeleton._textureWidth, skeleton._textureHeight);
                     } else {
                         effect.setMatrices("mBones", renderingMesh.skeleton.getTransformMatrices(renderingMesh));
                     }

@@ -1,47 +1,45 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Immutable, Nullable, float, DataArray } from "../types";
-import type { Color3Gradient, IValueGradient } from "../Misc/gradients";
-import { FactorGradient, ColorGradient, GradientHelper } from "../Misc/gradients";
+import { type Immutable, type Nullable, type float, type DataArray } from "../types";
+import { type Color3Gradient, type IValueGradient, FactorGradient, ColorGradient, GradientHelper } from "../Misc/gradients";
 import { Observable } from "../Misc/observable";
 import { Vector3, Matrix, TmpVectors } from "../Maths/math.vector";
 import { Color4, TmpColors } from "../Maths/math.color";
 import { Lerp } from "../Maths/math.scalar.functions";
 import { VertexBuffer, Buffer } from "../Buffers/buffer";
 
-import type { IParticleSystem } from "./IParticleSystem";
+import { type IParticleSystem } from "./IParticleSystem";
 import { BaseParticleSystem } from "./baseParticleSystem";
 import { ParticleSystem } from "./particleSystem";
 import { BoxParticleEmitter } from "../Particles/EmitterTypes/boxParticleEmitter";
-import type { IDisposable } from "../scene";
-import type { Effect } from "../Materials/effect";
+import { type IDisposable, Scene } from "../scene";
+import { type Effect } from "../Materials/effect";
 import { ImageProcessingConfiguration } from "../Materials/imageProcessingConfiguration";
 import { RawTexture } from "../Materials/Textures/rawTexture";
 import { Constants } from "../Engines/constants";
 import { EngineStore } from "../Engines/engineStore";
-import type { IAnimatable } from "../Animations/animatable.interface";
+import { type IAnimatable } from "../Animations/animatable.interface";
 import { CustomParticleEmitter } from "./EmitterTypes/customParticleEmitter";
 import { AbstractEngine } from "../Engines/abstractEngine";
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { DrawWrapper } from "../Materials/drawWrapper";
-import type { UniformBufferEffectCommonAccessor } from "../Materials/uniformBufferEffectCommonAccessor";
-import type { IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
+import { type UniformBufferEffectCommonAccessor } from "../Materials/uniformBufferEffectCommonAccessor";
+import { type IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
 import { GetClass } from "../Misc/typeStore";
 import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
 
-import { Scene } from "../scene";
-import type { Engine } from "../Engines/engine";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type Engine } from "../Engines/engine";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 
 import "../Engines/Extensions/engine.transformFeedback";
 
 import "../Shaders/gpuRenderParticles.fragment";
 import "../Shaders/gpuRenderParticles.vertex";
 import { BindFogParameters, BindLogDepth } from "../Materials/materialHelper.functions";
-import type { PointParticleEmitter } from "./EmitterTypes/pointParticleEmitter";
-import type { HemisphericParticleEmitter } from "./EmitterTypes/hemisphericParticleEmitter";
-import type { SphereDirectedParticleEmitter, SphereParticleEmitter } from "./EmitterTypes/sphereParticleEmitter";
-import type { CylinderDirectedParticleEmitter, CylinderParticleEmitter } from "./EmitterTypes/cylinderParticleEmitter";
-import type { ConeDirectedParticleEmitter, ConeParticleEmitter } from "./EmitterTypes/coneParticleEmitter";
+import { type PointParticleEmitter } from "./EmitterTypes/pointParticleEmitter";
+import { type HemisphericParticleEmitter } from "./EmitterTypes/hemisphericParticleEmitter";
+import { type SphereDirectedParticleEmitter, type SphereParticleEmitter } from "./EmitterTypes/sphereParticleEmitter";
+import { type CylinderDirectedParticleEmitter, type CylinderParticleEmitter } from "./EmitterTypes/cylinderParticleEmitter";
+import { type ConeDirectedParticleEmitter, type ConeParticleEmitter } from "./EmitterTypes/coneParticleEmitter";
 import {
     CreateConeEmitter,
     CreateCylinderEmitter,
@@ -52,7 +50,7 @@ import {
     CreatePointEmitter,
     CreateSphereEmitter,
 } from "./particleSystem.functions";
-import type { Texture } from "core/Materials/Textures/texture";
+import { type Texture } from "core/Materials/Textures/texture";
 
 /**
  * This represents a GPU particle system in Babylon
@@ -69,6 +67,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     private _maxActiveParticleCount: number;
     private _currentActiveCount: number;
     private _accumulatedCount = 0;
+    private _writePointer = 0;
+    private _emitIndex = 0;
+    private _emitCount = 0;
+    private _emitRateControl: boolean;
     private _updateBuffer: UniformBufferEffectCommonAccessor;
 
     private _buffer0: Buffer;
@@ -110,6 +112,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
     private _rebuildingAfterContextLost = false;
 
     /**
+     * Specifies if the particle system should be serialized
+     */
+    public doNotSerialize = false;
+
+    /**
      * Gets a boolean indicating if the GPU particles can be rendered on current browser
      */
     public static get IsSupported(): boolean {
@@ -130,6 +137,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      */
     public onStoppedObservable = new Observable<IParticleSystem>();
 
+    /**
+     * An event triggered when the system is started
+     */
+    public onStartedObservable = new Observable<IParticleSystem>();
+
     private _createIndexBuffer() {
         this._linesIndexBufferUseInstancing = this._engine.createIndexBuffer(new Uint32Array([0, 1, 1, 3, 3, 2, 2, 0, 0, 3]), undefined, "GPUParticleSystemLinesIndexBuffer");
     }
@@ -140,6 +152,18 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
      */
     public getCapacity(): number {
         return this._capacity;
+    }
+
+    /**
+     * Gets whether emit rate control is enabled.
+     * When true, the GPU particle system limits the number of active particles
+     * to approximately emitRate * maxLifeTime (matching CPU particle behavior)
+     * and uses a circular buffer to recycle particle slots.
+     * When false (default), all dead particles are recycled immediately,
+     * which is the legacy GPU particle behavior.
+     */
+    public get emitRateControl(): boolean {
+        return this._emitRateControl;
     }
 
     /**
@@ -184,6 +208,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
     /** Gets or sets a matrix to use to compute projection */
     public defaultProjectionMatrix: Matrix;
+
+    /**
+     * Gets or sets an object used to store user defined information for the particle system
+     */
+    public metadata: any = null;
 
     /**
      * Creates a Point Emitter for the particle system (emits directly from the emitter position)
@@ -419,6 +448,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         }
         this._started = true;
         this._stopped = false;
+        this._actualFrame = 0;
         this._preWarmDone = false;
 
         // Animations
@@ -448,6 +478,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         this._platform.releaseVertexBuffers();
         this._currentActiveCount = 0;
         this._targetIndex = 0;
+        this._writePointer = 0;
+        this._emitIndex = 0;
+        this._emitCount = 0;
+        this._accumulatedCount = 0;
     }
 
     /**
@@ -958,6 +992,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         options: Partial<{
             capacity: number;
             randomTextureSize: number;
+            emitRateControl: boolean;
         }>,
         sceneOrEngine: Scene | AbstractEngine,
         customEffect: Nullable<Effect> = null,
@@ -1021,6 +1056,7 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         this._maxActiveParticleCount = fullOptions.capacity;
         this._currentActiveCount = 0;
         this._isAnimationSheetEnabled = isAnimationSheetEnabled;
+        this._emitRateControl = !!options.emitRateControl;
 
         this.particleEmitterType = new BoxParticleEmitter();
 
@@ -1141,7 +1177,6 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             offset += 1;
             if (this.spriteRandomStartCell) {
                 renderVertexBuffers["cellStartOffset"] = renderBuffer.createVertexBuffer("cellStartOffset", offset, 1, this._attributesStrideSize, true);
-                offset += 1;
             }
         }
 
@@ -1409,6 +1444,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             defines += "\n#define LOCAL";
         }
 
+        if (this._emitRateControl) {
+            defines += "\n#define EMITRATECTRL";
+        }
+
         if (this._platform.isUpdateBufferCreated() && this._cachedUpdateDefines === defines) {
             return this._platform.isUpdateBufferReady();
         }
@@ -1558,6 +1597,10 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
             defines.push("#define ANIMATESHEET");
         }
 
+        if (this._emitRateControl) {
+            defines.push("#define EMITRATECTRL");
+        }
+
         if (fillImageProcessing && this._imageProcessingConfiguration) {
             this._imageProcessingConfiguration.prepareDefines(this._imageProcessingConfigurationDefines);
             defines.push("" + this._imageProcessingConfigurationDefines.toString());
@@ -1685,7 +1728,8 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         effect.setMatrix("projection", this.defaultProjectionMatrix ?? this._scene!.getProjectionMatrix());
         effect.setTexture("diffuseSampler", this.particleTexture);
         effect.setVector2("translationPivot", this.translationPivot);
-        effect.setVector3("worldOffset", this.worldOffset);
+        const worldOffset = this.worldOffset.subtractToRef(this._scene?.floatingOriginOffset || Vector3.ZeroReadOnly, TmpVectors.Vector3[0]);
+        effect.setVector3("worldOffset", worldOffset);
         if (this.isLocal) {
             effect.setMatrix("emitterWM", emitterWM);
         }
@@ -1786,6 +1830,8 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         this._updateBuffer.setFloat("currentCount", this._currentActiveCount);
         this._updateBuffer.setFloat("timeDelta", this._timeDelta);
         this._updateBuffer.setFloat("stopFactor", this._stopped ? 0 : 1);
+        this._updateBuffer.setFloat("emitIndex", this._emitIndex);
+        this._updateBuffer.setFloat("emitCount", this._emitCount);
         this._updateBuffer.setInt("randomTextureSize", this._randomTextureSize);
         this._updateBuffer.setFloat2("lifeTime", this.minLifeTime, this.maxLifeTime);
         this._updateBuffer.setFloat2("emitPower", this.minEmitPower, this.maxEmitPower);
@@ -1876,19 +1922,72 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
         // Get everything ready to render
         this._initialize();
 
-        if (this.manualEmitCount > -1) {
-            this._accumulatedCount += this.manualEmitCount;
-            this.manualEmitCount = 0;
-        } else {
-            this._accumulatedCount += this.emitRate * this._timeDelta;
-        }
-        if (this._accumulatedCount >= 1) {
-            const intPart = this._accumulatedCount | 0;
-            this._accumulatedCount -= intPart;
-            this._currentActiveCount += intPart;
-        }
+        if (this._emitRateControl) {
+            // Emit-rate-controlled mode: limits active particles to ~emitRate * maxLifeTime,
+            // matching CPU particle behavior with circular buffer recycling.
 
-        this._currentActiveCount = Math.min(this._maxActiveParticleCount, this._currentActiveCount);
+            // Accumulate fractional particles over time. Manual emit bypasses the rate.
+            if (this.manualEmitCount > -1) {
+                this._accumulatedCount += this.manualEmitCount;
+                this.manualEmitCount = 0;
+            } else if (!this._stopped) {
+                this._accumulatedCount += this.emitRate * this._timeDelta;
+            }
+
+            // Convert accumulated fractional count into whole particles to emit this frame.
+            // The fractional remainder carries over to the next frame.
+            let newParticles = 0;
+            if (this._accumulatedCount >= 1) {
+                newParticles = this._accumulatedCount | 0;
+                this._accumulatedCount -= newParticles;
+            }
+
+            // The maximum number of particles that can be alive at once is bounded by
+            // emitRate * maxLifeTime (e.g. 1000 emit/s * 0.3s = 300 particles).
+            // This matches CPU particle system behavior and avoids filling the entire capacity.
+            // When emitRate is 0 but manualEmitCount is used, the rate-based steady state
+            // would be 0, blocking buffer growth. Use newParticles as a floor so manual
+            // emissions can always allocate slots.
+            const steadyStateCount = Math.min(Math.max(Math.ceil(this.emitRate * this.maxLifeTime), newParticles), this._maxActiveParticleCount);
+
+            // During ramp-up, grow the active buffer size by adding new slots.
+            // Once _currentActiveCount reaches steadyStateCount, no new slots are added —
+            // existing slots are recycled instead (handled by _emitIndex below).
+            if (this._currentActiveCount < steadyStateCount && newParticles > 0) {
+                const growth = Math.min(newParticles, steadyStateCount - this._currentActiveCount);
+                this._currentActiveCount += growth;
+            }
+
+            // Tell the update shader which particle slots to (re)initialize this frame.
+            // _emitIndex is where the circular write pointer starts in the buffer,
+            // _emitCount is how many consecutive slots to reinitialize (with wrapping).
+            // The shader checks each particle's index against this range to decide
+            // whether to recycle it (emit branch) or advance its simulation (update branch).
+            if (this._currentActiveCount > 0 && newParticles > 0) {
+                this._emitCount = Math.min(newParticles, this._currentActiveCount);
+                this._emitIndex = this._writePointer % this._currentActiveCount;
+                this._writePointer += this._emitCount;
+            } else {
+                this._emitCount = 0;
+            }
+        } else {
+            // Legacy mode: dead particles recycle immediately, filling up to capacity.
+            if (this.manualEmitCount > -1) {
+                this._accumulatedCount += this.manualEmitCount;
+                this.manualEmitCount = 0;
+            } else {
+                this._accumulatedCount += this.emitRate * this._timeDelta;
+            }
+            if (this._accumulatedCount >= 1) {
+                const intPart = this._accumulatedCount | 0;
+                this._accumulatedCount -= intPart;
+                this._currentActiveCount += intPart;
+            }
+
+            this._currentActiveCount = Math.min(this._maxActiveParticleCount, this._currentActiveCount);
+            this._emitIndex = 0;
+            this._emitCount = 0;
+        }
 
         if (!this._currentActiveCount) {
             return 0;
@@ -2114,7 +2213,15 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         serializationObject.activeParticleCount = this.activeParticleCount;
         serializationObject.randomTextureSize = this._randomTextureSize;
+        serializationObject.emitRateControl = this._emitRateControl;
         serializationObject.customShader = this.customShader;
+
+        serializationObject.preventAutoStart = this.preventAutoStart;
+        serializationObject.worldOffset = this.worldOffset.asArray();
+
+        if (this.metadata) {
+            serializationObject.metadata = this.metadata;
+        }
 
         return serializationObject;
     }
@@ -2142,7 +2249,11 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         const particleSystem = new GPUParticleSystem(
             name,
-            { capacity: capacity || parsedParticleSystem.capacity, randomTextureSize: parsedParticleSystem.randomTextureSize },
+            {
+                capacity: capacity || parsedParticleSystem.capacity,
+                randomTextureSize: parsedParticleSystem.randomTextureSize,
+                emitRateControl: parsedParticleSystem.emitRateControl,
+            },
             sceneOrEngine,
             null,
             parsedParticleSystem.isAnimationSheetEnabled
@@ -2176,9 +2287,17 @@ export class GPUParticleSystem extends BaseParticleSystem implements IDisposable
 
         ParticleSystem._Parse(parsedParticleSystem, particleSystem, sceneOrEngine, rootUrl);
 
+        if (parsedParticleSystem.worldOffset) {
+            particleSystem.worldOffset = Vector3.FromArray(parsedParticleSystem.worldOffset);
+        }
+
         // Auto start
         if (parsedParticleSystem.preventAutoStart) {
             particleSystem.preventAutoStart = parsedParticleSystem.preventAutoStart;
+        }
+
+        if (parsedParticleSystem.metadata) {
+            particleSystem.metadata = parsedParticleSystem.metadata;
         }
 
         if (!doNotStart && !particleSystem.preventAutoStart) {

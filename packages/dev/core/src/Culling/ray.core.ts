@@ -2,16 +2,16 @@ import { Epsilon } from "core/Maths/math.constants";
 import { Matrix, TmpVectors, Vector3 } from "core/Maths/math.vector";
 import { BuildArray } from "core/Misc/arrayTools";
 import { IntersectionInfo } from "../Collisions/intersectionInfo";
-import type { BoundingBox } from "./boundingBox";
-import type { BoundingSphere } from "./boundingSphere";
-import type { DeepImmutable, float, Nullable } from "core/types";
-import type { Plane } from "core/Maths/math.plane";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
+import { type BoundingBox } from "./boundingBox";
+import { type BoundingSphere } from "./boundingSphere";
+import { type DeepImmutable, type float, type Nullable } from "core/types";
+import { type Plane } from "core/Maths/math.plane";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
 import { PickingInfo } from "core/Collisions/pickingInfo";
 import { EngineStore } from "core/Engines/engineStore";
-import type { Scene } from "core/scene";
-import type { Camera } from "core/Cameras/camera";
-import type { Mesh } from "core/Meshes/mesh";
+import { type Scene } from "core/scene";
+import { type Camera } from "core/Cameras/camera";
+import { type Mesh } from "core/Meshes/mesh";
 import { _ImportHelper } from "core/import.helper";
 
 /**
@@ -267,7 +267,7 @@ export class Ray {
 
         //check if the distance is longer than the predefined length.
         const distance = Vector3.Dot(edge2, qvec) * invdet;
-        if (distance > this.length) {
+        if (distance > this.length || distance < 0) {
             return null;
         }
 
@@ -690,8 +690,8 @@ export class Ray {
         const farScreenSource = TmpVectors.Vector3[1].copyFromFloats(nearScreenSource.x, nearScreenSource.y, 1.0 - 1e-8);
         const nearVec3 = TmpVectors.Vector3[2];
         const farVec3 = TmpVectors.Vector3[3];
-        Vector3._UnprojectFromInvertedMatrixToRef(nearScreenSource, matrix, nearVec3);
-        Vector3._UnprojectFromInvertedMatrixToRef(farScreenSource, matrix, farVec3);
+        Vector3.TransformCoordinatesToRef(nearScreenSource, matrix, nearVec3);
+        Vector3.TransformCoordinatesToRef(farScreenSource, matrix, farVec3);
 
         this.origin.copyFrom(nearVec3);
         farVec3.subtractToRef(nearVec3, this.direction);
@@ -741,7 +741,7 @@ export function CreatePickingRayToRef(
 ): Scene {
     const engine = scene.getEngine();
 
-    if (!camera && !(camera = scene.activeCamera!)) {
+    if (!camera && !(camera = scene.activeCamera!) && !(camera = scene.cameraToUseForPointers)) {
         return scene;
     }
 
@@ -799,7 +799,7 @@ export function CreatePickingRayInCameraSpaceToRef(scene: Scene, x: number, y: n
 
     const engine = scene.getEngine();
 
-    if (!camera && !(camera = scene.activeCamera!)) {
+    if (!camera && !(camera = scene.activeCamera!) && !(camera = scene.cameraToUseForPointers!)) {
         throw new Error("Active camera not set");
     }
 

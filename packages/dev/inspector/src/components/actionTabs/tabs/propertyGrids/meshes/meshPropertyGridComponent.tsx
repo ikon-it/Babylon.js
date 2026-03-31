@@ -1,15 +1,15 @@
 import * as React from "react";
 
-import type { Observable } from "core/Misc/observable";
+import { type Observable } from "core/Misc/observable";
 import { Vector3, TmpVectors } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
-import type { Mesh } from "core/Meshes/mesh";
+import { type Mesh } from "core/Meshes/mesh";
 import { VertexBuffer } from "core/Buffers/buffer";
 import { CreateLineSystem } from "core/Meshes/Builders/linesBuilder";
 import { PhysicsImpostor } from "core/Physics/v1/physicsImpostor";
 import { Scene } from "core/scene";
 
-import type { PropertyChangedEvent } from "../../../../propertyChangedEvent";
+import { type PropertyChangedEvent } from "../../../../propertyChangedEvent";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
@@ -17,13 +17,13 @@ import { Vector3LineComponent } from "shared-ui-components/lines/vector3LineComp
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
 import { QuaternionLineComponent } from "../../../lines/quaternionLineComponent";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
-import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
-import type { GlobalState } from "../../../../globalState";
+import { type LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
+import { type GlobalState } from "../../../../globalState";
 import { CustomPropertyGridComponent } from "../customPropertyGridComponent";
 import { StandardMaterial } from "core/Materials/standardMaterial";
 import { Color3LineComponent } from "shared-ui-components/lines/color3LineComponent";
 import { Color4LineComponent } from "shared-ui-components/lines/color4LineComponent";
-import type { MorphTarget } from "core/Morph/morphTarget";
+import { type MorphTarget } from "core/Morph/morphTarget";
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { AbstractMesh } from "core/Meshes/abstractMesh";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
@@ -34,8 +34,8 @@ import { CommonPropertyGridComponent } from "../commonPropertyGridComponent";
 import { VariantsPropertyGridComponent } from "../variantsPropertyGridComponent";
 import { HexLineComponent } from "shared-ui-components/lines/hexLineComponent";
 import { SkeletonViewer } from "core/Debug/skeletonViewer";
-import type { ShaderMaterial } from "core/Materials/shaderMaterial";
-import type { IInspectableOptions } from "core/Misc/iInspectable";
+import { type ShaderMaterial } from "core/Materials/shaderMaterial";
+import { type IInspectableOptions } from "core/Misc/iInspectable";
 import { NormalMaterial } from "materials/normal/normalMaterial";
 
 import "core/Physics/physicsEngineComponent";
@@ -45,6 +45,7 @@ import { ParentPropertyGridComponent } from "../parentPropertyGridComponent";
 import { Tools } from "core/Misc/tools";
 import { PhysicsBodyGridComponent } from "./physics/physicsBodyGridComponent";
 import { Constants } from "core/Engines/constants";
+import { FrameGraphUtils } from "core/FrameGraph/frameGraphUtils";
 
 interface IMeshPropertyGridComponentProps {
     globalState: GlobalState;
@@ -83,6 +84,17 @@ export class MeshPropertyGridComponent extends React.Component<
         const scene = mesh.getScene();
 
         if (mesh.reservedDataStore && mesh.reservedDataStore.wireframeOver) {
+            const frameGraph = scene.frameGraph;
+            if (frameGraph) {
+                const objectRenderer = FrameGraphUtils.FindMainObjectRenderer(frameGraph);
+                if (objectRenderer && objectRenderer.objectList.meshes) {
+                    const idx = objectRenderer.objectList.meshes.indexOf(mesh.reservedDataStore.wireframeOver);
+                    if (idx !== -1) {
+                        objectRenderer.objectList.meshes!.splice(idx, 1);
+                    }
+                }
+            }
+
             mesh.reservedDataStore.wireframeOver.dispose(false, true);
             mesh.reservedDataStore.wireframeOver = null;
 
@@ -115,6 +127,14 @@ export class MeshPropertyGridComponent extends React.Component<
         }
 
         mesh.reservedDataStore.wireframeOver = wireframeOver;
+
+        const frameGraph = scene.frameGraph;
+        if (frameGraph) {
+            const objectRenderer = FrameGraphUtils.FindMainObjectRenderer(frameGraph);
+            if (objectRenderer && objectRenderer.objectList.meshes) {
+                objectRenderer.objectList.meshes.push(wireframeOver);
+            }
+        }
 
         this.forceUpdate();
     }

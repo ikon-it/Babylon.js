@@ -1,9 +1,12 @@
-import * as React from "react";
-import type { Observable } from "core/Misc/observable";
-import type { PropertyChangedEvent } from "../propertyChangedEvent";
-import type { LockObject } from "../tabs/propertyGrids/lockObject";
+import { type ReactNode, type KeyboardEvent, Component } from "react";
+import { type Observable } from "core/Misc/observable";
+import { type PropertyChangedEvent } from "../propertyChangedEvent";
+import { type LockObject } from "../tabs/propertyGrids/lockObject";
 import { conflictingValuesPlaceholder } from "./targetsProxy";
 import { InputArrowsComponent } from "./inputArrowsComponent";
+import { TextInputPropertyLine, NumberInputPropertyLine } from "../fluent/hoc/propertyLines/inputPropertyLine";
+import { TextAreaPropertyLine } from "../fluent/hoc/propertyLines/textAreaPropertyLine";
+import { ToolContext } from "../fluent/hoc/fluentToolWrapper";
 
 export interface ITextInputLineComponentProps {
     label?: string;
@@ -26,7 +29,7 @@ export interface ITextInputLineComponentProps {
     min?: number;
     max?: number;
     placeholder?: string;
-    unit?: React.ReactNode;
+    unit?: ReactNode;
     validator?: (value: string) => boolean;
     multilines?: boolean;
     throttlePropertyChangedNotification?: boolean;
@@ -36,7 +39,7 @@ export interface ITextInputLineComponentProps {
 
 let ThrottleTimerId = -1;
 
-export class TextInputLineComponent extends React.Component<ITextInputLineComponentProps, { value: string; dragging: boolean }> {
+export class TextInputLineComponent extends Component<ITextInputLineComponentProps, { value: string; dragging: boolean }> {
     private _localChange = false;
 
     constructor(props: ITextInputLineComponentProps) {
@@ -178,7 +181,7 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
         this.updateValue((currentValue + amount).toFixed(2));
     }
 
-    onKeyDown(event: React.KeyboardEvent) {
+    onKeyDown(event: KeyboardEvent) {
         if (!this.props.disabled && this.props.arrows) {
             if (event.key === "ArrowUp") {
                 this.incrementValue(1);
@@ -191,10 +194,23 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
         }
     }
 
-    override render() {
-        const value = this.state.value === conflictingValuesPlaceholder ? "" : this.state.value;
-        const placeholder = this.state.value === conflictingValuesPlaceholder ? conflictingValuesPlaceholder : this.props.placeholder || "";
-        const step = this.props.step || (this.props.roundValues ? 1 : 0.01);
+    renderFluent(value: string, placeholder: string, step: number) {
+        return this.props.multilines ? (
+            <TextAreaPropertyLine label={this.props.label || ""} value={this.state.value} onChange={(val) => this.updateValue(val)} disabled={this.props.disabled} />
+        ) : this.props.numeric ? (
+            <NumberInputPropertyLine
+                label={this.props.label || ""}
+                value={this.getCurrentNumericValue(value)}
+                onChange={(val) => this.updateValue(val.toString())}
+                step={step}
+                disabled={this.props.disabled}
+            />
+        ) : (
+            <TextInputPropertyLine label={this.props.label || ""} value={value} onChange={(val) => this.updateValue(val.toString())} disabled={this.props.disabled} />
+        );
+    }
+
+    renderOriginal(value: string, placeholder: string, step: number) {
         const className = this.props.multilines ? "textInputArea" : this.props.unit !== undefined ? "textInputLine withUnits" : "textInputLine";
         return (
             <div className={className}>
@@ -263,6 +279,16 @@ export class TextInputLineComponent extends React.Component<ITextInputLineCompon
                 )}
                 {this.props.unit}
             </div>
+        );
+    }
+    override render() {
+        const value = this.state.value === conflictingValuesPlaceholder ? "" : this.state.value;
+        const placeholder = this.state.value === conflictingValuesPlaceholder ? conflictingValuesPlaceholder : this.props.placeholder || "";
+        const step = this.props.step || (this.props.roundValues ? 1 : 0.01);
+        return (
+            <ToolContext.Consumer>
+                {({ useFluent }) => (useFluent ? this.renderFluent(value, placeholder, step) : this.renderOriginal(value, placeholder, step))}
+            </ToolContext.Consumer>
         );
     }
 }

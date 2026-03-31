@@ -1,8 +1,8 @@
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { Tools } from "../../Misc/tools";
-import type { Camera } from "../../Cameras/camera";
-import type { PostProcess } from "../../PostProcesses/postProcess";
-import type { AbstractEngine } from "../../Engines/abstractEngine";
+import { type Camera } from "../../Cameras/camera";
+import { type PostProcess } from "../../PostProcesses/postProcess";
+import { type AbstractEngine } from "../../Engines/abstractEngine";
 /**
  * This represents a set of one or more post processes in Babylon.
  * A post process can be used to apply a shader to a texture after it is rendered.
@@ -31,9 +31,9 @@ export class PostProcessRenderEffect {
      * @param getPostProcesses A function that returns a set of post processes which the effect will run in order to be run.
      * @param singleInstance False if this post process can be run on multiple cameras. (default: true)
      */
-    constructor(engine: AbstractEngine, name: string, getPostProcesses: () => Nullable<PostProcess | Array<PostProcess>>, singleInstance?: boolean) {
+    constructor(engine: AbstractEngine, name: string, getPostProcesses: () => Nullable<PostProcess | Array<PostProcess>>, singleInstance = true) {
         this._name = name;
-        this._singleInstance = singleInstance || true;
+        this._singleInstance = singleInstance;
 
         this._getPostProcesses = getPostProcesses;
 

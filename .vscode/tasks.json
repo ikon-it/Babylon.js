@@ -44,22 +44,79 @@
             "problemMatcher": ["$tsc-watch"]
         },
         {
-            "label": "Build (Dev)",
+            "label": "Watch Smart Filters",
             "type": "shell",
-            "command": "npm run build:dev",
-            "isBackground": false,
+            "command": "npm run watch:source:smart-filters",
+            "dependsOn": ["Watch Smart Filters Assets", "Watch Assets"],
+            "isBackground": true,
             "runOptions": {
                 "instanceLimit": 1
             },
             "presentation": {
-                "group": "build"
+                "group": "watch"
             },
-            "problemMatcher": ["$tsc"]
+            "problemMatcher": ["$tsc-watch"]
         },
         {
-            "label": "Build (LTS)",
+            "label": "Watch Smart Filters Assets",
             "type": "shell",
-            "command": "npm run build:lts",
+            "command": "npm run watch:assets:smart-filters",
+            "isBackground": true,
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "presentation": {
+                "group": "watch"
+            },
+            "problemMatcher": {
+                "fileLocation": "relative",
+                "pattern": {
+                    "regexp": "(error|warning|info)",
+                    "file": 1,
+                    "location": 2,
+                    "severity": 3,
+                    "code": 4,
+                    "message": 5
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*",
+                    "endsPattern": "Watching for changes"
+                }
+            }
+        },
+        {
+            "label": "Watch Assets",
+            "type": "shell",
+            "command": "npm run watch:assets",
+            "isBackground": true,
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "presentation": {
+                "group": "watch"
+            },
+            "problemMatcher": {
+                "fileLocation": "relative",
+                "pattern": {
+                    "regexp": "(error|warning|info)",
+                    "file": 1,
+                    "location": 2,
+                    "severity": 3,
+                    "code": 4,
+                    "message": 5
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Babylon.js build tools",
+                    "endsPattern": "watching for asset changes..."
+                }
+            }
+        },
+        {
+            "label": "Build (Dev)",
+            "type": "shell",
+            "command": "npm run build:dev",
             "isBackground": false,
             "runOptions": {
                 "instanceLimit": 1
@@ -216,24 +273,6 @@
             "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
         },
         {
-            "label": "CDN Serve (LTS)",
-            "dependsOn": ["Build (LTS)"],
-            "type": "shell",
-            "command": "npm",
-            "runOptions": {
-                "instanceLimit": 1
-            },
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "args": ["run", "serve:lts", "-w", "@tools/babylon-server"],
-            "isBackground": true,
-            "presentation": {
-                "group": "serve"
-            },
-            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
-        },
-        {
             "label": "Playground Serve for core (Dev)",
             "type": "shell",
             "command": "npm",
@@ -255,25 +294,7 @@
             "label": "Playground Serve (Dev)",
             "type": "shell",
             "command": "npm",
-            "dependsOn": "CDN Serve and watch (Dev)",
-            "runOptions": {
-                "instanceLimit": 1
-            },
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "args": ["run", "serve", "-w", "@tools/playground"],
-            "isBackground": true,
-            "presentation": {
-                "group": "serve"
-            },
-            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
-        },
-        {
-            "label": "Playground Serve (LTS)",
-            "type": "shell",
-            "command": "npm",
-            "dependsOn": "CDN Serve and watch (LTS)",
+            "dependsOn": ["CDN Serve and watch (Dev)"],
             "runOptions": {
                 "instanceLimit": 1
             },
@@ -309,7 +330,7 @@
             "label": "Sandbox Serve (Dev)",
             "type": "shell",
             "command": "npm",
-            "dependsOn": "CDN Serve and watch (Dev)",
+            "dependsOn": ["CDN Serve and watch (Dev)"],
             "runOptions": {
                 "instanceLimit": 1
             },
@@ -432,6 +453,48 @@
             "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
         },
         {
+            "label": "Flow Graph Editor Serve for core (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "FGE_PORT": "1345"
+                }
+            },
+            "args": ["run", "serve", "-w", "@tools/flow-graph-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Flow Graph Editor Serve (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "FGE_PORT": "1345"
+                }
+            },
+            "args": ["run", "serve", "-w", "@tools/flow-graph-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
             "label": "Node Render Graph Editor Serve for core (Dev)",
             "type": "shell",
             "command": "npm",
@@ -461,6 +524,60 @@
                 "cwd": "${workspaceFolder}"
             },
             "args": ["run", "serve", "-w", "@tools/node-render-graph-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Node Particle Editor Serve for core (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/node-particle-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Node Particle Editor Serve (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "CDN Serve and watch (Dev)",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/node-particle-editor"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Smart Filter Editor Serve (Dev)",
+            "type": "shell",
+            "command": "npm",
+            "dependsOn": "Watch Smart Filters",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@tools/smart-filters-editor"],
             "isBackground": true,
             "presentation": {
                 "group": "serve"
@@ -561,6 +678,38 @@
                 "cwd": "${workspaceFolder}"
             },
             "args": ["run", "serve", "-w", "@tools/viewer-configurator"],
+            "isBackground": true,
+            "presentation": {
+                "group": "serve"
+            },
+            "problemMatcher": ["$ts-webpack-watch", "$tslint-webpack-watch"]
+        },
+        {
+            "label": "Watch Inspector v2",
+            "type": "shell",
+            "command": "npm",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "watch:dev", "-w", "@dev/inspector"],
+            "isBackground": true,
+            "problemMatcher": ["$tsc-watch"]
+        },
+        {
+            "label": "Inspector v2 Test App",
+            "dependsOn": ["Watch all (Dev)"],
+            "type": "shell",
+            "command": "npm",
+            "runOptions": {
+                "instanceLimit": 1
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "args": ["run", "serve", "-w", "@dev/inspector"],
             "isBackground": true,
             "presentation": {
                 "group": "serve"

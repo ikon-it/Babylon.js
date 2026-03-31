@@ -1,6 +1,8 @@
 import { Matrix, Vector3 } from "../Maths/math.vector";
-import type { Particle } from "../Particles/particle";
-import type { IVector3Like } from "../Maths/math.like";
+import { type Particle } from "../Particles/particle";
+import { type IVector3Like } from "../Maths/math.like";
+import { type Texture } from "core/Materials/Textures/texture";
+import { TextureTools } from "core/Misc/textureTools";
 
 const FlowVector = new Vector3(0, 0, 0);
 const ScaledFlowVector = new Vector3(0, 0, 0);
@@ -115,5 +117,16 @@ export class FlowMap {
                 resolve(new FlowMap(flowCanvas.width, flowCanvas.height, flowImageData.data));
             };
         });
+    }
+
+    /**
+     * Load from a texture
+     * @param texture defines the source texture
+     * @returns a promise fulfilled when image data is loaded
+     */
+    public static async ExtractFromTextureAsync(texture: Texture) {
+        const data = await TextureTools.GetTextureDataAsync(texture);
+        const { width, height } = texture.getSize();
+        return new FlowMap(width, height, new Uint8ClampedArray(data));
     }
 }

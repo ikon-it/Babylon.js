@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { ISceneLoaderPluginExtensions, ISceneLoaderPluginMetadata } from "core/index";
+import { type ISceneLoaderPluginExtensions, type ISceneLoaderPluginMetadata } from "core/index";
 
 export const SPLATFileLoaderMetadata = {
     name: "splat",
@@ -11,5 +10,9 @@ export const SPLATFileLoaderMetadata = {
         ".ply": { isBinary: true },
         // eslint-disable-next-line @typescript-eslint/naming-convention
         ".spz": { isBinary: true },
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        ".json": { isBinary: false }, // For SOG metadata files
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        ".sog": { isBinary: true },
     } as const satisfies ISceneLoaderPluginExtensions,
 } as const satisfies ISceneLoaderPluginMetadata;

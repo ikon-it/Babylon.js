@@ -1,6 +1,6 @@
 /* eslint-disable github/no-then */
 import * as React from "react";
-import type { GlobalState } from "../globalState";
+import { type GlobalState } from "../globalState";
 import { CommandButtonComponent } from "./commandButtonComponent";
 import { CommandDropdownComponent } from "./commandDropdownComponent";
 import { Utilities } from "../tools/utilities";
@@ -15,7 +15,9 @@ interface ICommandBarComponentProps {
     globalState: GlobalState;
 }
 
-export class CommandBarComponent extends React.Component<ICommandBarComponentProps> {
+interface ICommandBarComponentState {}
+
+export class CommandBarComponent extends React.Component<ICommandBarComponentProps, ICommandBarComponentState> {
     private _webGPUSupported: boolean = false;
     private _procedural: {
         label: string;
@@ -26,6 +28,9 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
 
     public constructor(props: ICommandBarComponentProps) {
         super(props);
+
+        this.state = {};
+
         // First Fetch JSON data for procedural code
         this._procedural = [];
         const url = "procedural.json?uncacher=" + Date.now();
@@ -40,8 +45,24 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
             });
     }
 
+    private _reloadWithEngineVersion(engineVersion: "WebGL2" | "WebGL" | "WebGPU") {
+        Utilities.MarkManualEngineSwitchReload();
+        Utilities.StoreStringToStore("engineVersion", engineVersion, true);
+
+        if (engineVersion !== "WebGPU" && location.search.indexOf("webgpu") !== -1) {
+            location.search = location.search.replace("webgpu", "");
+            return;
+        }
+
+        window.location.reload();
+    }
+
     private _load() {
         this.props.globalState.onLanguageChangedObservable.add(() => {
+            this.forceUpdate();
+        });
+
+        this.props.globalState.onEngineChangedObservable.add(() => {
             this.forceUpdate();
         });
 
@@ -184,19 +205,44 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
                 tooltip: "Loads the Babylon Toolkit into the playground",
                 storeKey: "babylon-toolkit",
                 defaultValue: false,
+                onCheck: (value: boolean) => {
+                    if (!value) {
+                        try {
+                            localStorage.removeItem("babylon-toolkit-used");
+                        } catch {
+                            // Ignore storage errors
+                        }
+                    }
+                },
+            },
+            {
+                label: "Auto-run",
+                tooltip: "Playground code runs automatically after loading",
+                storeKey: "auto-run",
+                defaultValue: true,
                 onCheck: () => {},
             },
         ];
 
         // Procedural Code Generator Options (build from procedural.json)
-        let proceduralOptions: any[] = [];
-        proceduralOptions = this._procedural.map((item) => ({
-            ...item,
-            onClick: () => {},
-            onInsert: (snippetKey: string) => {
-                this.onInsertSnippet(snippetKey);
-            },
-        }));
+        const isJavaScript = this.props.globalState.language === "JS" || this.props.globalState.language === "JavaScript";
+
+        const proceduralOptions = this._procedural.map((item) => {
+            const obj: any = {
+                ...item,
+                onClick: () => {},
+                onInsert: (snippetKey: string) => {
+                    this.onInsertSnippet(snippetKey);
+                },
+            };
+            if (isJavaScript) {
+                delete obj.subItemsTS;
+            } else if (obj.subItemsTS) {
+                obj.subItems = obj.subItemsTS;
+                delete obj.subItemsTS;
+            }
+            return obj;
+        });
 
         // Engine Version Options
         const activeVersion = Utilities.ReadStringFromStore("version", "Latest", true);
@@ -225,12 +271,7 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
                 storeKey: "engineVersion",
                 isActive: activeEngineVersion === "WebGL2",
                 onClick: () => {
-                    Utilities.StoreStringToStore("engineVersion", "WebGL2", true);
-                    if (location.search.indexOf("webgpu") !== -1) {
-                        location.search = location.search.replace("webgpu", "");
-                    } else {
-                        window.location.reload();
-                    }
+                    this._reloadWithEngineVersion("WebGL2");
                 },
                 validate: () => window.confirm(Utilities.GetCodeLostConfirmationMessage("version")),
             },
@@ -240,17 +281,26 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
                 storeKey: "engineVersion",
                 isActive: activeEngineVersion === "WebGL",
                 onClick: () => {
-                    if (location.search.indexOf("webgpu") !== -1) {
-                        location.search = location.search.replace("webgpu", "");
-                    }
-                    Utilities.StoreStringToStore("engineVersion", "WebGL", true);
-                    if (location.search.indexOf("webgpu") !== -1) {
-                        location.search = location.search.replace("webgpu", "");
-                    } else {
-                        window.location.reload();
-                    }
+                    this._reloadWithEngineVersion("WebGL");
                 },
                 validate: () => window.confirm(Utilities.GetCodeLostConfirmationMessage("version")),
+            },
+        ];
+
+        const fileOptions = [
+            {
+                label: "Load",
+                tooltip: "Load a saved playground from a local file",
+                onClick: () => {
+                    this.props.globalState.onLocalLoadRequiredObservable.notifyObservers();
+                },
+            },
+            {
+                label: "Save",
+                tooltip: "Save the playground to a local file",
+                onClick: () => {
+                    this.props.globalState.onLocalSaveRequiredObservable.notifyObservers();
+                },
             },
         ];
 
@@ -261,8 +311,7 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
                 storeKey: "engineVersion",
                 isActive: activeEngineVersion === "WebGPU",
                 onClick: () => {
-                    Utilities.StoreStringToStore("engineVersion", "WebGPU", true);
-                    window.location.reload();
+                    this._reloadWithEngineVersion("WebGPU");
                 },
                 validate: () => window.confirm(Utilities.GetCodeLostConfirmationMessage("version")),
             });
@@ -273,6 +322,7 @@ export class CommandBarComponent extends React.Component<ICommandBarComponentPro
                 <div className="commands-left">
                     <CommandButtonComponent globalState={this.props.globalState} tooltip="Run" icon="play" shortcut="Alt+Enter" isActive={true} onClick={() => this.onPlay()} />
                     <CommandButtonComponent globalState={this.props.globalState} tooltip="Save" icon="save" shortcut="Ctrl+S" isActive={false} onClick={() => this.onSave()} />
+                    <CommandDropdownComponent globalState={this.props.globalState} icon="saveLocal" tooltip="Local file" items={fileOptions} />
                     <CommandButtonComponent globalState={this.props.globalState} tooltip="Inspector" icon="inspector" isActive={false} onClick={() => this.onInspector()} />
                     <CommandButtonComponent
                         globalState={this.props.globalState}

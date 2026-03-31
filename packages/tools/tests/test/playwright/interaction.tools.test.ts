@@ -3,10 +3,12 @@ import { test, expect } from "@playwright/test";
 
 // if running in the CI we need to use the babylon snapshot when loading the tools
 const snapshot = process.env.SNAPSHOT ? "?snapshot=" + process.env.SNAPSHOT : "";
-const nmeUrl = (process.env.NME_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NME_PORT || ":1340")) + snapshot;
-const ngeUrl = (process.env.NGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NGE_PORT || ":1343")) + snapshot;
-const guiUrl = (process.env.GUIEDITOR_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.GUIEDITOR_PORT || ":1341")) + snapshot;
-const nrgeUrl = (process.env.NRGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NRGE_PORT || ":1344")) + snapshot;
+const cdnPort = ":" + (process.env.CDN_PORT || 1337);
+const nmeUrl = (process.env.NME_BASE_URL || getGlobalConfig().baseUrl.replace(cdnPort, process.env.NME_PORT || ":1340")) + snapshot;
+const ngeUrl = (process.env.NGE_BASE_URL || getGlobalConfig().baseUrl.replace(cdnPort, process.env.NGE_PORT || ":1343")) + snapshot;
+const guiUrl = (process.env.GUIEDITOR_BASE_URL || getGlobalConfig().baseUrl.replace(cdnPort, process.env.GUIEDITOR_PORT || ":1341")) + snapshot;
+const nrgeUrl = (process.env.NRGE_BASE_URL || getGlobalConfig().baseUrl.replace(cdnPort, process.env.NRGE_PORT || ":1344")) + snapshot;
+const _fgeUrl = (process.env.FGE_BASE_URL || getGlobalConfig().baseUrl.replace(cdnPort, process.env.FGE_PORT || ":1345")) + snapshot;
 
 test.beforeAll(async () => {
     // Set timeout for this hook.
@@ -15,7 +17,7 @@ test.beforeAll(async () => {
 
 test("NME is loaded correctly", async ({ page }) => {
     await page.goto(nmeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -29,7 +31,7 @@ test("NME is loaded correctly", async ({ page }) => {
 
 test("NGE is loaded correctly", async ({ page }) => {
     await page.goto(ngeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -43,7 +45,7 @@ test("NGE is loaded correctly", async ({ page }) => {
 
 test("GUIEditor is loaded", async ({ page }) => {
     await page.goto(guiUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -57,7 +59,7 @@ test("GUIEditor is loaded", async ({ page }) => {
 
 test("NRGE is loaded correctly", async ({ page }) => {
     await page.goto(nrgeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -73,7 +75,7 @@ test("NRGE is loaded correctly", async ({ page }) => {
 
 test("[NME] User can drag graph nodes", async ({ page }) => {
     await page.goto(nmeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -101,7 +103,7 @@ test("[NME] User can drag graph nodes", async ({ page }) => {
 
 test("[NME] User can zoom in and out of the graph", async ({ page }) => {
     await page.goto(nmeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -134,7 +136,7 @@ test("[NME] User can zoom in and out of the graph", async ({ page }) => {
 
 test("[NME] User can add a new node to the graph", async ({ page }) => {
     await page.goto(nmeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -178,7 +180,7 @@ test("[NME] User can add a new node to the graph", async ({ page }) => {
 
 test("[NGE] User can drag graph nodes", async ({ page }) => {
     await page.goto(ngeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -206,7 +208,7 @@ test("[NGE] User can drag graph nodes", async ({ page }) => {
 
 test("[NGE] User can zoom in and out of the graph", async ({ page }) => {
     await page.goto(ngeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -239,7 +241,7 @@ test("[NGE] User can zoom in and out of the graph", async ({ page }) => {
 
 test("[NGE] User can add a new node to the graph", async ({ page }) => {
     await page.goto(ngeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -283,7 +285,7 @@ test("[NGE] User can add a new node to the graph", async ({ page }) => {
 
 test("[NRGE] User can drag graph nodes", async ({ page }) => {
     await page.goto(nrgeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -311,7 +313,7 @@ test("[NRGE] User can drag graph nodes", async ({ page }) => {
 
 test("[NRGE] User can zoom in and out of the graph", async ({ page }) => {
     await page.goto(nrgeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -344,7 +346,7 @@ test("[NRGE] User can zoom in and out of the graph", async ({ page }) => {
 
 test("[NRGE] User can add a new node to the graph", async ({ page }) => {
     await page.goto(nrgeUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -384,12 +386,139 @@ test("[NRGE] User can add a new node to the graph", async ({ page }) => {
     expect(newCount).toBe(nodeCount + 1);
 });
 
+//////// FGE TESTS ////////
+// TODO: Uncomment after the FGE PR is merged and CI is updated.
+// test("FGE is loaded correctly", async ({ page }) => {
+//     await page.goto(fgeUrl, {
+//         waitUntil: "load",
+//     });
+//     await page.setViewportSize({
+//         width: 1920,
+//         height: 1080,
+//     });
+//     // check visibility of the graph canvas AND the editor panels
+//     await expect(page.locator("#graph-canvas")).toBeVisible();
+//     await expect(page.locator("#fgeNodeList")).toBeVisible();
+//     await expect(page.locator(".fge-right-panel")).toBeVisible();
+// });
+
+// test("[FGE] User can add a new block to the graph", async ({ page }) => {
+//     await page.goto(fgeUrl, {
+//         waitUntil: "load",
+//     });
+//     await page.setViewportSize({
+//         width: 1920,
+//         height: 1080,
+//     });
+
+//     // get the number of nodes in the graph
+//     const nodeCount = await page.evaluate(() => {
+//         const graph = document.getElementById("graph-canvas-container");
+//         if (!graph) {
+//             throw new Error("Graph not found");
+//         }
+//         return graph.children.length;
+//     });
+
+//     // get a palette item with text "SceneReadyEvent"
+//     const node = page.getByText("SceneReadyEvent").nth(0);
+//     const nodePosition = await node.boundingBox();
+//     if (!nodePosition) {
+//         throw new Error("Node not found");
+//     }
+//     await page.mouse.move(nodePosition.x + 10, nodePosition.y + 10, { steps: 5 });
+//     await page.mouse.down();
+//     // move to the right into the canvas
+//     await page.mouse.move(nodePosition.x + 400, nodePosition.y, { steps: 5 });
+//     await page.mouse.up();
+//     // wait for async block creation
+//     await page.waitForTimeout(500);
+//     // check the new number of children
+//     const newCount = await page.evaluate(() => {
+//         const graph = document.getElementById("graph-canvas-container");
+//         if (!graph) {
+//             throw new Error("Graph not found");
+//         }
+//         return graph.children.length;
+//     });
+//     // expect newCount to be nodeCount + 1
+//     expect(newCount).toBe(nodeCount + 1);
+// });
+
+// test("[FGE] User can drag graph nodes", async ({ page }) => {
+//     await page.goto(fgeUrl, {
+//         waitUntil: "load",
+//     });
+//     await page.setViewportSize({
+//         width: 1920,
+//         height: 1080,
+//     });
+
+//     // First add a block
+//     const paletteItem = page.getByText("SceneReadyEvent").nth(0);
+//     const palettePos = await paletteItem.boundingBox();
+//     if (!palettePos) throw new Error("Palette item not found");
+//     await page.mouse.move(palettePos.x + 10, palettePos.y + 10, { steps: 5 });
+//     await page.mouse.down();
+//     await page.mouse.move(palettePos.x + 400, palettePos.y, { steps: 5 });
+//     await page.mouse.up();
+//     await page.waitForTimeout(500);
+
+//     const node = page.locator(".FlowGraphSceneReadyEventBlock");
+//     const nodePosition = await node.boundingBox();
+//     if (!nodePosition) {
+//         throw new Error("Node not found");
+//     }
+//     await page.mouse.move(nodePosition.x + 40, nodePosition.y + 20, { steps: 5 });
+//     await page.mouse.down();
+//     await page.mouse.move(nodePosition.x + 200, nodePosition.y + 200, { steps: 5 });
+//     await page.mouse.up();
+
+//     const newNodePosition = await node.boundingBox();
+//     if (!newNodePosition) {
+//         throw new Error("Node not found");
+//     }
+//     expect(newNodePosition.x).toBeGreaterThan(nodePosition.x);
+//     expect(newNodePosition.y).toBeGreaterThan(nodePosition.y);
+// });
+
+// test("[FGE] User can zoom in and out of the graph", async ({ page }) => {
+//     await page.goto(fgeUrl, {
+//         waitUntil: "load",
+//     });
+//     await page.setViewportSize({
+//         width: 1920,
+//         height: 1080,
+//     });
+
+//     const graph = page.locator("#graph-canvas");
+//     const graphPosition = await graph.boundingBox();
+//     const backgroundSize = await page.evaluate(() => {
+//         const graph = document.getElementById("graph-canvas") as HTMLCanvasElement;
+//         return graph.style.backgroundSize;
+//     });
+//     const backgroundParsed = backgroundSize.split(" ").map((size) => parseFloat(size.replace("px", "")));
+//     if (!graphPosition) {
+//         throw new Error("Graph not found");
+//     }
+//     await page.mouse.move(graphPosition.x + 40, graphPosition.y + 20, { steps: 5 });
+//     await page.mouse.wheel(0, 300);
+//     const newBackgroundSize = await page.evaluate(() => {
+//         const graph = document.getElementById("graph-canvas") as HTMLCanvasElement;
+//         return graph.style.backgroundSize;
+//     });
+//     const newBackgroundParsed = newBackgroundSize.split(" ").map((size) => parseFloat(size.replace("px", "")));
+//     expect(newBackgroundParsed).toHaveLength(2);
+//     expect(backgroundParsed[0]).toBeGreaterThan(newBackgroundParsed[0]);
+//     expect(backgroundParsed[1]).toBeGreaterThan(newBackgroundParsed[1]);
+// });
+
 //////// GUIEDITOR TESTS ////////
 
 // single test adding, moving an element
 test("[GUIEDITOR] User can add and drag graph nodes", async ({ page }) => {
     await page.goto(guiUrl, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,

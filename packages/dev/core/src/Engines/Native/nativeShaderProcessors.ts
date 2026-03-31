@@ -1,9 +1,9 @@
 /* eslint-disable babylonjs/available */
 /* eslint-disable jsdoc/require-jsdoc */
-import type { Nullable } from "core/types";
-import type { IShaderProcessor } from "../Processors/iShaderProcessor";
-import type { NativeShaderProcessingContext } from "./nativeShaderProcessingContext";
-import type { _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
+import { type Nullable } from "core/types";
+import { type IShaderProcessor } from "../Processors/iShaderProcessor";
+import { type NativeShaderProcessingContext } from "./nativeShaderProcessingContext";
+import { type _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
 import { ShaderLanguage } from "../../Materials/shaderLanguage";
 import { InjectStartingAndEndingCode } from "../../Misc/codeStringParsingTools";
 
@@ -79,6 +79,9 @@ export class NativeShaderProcessor implements IShaderProcessor {
             code = code.replace(/gl_FragData/g, "glFragData");
             code = code.replace(/void\s+?main\s*\(/g, (hasDrawBuffersExtension || hasOutput ? "" : "layout(location = 0) out vec4 glFragColor;\n") + "void main(");
         } else {
+            if (defines.indexOf("#define VERTEXOUTPUT_INVARIANT") >= 0) {
+                code = "invariant gl_Position;\n" + code;
+            }
             if (this._nativeProcessingContext?.injectInVertexMain) {
                 code = InjectStartingAndEndingCode(code, "void main", this._nativeProcessingContext.injectInVertexMain);
             }

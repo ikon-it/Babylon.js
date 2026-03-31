@@ -1,103 +1,114 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Nullable } from "./types";
+import { type Nullable } from "./types";
 import { Tools } from "./Misc/tools";
-import type { IAnimatable } from "./Animations/animatable.interface";
+import { type IAnimatable } from "./Animations/animatable.interface";
 import { PrecisionDate } from "./Misc/precisionDate";
-import type { Observer } from "./Misc/observable";
-import { Observable } from "./Misc/observable";
-import type { ISmartArrayLike } from "./Misc/smartArray";
-import { SmartArrayNoDuplicate, SmartArray } from "./Misc/smartArray";
+import { type Observer, Observable } from "./Misc/observable";
+import { type ISmartArrayLike, SmartArrayNoDuplicate, SmartArray } from "./Misc/smartArray";
 import { StringDictionary } from "./Misc/stringDictionary";
 import { Tags } from "./Misc/tags";
-import type { Vector2, Vector4 } from "./Maths/math.vector";
-import { Vector3, Matrix, TmpVectors } from "./Maths/math.vector";
-import type { IParticleSystem } from "./Particles/IParticleSystem";
+import { type Vector2, Vector3, Vector4, Matrix } from "./Maths/math.vector";
+import { type IParticleSystem } from "./Particles/IParticleSystem";
 import { ImageProcessingConfiguration } from "./Materials/imageProcessingConfiguration";
 import { UniformBuffer } from "./Materials/uniformBuffer";
 import { PickingInfo } from "./Collisions/pickingInfo";
-import type { ICollisionCoordinator } from "./Collisions/collisionCoordinator";
-import type { PointerEventTypes, PointerInfoPre, PointerInfo } from "./Events/pointerEvents";
-import type { KeyboardInfoPre, KeyboardInfo } from "./Events/keyboardEvents";
+import { type ICollisionCoordinator } from "./Collisions/collisionCoordinator";
+import { type PointerEventTypes, type PointerInfoPre, type PointerInfo } from "./Events/pointerEvents";
+import { type KeyboardInfoPre, type KeyboardInfo } from "./Events/keyboardEvents";
 import { ActionEvent } from "./Actions/actionEvent";
 import { PostProcessManager } from "./PostProcesses/postProcessManager";
-import type { IOfflineProvider } from "./Offline/IOfflineProvider";
-import type { RenderingGroupInfo, IRenderingManagerAutoClearSetup } from "./Rendering/renderingManager";
-import { RenderingManager } from "./Rendering/renderingManager";
-import type {
-    ISceneComponent,
-    ISceneSerializableComponent,
-    SimpleStageAction,
-    RenderTargetsStageAction,
-    RenderTargetStageAction,
-    MeshStageAction,
-    EvaluateSubMeshStageAction,
-    PreActiveMeshStageAction,
-    CameraStageAction,
-    RenderingGroupStageAction,
-    RenderingMeshStageAction,
-    PointerMoveStageAction,
-    PointerUpDownStageAction,
-    CameraStageFrameBufferAction,
+import { type IOfflineProvider } from "./Offline/IOfflineProvider";
+import { FloatingOriginCurrentScene, OverrideMatrixFunctions, ResetMatrixFunctions } from "./Materials/floatingOriginMatrixOverrides";
+import { type RenderingGroupInfo, type IRenderingManagerAutoClearSetup, RenderingManager } from "./Rendering/renderingManager";
+import {
+    type ISceneComponent,
+    type ISceneSerializableComponent,
+    type SimpleStageAction,
+    type RenderTargetsStageAction,
+    type RenderTargetStageAction,
+    type MeshStageAction,
+    type EvaluateSubMeshStageAction,
+    type PreActiveMeshStageAction,
+    type CameraStageAction,
+    type RenderingGroupStageAction,
+    type RenderingMeshStageAction,
+    type PointerMoveStageAction,
+    type PointerUpDownStageAction,
+    type CameraStageFrameBufferAction,
+    Stage,
 } from "./sceneComponent";
-import { Stage } from "./sceneComponent";
 import { Constants } from "./Engines/constants";
 import { IsWindowObjectExist } from "./Misc/domManagement";
 import { EngineStore } from "./Engines/engineStore";
-import type { AbstractActionManager } from "./Actions/abstractActionManager";
+import { type AbstractActionManager } from "./Actions/abstractActionManager";
 import { _WarnImport } from "./Misc/devTools";
-import type { WebRequest } from "./Misc/webRequest";
+import { type WebRequest } from "./Misc/webRequest";
 import { InputManager } from "./Inputs/scene.inputManager";
 import { PerfCounter } from "./Misc/perfCounter";
-import type { IFileRequest } from "./Misc/fileRequest";
+import { type IFileRequest } from "./Misc/fileRequest";
 import { Color4, Color3 } from "./Maths/math.color";
-import type { Plane } from "./Maths/math.plane";
+import { type Plane } from "./Maths/math.plane";
 import { Frustum } from "./Maths/math.frustum";
 import { UniqueIdGenerator } from "./Misc/uniqueIdGenerator";
-import type { LoadFileError, RequestFileError, ReadFileError } from "./Misc/fileTools";
-import { ReadFile, RequestFile, LoadFile } from "./Misc/fileTools";
-import type { IClipPlanesHolder } from "./Misc/interfaces/iClipPlanesHolder";
-import type { IPointerEvent } from "./Events/deviceInputEvents";
+import { type LoadFileError, type RequestFileError, type ReadFileError, ReadFile, RequestFile, LoadFile } from "./Misc/fileTools";
+import { type IClipPlanesHolder } from "./Misc/interfaces/iClipPlanesHolder";
+import { type IPointerEvent } from "./Events/deviceInputEvents";
 import { LightConstants } from "./Lights/lightConstants";
 import { _ObserveArray } from "./Misc/arrayTools";
-import type { IAction } from "./Actions/action";
-import type { AnimationPropertiesOverride } from "./Animations/animationPropertiesOverride";
-import type { AnimationGroup } from "./Animations/animationGroup";
-import type { Skeleton } from "./Bones/skeleton";
-import type { Bone } from "./Bones/bone";
-import type { Camera } from "./Cameras/camera";
-import type { Collider } from "./Collisions/collider";
-import type { Ray, MeshPredicate, TrianglePickingPredicate } from "./Culling/ray.core";
-import type { Light } from "./Lights/light";
-import type { PerformanceViewerCollector } from "./Misc/PerformanceViewer/performanceViewerCollector";
-import type { MorphTarget } from "./Morph/morphTarget";
-import type { MorphTargetManager } from "./Morph/morphTargetManager";
-import type { PostProcess } from "./PostProcesses/postProcess";
-import type { Material } from "./Materials/material";
-import type { BaseTexture } from "./Materials/Textures/baseTexture";
-import type { Geometry } from "./Meshes/geometry";
-import type { TransformNode } from "./Meshes/transformNode";
-import type { AbstractMesh } from "./Meshes/abstractMesh";
-import type { MultiMaterial } from "./Materials/multiMaterial";
-import type { Effect } from "./Materials/effect";
-import type { RenderTargetTexture } from "./Materials/Textures/renderTargetTexture";
-import type { Mesh } from "./Meshes/mesh";
-import type { SubMesh } from "./Meshes/subMesh";
-import type { Node } from "./node";
-import type { Animation } from "./Animations/animation";
-import type { Animatable } from "./Animations/animatable.core";
-import type { Texture } from "./Materials/Textures/texture";
+import { type IAction } from "./Actions/action";
+import { type AnimationPropertiesOverride } from "./Animations/animationPropertiesOverride";
+import { type AnimationGroup } from "./Animations/animationGroup";
+import { type Skeleton } from "./Bones/skeleton";
+import { type Bone } from "./Bones/bone";
+import { type Camera } from "./Cameras/camera";
+import { type Collider } from "./Collisions/collider";
+import { type Ray, type MeshPredicate, type TrianglePickingPredicate } from "./Culling/ray.core";
+import { type Light } from "./Lights/light";
+import { type PerformanceViewerCollector } from "./Misc/PerformanceViewer/performanceViewerCollector";
+import { type MorphTarget } from "./Morph/morphTarget";
+import { type MorphTargetManager } from "./Morph/morphTargetManager";
+import { type PostProcess } from "./PostProcesses/postProcess";
+import { type Material } from "./Materials/material";
+import { type BaseTexture } from "./Materials/Textures/baseTexture";
+import { type Geometry } from "./Meshes/geometry";
+import { type TransformNode } from "./Meshes/transformNode";
+import { type AbstractMesh } from "./Meshes/abstractMesh";
+import { type MultiMaterial } from "./Materials/multiMaterial";
+import { type Effect } from "./Materials/effect";
+import { type RenderTargetTexture } from "./Materials/Textures/renderTargetTexture";
+import { type Mesh } from "./Meshes/mesh";
+import { type SubMesh } from "./Meshes/subMesh";
+import { type Node } from "./node";
+import { type Animation } from "./Animations/animation";
+import { type Animatable } from "./Animations/animatable.core";
+import { type Texture } from "./Materials/Textures/texture";
 import { PointerPickingConfiguration } from "./Inputs/pointerPickingConfiguration";
 import { Logger } from "./Misc/logger";
-import type { AbstractEngine } from "./Engines/abstractEngine";
+import { type AbstractEngine } from "./Engines/abstractEngine";
 import { RegisterClass } from "./Misc/typeStore";
-import type { FrameGraph } from "./FrameGraph/frameGraph";
-import type { IAssetContainer } from "./IAssetContainer";
+import { type FrameGraph } from "./FrameGraph/frameGraph";
+import { type IAssetContainer } from "./IAssetContainer";
 
-import type { EffectLayer } from "./Layers/effectLayer";
-import type { Sound } from "./Audio/sound";
-import type { Layer } from "./Layers/layer";
-import type { LensFlareSystem } from "./LensFlares/lensFlareSystem";
-import type { ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
+import { type EffectLayer } from "./Layers/effectLayer";
+import { type Sound } from "./Audio/sound";
+import { type Layer } from "./Layers/layer";
+import { type LensFlareSystem } from "./LensFlares/lensFlareSystem";
+import { type ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
+import { type FrameGraphObjectRendererTask } from "./FrameGraph/Tasks/Rendering/objectRendererTask";
+import { _RetryWithInterval } from "./Misc/timingTools";
+import { type ObjectRenderer } from "./Rendering/objectRenderer";
+import { type BoundingBoxRenderer } from "./Rendering/boundingBoxRenderer";
+import { type BoundingBox } from "./Culling/boundingBox";
+
+/**
+ * Options for creating a scene uniform buffer
+ */
+export interface ICreateSceneUboOptions {
+    /** Define if the UBOs should be tracked in the frame (default: undefined - will use the value from Engine._features.trackUbosInFrame) */
+    trackUBOsInFrame?: boolean;
+    /** When true, always creates a mono (non-multiview) UBO, bypassing any multiview override */
+    forceMono?: boolean;
+}
 
 /**
  * Define an interface for all classes that will hold resources
@@ -108,6 +119,10 @@ export interface IDisposable {
      */
     dispose(): void;
 }
+
+// Defining Temps for the file to avoid misuse of shared TmpVectors
+const TempVect1 = new Vector4();
+const TempVect2 = new Vector4();
 
 /** Interface defining initialization parameters for Scene class */
 // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -129,6 +144,15 @@ export interface SceneOptions {
      * It will improve performance when the number of mesh becomes important, but might consume a bit more memory
      */
     useClonedMeshMap?: boolean;
+
+    /**
+     * When enabled, the scene can handle large world coordinate rendering without jittering caused by floating point imprecision on the GPU.
+     * This mode offsets matrices and position-related attribute values before passing to shaders, centering camera at origin and offsetting other scene objects by camera active position.
+     *
+     * IMPORTANT: Only use this scene-level option if you intend to enable floating origin on a per-scene basis. Must use in conjunction with engine creation option 'useHighPrecisionMatrix' to fix CPU-side floating point imprecision.
+     * HOWEVER if you want largeWorldRendering on ALL scenes, set the useLargeWorldRendering flag on the engine instead of this scene-level flag. Doing so will automatically set useHighPrecisionMatrix on the engine as well.
+     */
+    useFloatingOrigin?: boolean;
 
     /** Defines if the creation of the scene should impact the engine (Eg. UtilityLayer's scene) */
     virtual?: boolean;
@@ -259,6 +283,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * The material properties need to be setup according to the type of texture in use.
      */
     public environmentBRDFTexture: BaseTexture;
+
+    /**
+     * This stores the brdf lookup for the fuzz layer of PBR materials in your scene.
+     */
+    public environmentFuzzBRDFTexture: BaseTexture;
 
     /**
      * Intensity of the environment (i.e. all indirect lighting) in all pbr material.
@@ -499,6 +528,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     public actionManagers: AbstractActionManager[] = [];
 
     /**
+     * Object renderers available on the scene.
+     */
+    public objectRenderers: ObjectRenderer[] = [];
+
+    /**
      * Textures to keep.
      */
     public textures: BaseTexture[] = [];
@@ -542,6 +576,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
     /**
      * The list of sounds used in the scene.
+     * @deprecated please use AudioEngineV2 instead
      */
     public sounds: Nullable<Array<Sound>> = null;
 
@@ -847,6 +882,26 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     public onSkeletonRemovedObservable = new Observable<Skeleton>();
 
     /**
+     * An event triggered when a particle system is created
+     */
+    public onNewParticleSystemAddedObservable = new Observable<IParticleSystem>();
+
+    /**
+     * An event triggered when a particle system is removed
+     */
+    public onParticleSystemRemovedObservable = new Observable<IParticleSystem>();
+
+    /**
+     * An event triggered when an animation group is created
+     */
+    public onNewAnimationGroupAddedObservable = new Observable<AnimationGroup>();
+
+    /**
+     * An event triggered when an animation group is removed
+     */
+    public onAnimationGroupRemovedObservable = new Observable<AnimationGroup>();
+
+    /**
      * An event triggered when a material is created
      */
     public onNewMaterialAddedObservable = new Observable<Material>();
@@ -875,6 +930,46 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * An event triggered when a texture is removed
      */
     public onTextureRemovedObservable = new Observable<BaseTexture>();
+
+    /**
+     * An event triggered when a frame graph is created
+     */
+    public onNewFrameGraphAddedObservable = new Observable<FrameGraph>();
+
+    /**
+     * An event triggered when a frame graph is removed
+     */
+    public onFrameGraphRemovedObservable = new Observable<FrameGraph>();
+
+    /**
+     * An event triggered when an object renderer is created
+     */
+    public onNewObjectRendererAddedObservable = new Observable<ObjectRenderer>();
+
+    /**
+     * An event triggered when an object renderer is removed
+     */
+    public onObjectRendererRemovedObservable = new Observable<ObjectRenderer>();
+
+    /**
+     * An event triggered when a post process is created
+     */
+    public onNewPostProcessAddedObservable = new Observable<PostProcess>();
+
+    /**
+     * An event triggered when a post process is removed
+     */
+    public onPostProcessRemovedObservable = new Observable<PostProcess>();
+
+    /**
+     * An event triggered when an effect layer is created
+     */
+    public onNewEffectLayerAddedObservable = new Observable<EffectLayer>();
+
+    /**
+     * An event triggered when an effect layer is removed
+     */
+    public onEffectLayerRemovedObservable = new Observable<EffectLayer>();
 
     /**
      * An event triggered when render targets are about to be rendered
@@ -1140,32 +1235,37 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
+     * Gets the current eye position in order of forcedViewPosition, activeCamera world position, Vector3.ZeroReadOnly
+     */
+    private get _eyePosition(): Vector3 {
+        return this._forcedViewPosition ?? this.activeCamera?.globalPosition ?? Vector3.ZeroReadOnly;
+    }
+
+    /**
      * Bind the current view position to an effect.
      * @param effect The effect to be bound
      * @param variableName name of the shader variable that will hold the eye position
      * @param isVector3 true to indicates that variableName is a Vector3 and not a Vector4
-     * @returns the computed eye position
+     * @returns the computed eye position in a temp vector, caller can copy values as needed
      */
     public bindEyePosition(effect: Nullable<Effect>, variableName = "vEyePosition", isVector3 = false): Vector4 {
-        const eyePosition = this._forcedViewPosition
-            ? this._forcedViewPosition
-            : this._mirroredCameraPosition
-              ? this._mirroredCameraPosition
-              : (this.activeCamera?.globalPosition ?? Vector3.ZeroReadOnly);
-
+        const eyePosition = this._eyePosition;
         const invertNormal = this.useRightHandedSystem === (this._mirroredCameraPosition != null);
 
-        TmpVectors.Vector4[0].set(eyePosition.x, eyePosition.y, eyePosition.z, invertNormal ? -1 : 1);
+        const offset = this.floatingOriginOffset;
+        const eyePos = TempVect1.set(eyePosition.x, eyePosition.y, eyePosition.z, invertNormal ? -1 : 1);
+        const offsetEyePos = eyePos.subtractFromFloatsToRef(offset.x, offset.y, offset.z, 0, TempVect2);
 
         if (effect) {
             if (isVector3) {
-                effect.setFloat3(variableName, TmpVectors.Vector4[0].x, TmpVectors.Vector4[0].y, TmpVectors.Vector4[0].z);
+                effect.setFloat3(variableName, offsetEyePos.x, offsetEyePos.y, offsetEyePos.z);
             } else {
-                effect.setVector4(variableName, TmpVectors.Vector4[0]);
+                effect.setVector4(variableName, offsetEyePos);
             }
         }
 
-        return TmpVectors.Vector4[0];
+        // Return the non-offset position
+        return eyePos;
     }
 
     /**
@@ -1175,7 +1275,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     public finalizeSceneUbo(): UniformBuffer {
         const ubo = this.getSceneUniformBuffer();
         const eyePosition = this.bindEyePosition(null);
-        ubo.updateFloat4("vEyePosition", eyePosition.x, eyePosition.y, eyePosition.z, eyePosition.w);
+
+        const offset = this.floatingOriginOffset;
+        ubo.updateFloat4("vEyePosition", eyePosition.x - offset.x, eyePosition.y - offset.y, eyePosition.z - offset.z, eyePosition.w);
 
         ubo.update();
 
@@ -1631,7 +1733,8 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     private _renderId = 0;
     private _frameId = 0;
     private _executeWhenReadyTimeoutId: Nullable<ReturnType<typeof setTimeout>> = null;
-    private _intermediateRendering = false;
+    /** @internal */
+    public _intermediateRendering = false;
     private _defaultFrameBufferCleared = false;
 
     private _viewUpdateFlag = -1;
@@ -1644,6 +1747,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /** @internal */
     public _pendingData = [] as any[];
     private _isDisposed = false;
+    private _isReadyChecks: { isReady(): boolean }[] = [];
 
     /**
      * Gets or sets a boolean indicating that all submeshes of active meshes must be rendered
@@ -1891,6 +1995,15 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      */
     private _geometriesByUniqueId: Nullable<{ [uniqueId: string]: number | undefined }> = null;
 
+    private _uniqueId = 0;
+
+    /**
+     * Gets the unique id of the scene
+     */
+    public get uniqueId() {
+        return this._uniqueId;
+    }
+
     /**
      * Creates a new Scene
      * @param engine defines the engine to use to render this scene
@@ -1898,6 +2011,8 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      */
     constructor(engine: AbstractEngine, options?: SceneOptions) {
         this.activeCameras = [] as Camera[];
+
+        this._uniqueId = this.getUniqueId();
 
         const fullOptions = {
             useGeometryUniqueIdsMap: true,
@@ -1913,6 +2028,12 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         } else {
             EngineStore._LastCreatedScene = this;
             engine.scenes.push(this);
+        }
+
+        if (engine.getCreationOptions().useLargeWorldRendering || options?.useFloatingOrigin) {
+            OverrideMatrixFunctions();
+            this._floatingOriginScene = this;
+            FloatingOriginCurrentScene.getScene = this._getFloatingOriginScene;
         }
 
         this._uid = null;
@@ -2337,6 +2458,13 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                     isReady = false;
                 }
             }
+
+            for (index = 0; index < this.customRenderTargets.length; ++index) {
+                const rtt = this.customRenderTargets[index];
+                if (!rtt.isReadyForRendering()) {
+                    isReady = false;
+                }
+            }
         }
 
         // Geometries
@@ -2383,6 +2511,13 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                 if (!effectLayer.isLayerReady()) {
                     isReady = false;
                 }
+            }
+        }
+
+        // isReady() checks for externally specified objects.
+        for (const check of this._isReadyChecks) {
+            if (!check.isReady()) {
+                isReady = false;
             }
         }
 
@@ -2503,6 +2638,28 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
+     * Registers an object whose {@link isReady} method will be checked during {@link Scene.isReady}.
+     * Call {@link removeIsReadyCheck} to remove the object.
+     * @param isReadyCheck defines the object to add.
+     */
+    public addIsReadyCheck(isReadyCheck: { isReady(): boolean }): void {
+        if (this._isReadyChecks.indexOf(isReadyCheck) === -1) {
+            this._isReadyChecks.push(isReadyCheck);
+        }
+    }
+
+    /**
+     * Removes an object previously registered with {@link addIsReadyCheck}.
+     * @param isReadyCheck defines the object to remove.
+     */
+    public removeIsReadyCheck(isReadyCheck: { isReady(): boolean }): void {
+        const index = this._isReadyChecks.indexOf(isReadyCheck);
+        if (index !== -1) {
+            this._isReadyChecks.splice(index, 1);
+        }
+    }
+
+    /**
      * Registers a function to be executed when the scene is ready
      * @param func - the function to be executed
      * @param checkRenderTargets true to also check that the meshes rendered as part of a render target are ready (default: false)
@@ -2531,22 +2688,52 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
+     * An event triggered when the scene ready checks has timed out.
+     */
+    public onReadyTimeoutObservable = new Observable<Scene>();
+
+    /**
+     * Duration in milliseconds to wait before triggering the onReadyTimeoutObservable event.
+     */
+    public onReadyTimeoutDuration = 2 * 60 * 1000; // 2 minutes by default
+
+    private _timeoutChecksStartTime: number = 0;
+
+    private _clearReadynessChecksData() {
+        this._timeoutChecksStartTime = 0;
+        this.onReadyTimeoutObservable.clear();
+
+        this.onReadyObservable.clear();
+        this._executeWhenReadyTimeoutId = null;
+    }
+
+    /**
      * @internal
      */
     public _checkIsReady(checkRenderTargets = false) {
         this._registerTransientComponents();
 
-        if (this.isReady(checkRenderTargets)) {
-            this.onReadyObservable.notifyObservers(this);
-
-            this.onReadyObservable.clear();
-            this._executeWhenReadyTimeoutId = null;
+        // Starts counting time from the first check for timeout purposes
+        if (this._timeoutChecksStartTime === 0) {
+            this._timeoutChecksStartTime = PrecisionDate.Now;
+        }
+        // Check for timeout
+        else if (this.onReadyTimeoutDuration > 0 && PrecisionDate.Now - this._timeoutChecksStartTime > this.onReadyTimeoutDuration) {
+            this.onReadyTimeoutObservable.notifyObservers(this);
+            this._clearReadynessChecksData();
             return;
         }
 
+        // Check for readyness
+        if (this.isReady(checkRenderTargets)) {
+            this.onReadyObservable.notifyObservers(this);
+            this._clearReadynessChecksData();
+            return;
+        }
+
+        // Clean up if the scene was disposed in the meantime
         if (this._isDisposed) {
-            this.onReadyObservable.clear();
-            this._executeWhenReadyTimeoutId = null;
+            this._clearReadynessChecksData();
             return;
         }
 
@@ -2606,11 +2793,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @param projectionR defines the right Projection matrix to use (if provided)
      */
     public setTransformMatrix(viewL: Matrix, projectionL: Matrix, viewR?: Matrix, projectionR?: Matrix): void {
-        // clear the multiviewSceneUbo if no viewR and projectionR are defined
-        if (!viewR && !projectionR && this._multiviewSceneUbo) {
-            this._multiviewSceneUbo.dispose();
-            this._multiviewSceneUbo = null;
-        }
+        // Toggle the multiview flag based on whether stereo matrices are provided.
+        // The multiview UBO itself is kept alive for the XR session lifetime to avoid per-frame GPU alloc/dealloc.
+        this._multiviewSceneUboIsActive = !!(viewR && projectionR && this._multiviewSceneUbo);
         if (this._viewUpdateFlag === viewL.updateFlag && this._projectionUpdateFlag === projectionL.updateFlag) {
             return;
         }
@@ -2629,7 +2814,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             Frustum.GetPlanesToRef(this._transformMatrix, this._frustumPlanes);
         }
 
-        if (this._multiviewSceneUbo && this._multiviewSceneUbo.useUbo) {
+        if (this._multiviewSceneUboIsActive && this._multiviewSceneUbo!.useUbo) {
             this._updateMultiviewUbo(viewR, projectionR);
         } else if (this._sceneUbo.useUbo) {
             this._sceneUbo.updateMatrix("viewProjection", this._transformMatrix);
@@ -2643,16 +2828,26 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns a UniformBuffer
      */
     public getSceneUniformBuffer(): UniformBuffer {
-        return this._multiviewSceneUbo ? this._multiviewSceneUbo : this._sceneUbo;
+        return this._multiviewSceneUboIsActive && this._multiviewSceneUbo ? this._multiviewSceneUbo : this._sceneUbo;
     }
 
     /**
      * Creates a scene UBO
      * @param name name of the uniform buffer (optional, for debugging purpose only)
+     * @param trackUBOsInFrame define if the UBOs should be tracked in the frame (default: undefined - will use the value from Engine._features.trackUbosInFrame)
      * @returns a new ubo
      */
-    public createSceneUniformBuffer(name?: string): UniformBuffer {
-        const sceneUbo = new UniformBuffer(this._engine, undefined, false, name ?? "scene");
+    public createSceneUniformBuffer(name?: string, trackUBOsInFrame?: boolean): UniformBuffer;
+    /**
+     * Creates a scene UBO
+     * @param name name of the uniform buffer (optional, for debugging purpose only)
+     * @param options options for creating the scene uniform buffer
+     * @returns a new ubo
+     */
+    public createSceneUniformBuffer(name?: string, options?: ICreateSceneUboOptions): UniformBuffer;
+    public createSceneUniformBuffer(name?: string, trackUBOsInFrameOrOptions?: boolean | ICreateSceneUboOptions): UniformBuffer {
+        const trackUBOsInFrame = typeof trackUBOsInFrameOrOptions === "boolean" ? trackUBOsInFrameOrOptions : trackUBOsInFrameOrOptions?.trackUBOsInFrame;
+        const sceneUbo = new UniformBuffer(this._engine, undefined, false, name ?? "scene", undefined, trackUBOsInFrame);
         sceneUbo.addUniform("viewProjection", 16);
         sceneUbo.addUniform("view", 16);
         sceneUbo.addUniform("projection", 16);
@@ -2669,6 +2864,22 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this._sceneUbo = ubo;
         this._viewUpdateFlag = -1;
         this._projectionUpdateFlag = -1;
+    }
+
+    private _floatingOriginScene: Scene | undefined = undefined;
+    /**
+     * True if floatingOriginMode was passed to engine or this scene creation otions.
+     * This mode avoids floating point imprecision in huge coordinate system by offsetting uniform values before passing to shader, centering camera at origin and displacing rest of scene by camera position
+     */
+    public get floatingOriginMode(): boolean {
+        return this._floatingOriginScene !== undefined;
+    }
+
+    /**
+     * When floatingOriginMode is enabled, offset is equal to the eye position. Default to ZeroReadonly when mode is disabled.
+     */
+    public get floatingOriginOffset(): Vector3 {
+        return this.floatingOriginMode ? this._eyePosition : Vector3.ZeroReadOnly;
     }
 
     /**
@@ -2844,8 +3055,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             if (!toRemove.parent) {
                 toRemove._removeFromSceneRootNodes();
             }
+
+            this.onLightRemovedObservable.notifyObservers(toRemove);
         }
-        this.onLightRemovedObservable.notifyObservers(toRemove);
         return index;
     }
 
@@ -2896,6 +3108,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             // Clean active container
             this._executeActiveContainerCleanup(this._activeParticleSystems);
         }
+        this.onParticleSystemRemovedObservable.notifyObservers(toRemove);
         return index;
     }
 
@@ -2932,6 +3145,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         if (index !== -1) {
             this.animationGroups.splice(index, 1);
         }
+        this.onAnimationGroupRemovedObservable.notifyObservers(toRemove);
         return index;
     }
 
@@ -2999,6 +3213,66 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             this.textures.splice(index, 1);
         }
         this.onTextureRemovedObservable.notifyObservers(toRemove);
+
+        return index;
+    }
+
+    /**
+     * Removes the given frame graph from this scene.
+     * @param toRemove The frame graph to remove
+     * @returns The index of the removed frame graph
+     */
+    public removeFrameGraph(toRemove: FrameGraph): number {
+        const index = this.frameGraphs.indexOf(toRemove);
+        if (index !== -1) {
+            this.frameGraphs.splice(index, 1);
+        }
+        this.onFrameGraphRemovedObservable.notifyObservers(toRemove);
+
+        return index;
+    }
+
+    /**
+     * Removes the given object renderer from this scene.
+     * @param toRemove The object renderer to remove
+     * @returns The index of the removed object renderer
+     */
+    public removeObjectRenderer(toRemove: ObjectRenderer): number {
+        const index = this.objectRenderers.indexOf(toRemove);
+        if (index !== -1) {
+            this.objectRenderers.splice(index, 1);
+        }
+        this.onObjectRendererRemovedObservable.notifyObservers(toRemove);
+
+        return index;
+    }
+
+    /**
+     * Removes the given post-process from this scene.
+     * @param toRemove The post-process to remove
+     * @returns The index of the removed post-process
+     */
+    public removePostProcess(toRemove: PostProcess): number {
+        const index = this.postProcesses.indexOf(toRemove);
+        if (index !== -1) {
+            this.postProcesses.splice(index, 1);
+        }
+        this.onPostProcessRemovedObservable.notifyObservers(toRemove);
+
+        return index;
+    }
+
+    /**
+     * Removes the given layer from this scene.
+     * @param toRemove The layer to remove
+     * @returns The index of the removed layer
+     */
+    public removeEffectLayer(toRemove: EffectLayer): number {
+        const index = this.effectLayers.indexOf(toRemove);
+        if (index !== -1) {
+            this.effectLayers.splice(index, 1);
+        }
+        this.onEffectLayerRemovedObservable.notifyObservers(toRemove);
 
         return index;
     }
@@ -3083,6 +3357,10 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             return;
         }
         this.particleSystems.push(newParticleSystem);
+
+        Tools.SetImmediate(() => {
+            this.onNewParticleSystemAddedObservable.notifyObservers(newParticleSystem);
+        });
     }
 
     /**
@@ -3105,6 +3383,10 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             return;
         }
         this.animationGroups.push(newAnimationGroup);
+
+        Tools.SetImmediate(() => {
+            this.onNewAnimationGroupAddedObservable.notifyObservers(newAnimationGroup);
+        });
     }
 
     /**
@@ -3188,6 +3470,56 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         }
         this.textures.push(newTexture);
         this.onNewTextureAddedObservable.notifyObservers(newTexture);
+    }
+
+    /**
+     * Adds the given frame graph to this scene.
+     * @param newFrameGraph The frame graph to add
+     */
+    public addFrameGraph(newFrameGraph: FrameGraph): void {
+        this.frameGraphs.push(newFrameGraph);
+        Tools.SetImmediate(() => {
+            this.onNewFrameGraphAddedObservable.notifyObservers(newFrameGraph);
+        });
+    }
+
+    /**
+     * Adds the given object renderer to this scene.
+     * @param objectRenderer The object renderer to add
+     */
+    public addObjectRenderer(objectRenderer: ObjectRenderer): void {
+        this.objectRenderers.push(objectRenderer);
+        Tools.SetImmediate(() => {
+            this.onNewObjectRendererAddedObservable.notifyObservers(objectRenderer);
+        });
+    }
+
+    /**
+     * Adds the given post process to this scene.
+     * @param newPostProcess The post process to add
+     */
+    public addPostProcess(newPostProcess: PostProcess): void {
+        if (this._blockEntityCollection) {
+            return;
+        }
+        this.postProcesses.push(newPostProcess);
+        Tools.SetImmediate(() => {
+            this.onNewPostProcessAddedObservable.notifyObservers(newPostProcess);
+        });
+    }
+
+    /**
+     * Adds the given effect layer to this scene.
+     * @param newEffectLayer The effect layer to add
+     */
+    public addEffectLayer(newEffectLayer: EffectLayer): void {
+        if (this._blockEntityCollection) {
+            return;
+        }
+        this.effectLayers.push(newEffectLayer);
+        Tools.SetImmediate(() => {
+            this.onNewEffectLayerAddedObservable.notifyObservers(newEffectLayer);
+        });
     }
 
     /**
@@ -3740,7 +4072,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
-     * Gets a the last added node (Mesh, Camera, Light) using a given Id
+     * Gets a the last added node (Mesh, Camera, Light, Bone) using a given Id
      * @param id defines the Id to search for
      * @returns the found node or null if not found at all
      */
@@ -3770,11 +4102,20 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             }
         }
 
+        for (index = this.skeletons.length - 1; index >= 0; index--) {
+            const skeleton = this.skeletons[index];
+            for (let boneIndex = skeleton.bones.length - 1; boneIndex >= 0; boneIndex--) {
+                if (skeleton.bones[boneIndex].id === id) {
+                    return skeleton.bones[boneIndex];
+                }
+            }
+        }
+
         return null;
     }
 
     /**
-     * Gets a node (Mesh, Camera, Light) using a given Id
+     * Gets a node (Mesh, Camera, Light, Bone) using a given Id
      * @param id defines the Id to search for
      * @returns the found node or null if not found at all
      */
@@ -4192,6 +4533,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /** @internal */
     public _activeMeshesFrozenButKeepClipping = false;
     private _skipEvaluateActiveMeshesCompletely = false;
+    private _freezeActiveMeshesCancel: Nullable<() => void> = null;
 
     /**
      * Use this function to stop evaluating active meshes. The current list will be keep alive between frames
@@ -4209,6 +4551,79 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         freezeMeshes = true,
         keepFrustumCulling = false
     ): Scene {
+        if (this.frameGraph) {
+            // Executes the frame graph once to be sure the culling tasks (if any) are executed and generate the right culled lists
+            // (it's possible freezeActiveMeshes is called before the frame graph has been executed for the first time)
+            this._renderWithFrameGraph(true, false, true);
+
+            // Freeze all active meshes of all object renderers in the graph
+            const objectRendererTasks = this.frameGraph.getTasksByClassName<FrameGraphObjectRendererTask>(["FrameGraphObjectRendererTask", "FrameGraphGeometryRendererTask"]);
+            for (const task of objectRendererTasks) {
+                task.objectRenderer._freezeActiveMeshes(freezeMeshes);
+            }
+
+            // Wait for all object renderers to finish freezing
+            this._freezeActiveMeshesCancel = _RetryWithInterval(
+                () => {
+                    let ok = true;
+                    let notCancelled = true;
+                    for (const task of objectRendererTasks) {
+                        ok &&= task.objectRenderer._isFrozen;
+                        notCancelled &&= task.objectRenderer._freezeActiveMeshesCancel !== null;
+                    }
+                    if (ok) {
+                        return true;
+                    } else if (!notCancelled) {
+                        // At least one object renderer cancelled freezing meshes because of an error
+                        // Throws an error that will be caught by _RetryWithInterval.onError
+                        throw new Error("Freezing active meshes was cancelled");
+                    }
+                    return false;
+                },
+                () => {
+                    // All meshes of all object renderers could be frozen correctly
+                    this._freezeActiveMeshesCancel = null;
+                    this._activeMeshesFrozen = true;
+                    this._activeMeshesFrozenButKeepClipping = keepFrustumCulling;
+                    this._skipEvaluateActiveMeshesCompletely = skipEvaluateActiveMeshes;
+
+                    onSuccess?.();
+                },
+                (err, isTimeout) => {
+                    // An error occurred => not all meshes could be frozen
+                    // Unfreezes all meshes so that we remain in a valid state
+                    this._freezeActiveMeshesCancel = null;
+                    this.unfreezeActiveMeshes();
+                    if (!isTimeout) {
+                        const errMsg = "Scene: An unexpected error occurred while trying to freeze active meshes.";
+                        if (onError) {
+                            onError(errMsg);
+                        } else {
+                            Logger.Error(errMsg);
+                            if (err) {
+                                Logger.Error(err);
+                                if (err.stack) {
+                                    Logger.Error(err.stack);
+                                }
+                            }
+                        }
+                    } else {
+                        const errMsg = "Scene: Timeout while waiting for meshes to be frozen.";
+                        if (onError) {
+                            onError(errMsg);
+                        } else {
+                            Logger.Error(errMsg);
+                            if (err) {
+                                Logger.Error(err);
+                            }
+                        }
+                    }
+                }
+            );
+
+            return this;
+        }
+
         this.executeWhenReady(() => {
             if (!this.activeCamera) {
                 if (onError) {
@@ -4250,8 +4665,18 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             }
         }
 
-        for (let index = 0; index < this._activeMeshes.length; index++) {
-            this._activeMeshes.data[index]._unFreeze();
+        this._freezeActiveMeshesCancel?.();
+        this._freezeActiveMeshesCancel = null;
+
+        if (this.frameGraph) {
+            const objectRendererTasks = this.frameGraph.getTasksByClassName<FrameGraphObjectRendererTask>(["FrameGraphObjectRendererTask", "FrameGraphGeometryRendererTask"]);
+            for (const task of objectRendererTasks) {
+                task.objectRenderer._unfreezeActiveMeshes();
+            }
+        } else {
+            for (let index = 0; index < this._activeMeshes.length; index++) {
+                this._activeMeshes.data[index]._unFreeze();
+            }
         }
 
         this._activeMeshesFrozen = false;
@@ -4567,6 +4992,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         this.onBeforeCameraRenderObservable.notifyObservers(this.activeCamera);
 
+        // Set the render pass id before evaluating active meshes so that instance registration in WebGPU (which is per render pass id) uses the correct pass id
+        this._engine.currentRenderPassId = camera.outputRenderTarget?.renderPassId ?? camera.renderPassId ?? Constants.RENDERPASS_MAIN;
+
         // Meshes
         this._evaluateActiveMeshes();
 
@@ -4603,30 +5031,62 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         if (this.renderTargetsEnabled) {
             this._intermediateRendering = true;
 
+            let currentBoundingBoxMeshList: Array<BoundingBox> | undefined;
+
             if (this._renderTargets.length > 0) {
                 Tools.StartPerformanceCounter("Render targets", this._renderTargets.length > 0);
+
+                // The cast to "any" is to avoid an error in ES6 in case you don't import boundingBoxRenderer
+                const boundingBoxRenderer = (this as any).getBoundingBoxRenderer?.() as Nullable<BoundingBoxRenderer>;
+
                 for (let renderIndex = 0; renderIndex < this._renderTargets.length; renderIndex++) {
                     const renderTarget = this._renderTargets.data[renderIndex];
                     if (renderTarget._shouldRender()) {
                         this._renderId++;
                         const hasSpecialRenderTargetCamera = renderTarget.activeCamera && renderTarget.activeCamera !== this.activeCamera;
+                        if (boundingBoxRenderer && !currentBoundingBoxMeshList) {
+                            // Saves the current bounding box mesh list (potentially built by the call to _evaluateActiveMeshes above), which will be reset/updated when processing this target
+                            currentBoundingBoxMeshList = boundingBoxRenderer.renderList.length > 0 ? boundingBoxRenderer.renderList.data.slice() : [];
+                            currentBoundingBoxMeshList.length = boundingBoxRenderer.renderList.length;
+                        }
                         renderTarget.render(<boolean>hasSpecialRenderTargetCamera, this.dumpNextRenderTargets);
                         needRebind = true;
                     }
                 }
+
+                if (boundingBoxRenderer && currentBoundingBoxMeshList) {
+                    boundingBoxRenderer.renderList.data = currentBoundingBoxMeshList;
+                    boundingBoxRenderer.renderList.length = currentBoundingBoxMeshList.length;
+                }
+
                 Tools.EndPerformanceCounter("Render targets", this._renderTargets.length > 0);
 
                 this._renderId++;
             }
 
-            for (const step of this._cameraDrawRenderTargetStage) {
-                needRebind = step.action(this.activeCamera) || needRebind;
+            if (this._cameraDrawRenderTargetStage.length > 0) {
+                // The cast to "any" is to avoid an error in ES6 in case you don't import boundingBoxRenderer
+                const boundingBoxRenderer = (this as any).getBoundingBoxRenderer?.() as Nullable<BoundingBoxRenderer>;
+
+                if (boundingBoxRenderer && !currentBoundingBoxMeshList) {
+                    // Saves the current bounding box mesh list (potentially built by the call to _evaluateActiveMeshes above), which can be reset/updated during the loop below
+                    currentBoundingBoxMeshList = boundingBoxRenderer.renderList.length > 0 ? boundingBoxRenderer.renderList.data.slice() : [];
+                    currentBoundingBoxMeshList.length = boundingBoxRenderer.renderList.length;
+                }
+
+                for (const step of this._cameraDrawRenderTargetStage) {
+                    // effect layer call object renderer in this step so bounding box render list must be restored
+                    needRebind = step.action(this.activeCamera) || needRebind;
+                }
+
+                if (boundingBoxRenderer && currentBoundingBoxMeshList) {
+                    boundingBoxRenderer.renderList.data = currentBoundingBoxMeshList;
+                    boundingBoxRenderer.renderList.length = currentBoundingBoxMeshList.length;
+                }
             }
 
             this._intermediateRendering = false;
         }
-
-        this._engine.currentRenderPassId = camera.outputRenderTarget?.renderPassId ?? camera.renderPassId ?? Constants.RENDERPASS_MAIN;
 
         // Restore framebuffer after rendering to targets
         if (needRebind && !this.prePass) {
@@ -4649,10 +5109,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         // Render
         this.onBeforeDrawPhaseObservable.notifyObservers(this);
 
-        if (engine.snapshotRendering && engine.snapshotRenderingMode === Constants.SNAPSHOTRENDERING_FAST) {
+        const fastSnapshotMode = engine.snapshotRendering && engine.snapshotRenderingMode === Constants.SNAPSHOTRENDERING_FAST;
+        if (fastSnapshotMode) {
             this.finalizeSceneUbo();
         }
-        this._renderingManager.render(null, null, true, true);
+        this._renderingManager.render(null, null, true, !fastSnapshotMode);
         this.onAfterDrawPhaseObservable.notifyObservers(this);
 
         // After Camera Draw
@@ -4862,11 +5323,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      */
     public customRenderFunction?: (updateCameras: boolean, ignoreAnimations: boolean) => void;
 
-    private _renderWithFrameGraph(updateCameras = true, ignoreAnimations = false): void {
+    private _renderWithFrameGraph(updateCameras = true, _ignoreAnimations = false, forceUpdateWorldMatrix = false): void {
         this.activeCamera = null;
-
-        this._activeParticleSystems.reset();
-        this._activeSkeletons.reset();
+        this.activeCameras = null;
 
         // Update Cameras
         if (updateCameras) {
@@ -4883,49 +5342,107 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         this.onBeforeRenderObservable.notifyObservers(this);
 
+        // Customs render targets
+        this.onBeforeRenderTargetsRenderObservable.notifyObservers(this);
+
+        this._renderTargets.reset();
+
+        const currentActiveCamera = this._frameGraph?.findMainCamera() ?? null;
+        if (this.renderTargetsEnabled) {
+            if (this.environmentTexture && this.environmentTexture.isRenderTarget) {
+                this._renderTargets.pushNoDuplicate(this.environmentTexture as RenderTargetTexture);
+            }
+
+            this._renderTargets.concatWithNoDuplicate(this.customRenderTargets);
+
+            Tools.StartPerformanceCounter("Custom render targets", this._renderTargets.length > 0);
+            for (let customIndex = 0; customIndex < this._renderTargets.length; customIndex++) {
+                const renderTarget = this._renderTargets.data[customIndex];
+                const activeCamera = renderTarget.activeCamera || currentActiveCamera;
+
+                this._renderRenderTarget(renderTarget, activeCamera, true, this.dumpNextRenderTargets);
+            }
+            Tools.EndPerformanceCounter("Custom render targets", this._renderTargets.length > 0);
+            this._renderId++;
+        }
+
+        this.onAfterRenderTargetsRenderObservable.notifyObservers(this);
+
         // We must keep these steps because the procedural texture component relies on them.
-        // TODO: move the procedural texture component to the frame graph.
         for (const step of this._beforeClearStage) {
             step.action();
         }
 
         // Process meshes
-        const meshes = this.getActiveMeshCandidates();
-        const len = meshes.length;
+        if (this._engine.snapshotRendering && this._engine.snapshotRenderingMode === Constants.SNAPSHOTRENDERING_FAST) {
+            this._activeParticleSystems.reset();
+            this._activeSkeletons.reset();
+            this._softwareSkinnedMeshes.reset();
+        } else {
+            const meshes = this.getActiveMeshCandidates();
+            const len = meshes.length;
 
-        for (let i = 0; i < len; i++) {
-            const mesh = meshes.data[i];
+            if (!this._activeMeshesFrozen) {
+                // Meshes are not frozen
+                this._activeParticleSystems.reset();
+                this._activeSkeletons.reset();
+                this._softwareSkinnedMeshes.reset();
 
-            if (mesh.isBlocked) {
-                continue;
-            }
+                for (let i = 0; i < len; i++) {
+                    const mesh = meshes.data[i];
 
-            this._totalVertices.addCount(mesh.getTotalVertices(), false);
+                    mesh._internalAbstractMeshDataInfo._wasActiveLastFrame = false;
 
-            if (!mesh.isReady() || !mesh.isEnabled() || mesh.scaling.hasAZeroComponent) {
-                continue;
-            }
+                    if (mesh.isBlocked) {
+                        continue;
+                    }
 
-            mesh.computeWorldMatrix();
+                    this._totalVertices.addCount(mesh.getTotalVertices(), false);
 
-            if (mesh.actionManager && mesh.actionManager.hasSpecificTriggers2(Constants.ACTION_OnIntersectionEnterTrigger, Constants.ACTION_OnIntersectionExitTrigger)) {
-                this._meshesForIntersections.pushNoDuplicate(mesh);
-            }
-        }
+                    if (!mesh.isReady() || !mesh.isEnabled() || mesh.scaling.hasAZeroComponent) {
+                        continue;
+                    }
 
-        // Animate Particle systems
-        if (this.particlesEnabled) {
-            for (let particleIndex = 0; particleIndex < this.particleSystems.length; particleIndex++) {
-                const particleSystem = this.particleSystems[particleIndex];
+                    mesh.computeWorldMatrix(forceUpdateWorldMatrix);
 
-                if (!particleSystem.isStarted() || !particleSystem.emitter) {
-                    continue;
+                    if (mesh.actionManager && mesh.actionManager.hasSpecificTriggers2(Constants.ACTION_OnIntersectionEnterTrigger, Constants.ACTION_OnIntersectionExitTrigger)) {
+                        this._meshesForIntersections.pushNoDuplicate(mesh);
+                    }
                 }
 
-                const emitter = <any>particleSystem.emitter;
-                if (!emitter.position || emitter.isEnabled()) {
-                    this._activeParticleSystems.push(particleSystem);
-                    particleSystem.animate();
+                // Animate Particle systems
+                if (this.particlesEnabled) {
+                    for (let particleIndex = 0; particleIndex < this.particleSystems.length; particleIndex++) {
+                        const particleSystem = this.particleSystems[particleIndex];
+
+                        if (!particleSystem.isStarted() || !particleSystem.emitter) {
+                            continue;
+                        }
+
+                        const emitter = <any>particleSystem.emitter;
+                        if (!emitter.position || emitter.isEnabled()) {
+                            this._activeParticleSystems.push(particleSystem);
+                            particleSystem.animate();
+                        }
+                    }
+                }
+            } else {
+                // Meshes are frozen
+                if (!this._skipEvaluateActiveMeshesCompletely) {
+                    for (let i = 0; i < len; i++) {
+                        const mesh = meshes.data[i];
+
+                        if (mesh._internalAbstractMeshDataInfo._wasActiveLastFrame) {
+                            mesh.computeWorldMatrix();
+                        }
+                    }
+                }
+
+                if (this.particlesEnabled) {
+                    const psLength = this._activeParticleSystems.length;
+                    for (let i = 0; i < psLength; i++) {
+                        this._activeParticleSystems.data[i].animate();
+                    }
                 }
             }
         }
@@ -4959,6 +5476,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this._intermediateRendering = false;
     }
 
+    private _getFloatingOriginScene = (): Scene | undefined => {
+        return this._floatingOriginScene;
+    };
     /**
      * Render the scene
      * @param updateCameras defines a boolean indicating if cameras must update according to their inputs (true by default)
@@ -4972,6 +5492,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         if (this.onReadyObservable.hasObservers() && this._executeWhenReadyTimeoutId === null) {
             this._checkIsReady();
         }
+
+        // Ensures that the floatingOriginOffset is grabbed from the correct scene
+        FloatingOriginCurrentScene.getScene = this._getFloatingOriginScene;
 
         this._frameId++;
         this._defaultFrameBufferCleared = false;
@@ -5189,6 +5712,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this._pointerMoveStage.clear();
         this._pointerDownStage.clear();
         this._pointerUpStage.clear();
+        this._isReadyChecks.length = 0;
 
         this.importedMeshesFiles = [] as string[];
 
@@ -5280,6 +5804,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         // Release morph targets
         this._disposeList(this.morphTargetManagers);
 
+        // Release frame graphs
+        this._disposeList(this.frameGraphs);
+
         // Release UBO
         this._sceneUbo.dispose();
 
@@ -5298,6 +5825,13 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         if (index > -1) {
             this._engine.scenes.splice(index, 1);
+        }
+
+        this._floatingOriginScene = undefined;
+        if (this._engine.scenes.length === 0) {
+            // If this is the last scene to be disposed, reset matrix overrides
+            // Cannot reset from within engine class due floatingOriginMatrixOverrides file import side effects
+            ResetMatrixFunctions();
         }
 
         if (EngineStore._LastCreatedScene === this) {
@@ -5361,6 +5895,10 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this.onMultiMaterialRemovedObservable.clear();
         this.onNewTextureAddedObservable.clear();
         this.onTextureRemovedObservable.clear();
+        this.onNewFrameGraphAddedObservable.clear();
+        this.onFrameGraphRemovedObservable.clear();
+        this.onNewObjectRendererAddedObservable.clear();
+        this.onObjectRendererRemovedObservable.clear();
         this.onPrePointerObservable.clear();
         this.onPointerObservable.clear();
         this.onPreKeyboardObservable.clear();
@@ -5445,10 +5983,12 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             Vector3.CheckExtends(maxBox, min, max);
         }
 
-        return {
-            min: min,
-            max: max,
-        };
+        return min.x === Number.MAX_VALUE
+            ? { min: Vector3.Zero(), max: Vector3.Zero() }
+            : {
+                  min: min,
+                  max: max,
+              };
     }
 
     // Picking

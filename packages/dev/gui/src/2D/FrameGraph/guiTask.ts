@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraphTextureHandle, FrameGraph } from "core/index";
+import { type FrameGraphTextureHandle, type FrameGraph } from "core/index";
 import { AdvancedDynamicTexture } from "../advancedDynamicTexture";
 import { FrameGraphTask } from "core/FrameGraph/frameGraphTask";
 
@@ -50,7 +49,7 @@ export class FrameGraphGUITask extends FrameGraphTask {
                 throw new Error(`AdvancedDynamicTexture "${name}": the texture must have been created with the useStandalone property set to true`);
             }
         } else {
-            adt = AdvancedDynamicTexture.CreateFullscreenUI(name, undefined, { useStandalone: true });
+            adt = AdvancedDynamicTexture.CreateFullscreenUI(name, undefined, { useStandalone: true, scene: frameGraph.scene });
         }
         this._adt = adt;
 
@@ -59,6 +58,10 @@ export class FrameGraphGUITask extends FrameGraphTask {
 
     public override isReady() {
         return this._adt.guiIsReady() && this._adt._layerToDispose!.isReady();
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphGUITask";
     }
 
     public record(): void {

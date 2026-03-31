@@ -1,5 +1,5 @@
-import type { Scene } from "core/scene";
-import type { FrameGraph } from "core/FrameGraph/frameGraph";
+import { type Scene } from "core/scene";
+import { type FrameGraph } from "core/FrameGraph/frameGraph";
 import { NodeRenderGraphBlockConnectionPointTypes } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
 import { NodeRenderGraphOutputBlock } from "core/FrameGraph/Node/Blocks/outputBlock";
 import { NodeRenderGraphInputBlock } from "core/FrameGraph/Node/Blocks/inputBlock";
@@ -19,7 +19,7 @@ import { NodeRenderGraphObjectRendererBlock } from "core/FrameGraph/Node/Blocks/
 import { NodeRenderGraphGeometryRendererBlock } from "core/FrameGraph/Node/Blocks/Rendering/geometryRendererBlock";
 import { NodeRenderGraphCullObjectsBlock } from "core/FrameGraph/Node/Blocks/cullObjectsBlock";
 import { NodeRenderGraphGUIBlock } from "gui/2D/FrameGraph/renderGraphGUIBlock";
-import { NodeRenderGraphTAAObjectRendererBlock } from "core/FrameGraph/Node/Blocks/Rendering/taaObjectRendererBlock";
+import { NodeRenderGraphTAAPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/taaPostProcessBlock";
 import { NodeRenderGraphResourceContainerBlock } from "core/FrameGraph/Node/Blocks/resourceContainerBlock";
 import { NodeRenderGraphShadowGeneratorBlock } from "core/FrameGraph/Node/Blocks/Rendering/shadowGeneratorBlock";
 import { NodeRenderGraphCascadedShadowGeneratorBlock } from "core/FrameGraph/Node/Blocks/Rendering/csmShadowGeneratorBlock";
@@ -35,6 +35,17 @@ import { NodeRenderGraphImageProcessingPostProcessBlock } from "core/FrameGraph/
 import { NodeRenderGraphFXAAPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/fxaaPostProcessBlock";
 import { NodeRenderGraphGrainPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/grainPostProcessBlock";
 import { NodeRenderGraphMotionBlurPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/motionBlurPostProcessBlock";
+import { NodeRenderGraphConvolutionPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/convolutionPostProcessBlock";
+import { NodeRenderGraphSharpenPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/sharpenPostProcessBlock";
+import { NodeRenderGraphScreenSpaceCurvaturePostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/screenSpaceCurvaturePostProcessBlock";
+import { NodeRenderGraphColorCorrectionPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/colorCorrectionPostProcessBlock";
+import { NodeRenderGraphFilterPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/filterPostProcessBlock";
+import { NodeRenderGraphTonemapPostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/tonemapPostProcessBlock";
+import { NodeRenderGraphSSAO2PostProcessBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/ssao2PostProcessBlock";
+import { NodeRenderGraphComputeShaderBlock } from "core/FrameGraph/Node/Blocks/computeShaderBlock";
+import { NodeRenderGraphVolumetricLightingBlock } from "core/FrameGraph/Node/Blocks/PostProcesses/volumetricLightingBlock";
+import { NodeRenderGraphLightingVolumeBlock } from "core/FrameGraph/Node/Blocks/lightingVolumeBlock";
+import { NodeRenderGraphSelectionOutlineLayerBlock } from "core/FrameGraph/Node/Blocks/Layers/selectionOutlineLayerBlock";
 
 /**
  * Static class for BlockTools
@@ -115,8 +126,8 @@ export class BlockTools {
             case "GeometryRendererBlock": {
                 return new NodeRenderGraphGeometryRendererBlock("Geometry renderer", frameGraph, scene);
             }
-            case "TAAObjectRendererBlock": {
-                return new NodeRenderGraphTAAObjectRendererBlock("TAA Object renderer", frameGraph, scene);
+            case "TAABlock": {
+                return new NodeRenderGraphTAAPostProcessBlock("Temporal Anti-Aliasing", frameGraph, scene);
             }
             case "CullBlock": {
                 return new NodeRenderGraphCullObjectsBlock("Cull", frameGraph, scene);
@@ -163,13 +174,46 @@ export class BlockTools {
             case "MotionBlurBlock": {
                 return new NodeRenderGraphMotionBlurPostProcessBlock("Motion Blur", frameGraph, scene);
             }
+            case "ConvolutionBlock": {
+                return new NodeRenderGraphConvolutionPostProcessBlock("Convolution", frameGraph, scene);
+            }
+            case "SharpenBlock": {
+                return new NodeRenderGraphSharpenPostProcessBlock("Sharpen", frameGraph, scene);
+            }
+            case "ScreenSpaceCurvatureBlock": {
+                return new NodeRenderGraphScreenSpaceCurvaturePostProcessBlock("Screen Space Curvature", frameGraph, scene);
+            }
+            case "ColorCorrectionBlock": {
+                return new NodeRenderGraphColorCorrectionPostProcessBlock("Color Correction", frameGraph, scene, "https://assets.babylonjs.com/textures/co.png");
+            }
+            case "FilterBlock": {
+                return new NodeRenderGraphFilterPostProcessBlock("Filter", frameGraph, scene);
+            }
+            case "TonemapBlock": {
+                return new NodeRenderGraphTonemapPostProcessBlock("Tonemap", frameGraph, scene);
+            }
+            case "SSAO2Block": {
+                return new NodeRenderGraphSSAO2PostProcessBlock("SSAO", frameGraph, scene);
+            }
+            case "ComputeShaderBlock": {
+                return new NodeRenderGraphComputeShaderBlock("Compute Shader", frameGraph, scene);
+            }
+            case "VolumetricLightingBlock": {
+                return new NodeRenderGraphVolumetricLightingBlock("Volumetric Lighting", frameGraph, scene);
+            }
+            case "LightingVolumeBlock": {
+                return new NodeRenderGraphLightingVolumeBlock("Lighting Volume", frameGraph, scene);
+            }
+            case "SelectionOutlineLayerBlock": {
+                return new NodeRenderGraphSelectionOutlineLayerBlock("Selection Outline Layer", frameGraph, scene);
+            }
         }
 
         return null;
     }
 
     public static GetColorFromConnectionNodeType(type: NodeRenderGraphBlockConnectionPointTypes) {
-        let color = "#964848";
+        let color: string;
         switch (type) {
             case NodeRenderGraphBlockConnectionPointTypes.ObjectList:
                 color = "#84995c";
@@ -190,6 +234,7 @@ export class BlockTools {
                 color = "#51e593";
                 break;
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewDepth:
+            case NodeRenderGraphBlockConnectionPointTypes.TextureNormalizedViewDepth:
                 color = "#51e566";
                 break;
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewNormal:
@@ -260,6 +305,8 @@ export class BlockTools {
                 return NodeRenderGraphBlockConnectionPointTypes.ObjectList;
             case "TextureViewDepth":
                 return NodeRenderGraphBlockConnectionPointTypes.TextureViewDepth;
+            case "TextureNormalizedViewDepth":
+                return NodeRenderGraphBlockConnectionPointTypes.TextureNormalizedViewDepth;
             case "TextureNormal":
                 return NodeRenderGraphBlockConnectionPointTypes.TextureViewNormal;
             case "TextureAlbedo":
@@ -304,7 +351,9 @@ export class BlockTools {
             case NodeRenderGraphBlockConnectionPointTypes.ObjectList:
                 return "ObjectList";
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewDepth:
-                return "TextureDepth";
+                return "TextureViewDepth";
+            case NodeRenderGraphBlockConnectionPointTypes.TextureNormalizedViewDepth:
+                return "TextureNormalizedViewDepth";
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewNormal:
                 return "TextureNormal";
             case NodeRenderGraphBlockConnectionPointTypes.TextureAlbedo:

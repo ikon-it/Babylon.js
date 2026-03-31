@@ -1,14 +1,12 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
 import { AutoReleaseWorkerPool } from "./workerPool";
 import { Tools } from "./tools";
-import type { Nullable } from "../types";
-import type { ICompressedFormatCapabilities, IDecodedData, IKTX2DecoderOptions } from "core/Materials/Textures/ktx2decoderTypes";
-import { EngineFormat, TranscodeTarget } from "core/Materials/Textures/ktx2decoderTypes";
-import type { AllowedKeys } from "./khronosTextureContainer2Worker";
-import { applyConfig, initializeWebWorker, workerFunction } from "./khronosTextureContainer2Worker";
+import { type Nullable } from "../types";
+import { type ICompressedFormatCapabilities, type IDecodedData, type IKTX2DecoderOptions, EngineFormat, TranscodeTarget } from "core/Materials/Textures/ktx2decoderTypes";
+import { type AllowedKeys, applyConfig, initializeWebWorker, workerFunction } from "./khronosTextureContainer2Worker";
 
 declare let KTX2DECODER: any;
 
@@ -142,13 +140,23 @@ export class DefaultKTX2DecoderOptions {
 
         this._isDirty = false;
 
-        const options: IKTX2DecoderOptions = {
-            useRGBAIfASTCBC7NotAvailableWhenUASTC: this._useRGBAIfASTCBC7NotAvailableWhenUASTC,
-            forceRGBA: this._forceRGBA,
-            forceR8: this._forceR8,
-            forceRG8: this._forceRG8,
-            bypassTranscoders: this._bypassTranscoders,
-        };
+        const options: IKTX2DecoderOptions = {};
+
+        if (this._useRGBAIfASTCBC7NotAvailableWhenUASTC !== undefined) {
+            options.useRGBAIfASTCBC7NotAvailableWhenUASTC = this._useRGBAIfASTCBC7NotAvailableWhenUASTC;
+        }
+        if (this._forceRGBA !== undefined) {
+            options.forceRGBA = this._forceRGBA;
+        }
+        if (this._forceR8 !== undefined) {
+            options.forceR8 = this._forceR8;
+        }
+        if (this._forceRG8 !== undefined) {
+            options.forceRG8 = this._forceRG8;
+        }
+        if (this._bypassTranscoders !== undefined) {
+            options.bypassTranscoders = this._bypassTranscoders;
+        }
 
         if (this.useRGBAIfOnlyBC1BC3AvailableWhenUASTC) {
             options.transcodeFormatDecisionTree = {
@@ -273,6 +281,7 @@ export class KhronosTextureContainer2 {
         }
 
         const urls = {
+            wasmBaseUrl: Tools.ScriptBaseUrl,
             jsDecoderModule: Tools.GetBabylonScriptURL(this.URLConfig.jsDecoderModule, true),
             wasmUASTCToASTC: Tools.GetBabylonScriptURL(this.URLConfig.wasmUASTCToASTC, true),
             wasmUASTCToBC7: Tools.GetBabylonScriptURL(this.URLConfig.wasmUASTCToBC7, true),
@@ -450,6 +459,8 @@ export class KhronosTextureContainer2 {
 
         internalTexture._gammaSpace = data.isInGammaSpace;
         internalTexture.generateMipMaps = data.mipmaps.length > 1;
+        internalTexture.width = data.mipmaps[0].width;
+        internalTexture.height = data.mipmaps[0].height;
 
         if (data.errors) {
             throw new Error("KTX2 container - could not transcode the data. " + data.errors);
@@ -474,8 +485,6 @@ export class KhronosTextureContainer2 {
         }
 
         internalTexture._extension = ".ktx2";
-        internalTexture.width = data.mipmaps[0].width;
-        internalTexture.height = data.mipmaps[0].height;
         internalTexture.isReady = true;
 
         this._engine._bindTextureDirectly(oglTexture2D, null);

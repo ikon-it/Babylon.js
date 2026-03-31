@@ -2,9 +2,9 @@ import { WebGLHardwareTexture } from "../../Engines/WebGL/webGLHardwareTexture";
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
 import { Observable } from "../../Misc/observable";
 import { Tools } from "../../Misc/tools";
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { WebXRFeatureName, WebXRFeaturesManager } from "../webXRFeaturesManager";
-import type { WebXRSessionManager } from "../webXRSessionManager";
+import { type WebXRSessionManager } from "../webXRSessionManager";
 import { WebXRAbstractFeature } from "./WebXRAbstractFeature";
 import { Constants } from "../../Engines/constants";
 import { Color3 } from "../../Maths/math.color";
@@ -14,7 +14,7 @@ import { BaseTexture } from "../../Materials/Textures/baseTexture";
 import { SphericalHarmonics, SphericalPolynomial } from "../../Maths/sphericalPolynomial";
 import { LightConstants } from "../../Lights/lightConstants";
 import { HDRFiltering } from "core/Materials/Textures/Filtering/hdrFiltering";
-import type { ThinEngine } from "core/Engines";
+import { type ThinEngine } from "core/Engines";
 
 /**
  * Options for Light Estimation feature
@@ -44,6 +44,10 @@ export interface IWebXRLightEstimationOptions {
      * If created, this light source will be updated whenever the light estimation values change
      */
     createDirectionalLightSource?: boolean;
+    /**
+     * The scale factor to multiply the intensity of the directional light by. Defaults to 1.0.
+     */
+    directionalLightIntensityFactor?: number;
     /**
      * Define the format to be used for the light estimation texture.
      */
@@ -133,6 +137,11 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
     public directionalLight: Nullable<DirectionalLight> = null;
 
     /**
+     * The scale factor to multiply the intensity of the directional light by. Defaults to 1.0.
+     */
+    public directionalLightIntensityFactor: number = 1.0;
+
+    /**
      * This observable will notify when the reflection cube map is updated.
      */
     public onReflectionCubeMapUpdatedObservable: Observable<BaseTexture> = new Observable();
@@ -159,6 +168,8 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
             this.directionalLight.intensity = 0;
             this.directionalLight.falloffType = LightConstants.FALLOFF_GLTF;
         }
+
+        this.directionalLightIntensityFactor = this.options.directionalLightIntensityFactor ?? 1.0;
 
         this._hdrFilter = new HDRFiltering(this._xrSessionManager.scene.getEngine() as ThinEngine);
 
@@ -390,7 +401,7 @@ export class WebXRLightEstimation extends WebXRAbstractFeature {
                 // set the values after calculating them
                 if (this.directionalLight) {
                     this.directionalLight.direction.copyFrom(this._lightDirection);
-                    this.directionalLight.intensity = Math.min(this._intensity, 1.0);
+                    this.directionalLight.intensity = Math.min(this._intensity, 1.0) * this.directionalLightIntensityFactor;
                     this.directionalLight.diffuse.copyFrom(this._lightColor);
                 }
             }

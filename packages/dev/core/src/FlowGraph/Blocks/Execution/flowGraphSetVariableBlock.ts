@@ -1,8 +1,8 @@
 import { RegisterClass } from "core/Misc/typeStore";
-import type { IFlowGraphBlockConfiguration } from "../../flowGraphBlock";
-import type { FlowGraphContext } from "../../flowGraphContext";
+import { type IFlowGraphBlockConfiguration } from "../../flowGraphBlock";
+import { type FlowGraphContext } from "../../flowGraphContext";
 import { FlowGraphExecutionBlockWithOutSignal } from "../../flowGraphExecutionBlockWithOutSignal";
-import type { FlowGraphSignalConnection } from "../../flowGraphSignalConnection";
+import { type FlowGraphSignalConnection } from "../../flowGraphSignalConnection";
 import { FlowGraphBlockNames } from "../flowGraphBlockNames";
 import { RichTypeAny } from "core/FlowGraph/flowGraphRichTypes";
 
@@ -27,10 +27,6 @@ export interface IFlowGraphSetVariableBlockConfiguration extends IFlowGraphBlock
 export class FlowGraphSetVariableBlock<T> extends FlowGraphExecutionBlockWithOutSignal {
     constructor(config: IFlowGraphSetVariableBlockConfiguration) {
         super(config);
-        // check if the variable is defined
-        if (!config.variable && !config.variables) {
-            throw new Error("FlowGraphSetVariableBlock: variable/variables is not defined");
-        }
         // check if the variable is an array
         if (config.variables && config.variable) {
             throw new Error("FlowGraphSetVariableBlock: variable and variables are both defined");
@@ -60,16 +56,16 @@ export class FlowGraphSetVariableBlock<T> extends FlowGraphExecutionBlockWithOut
         // check if there is an animation(group) running on this variable. If there is, stop the animation - a value was force-set.
         const currentlyRunningAnimationGroups = context._getGlobalContextVariable("currentlyRunningAnimationGroups", []) as number[];
         for (const animationUniqueId of currentlyRunningAnimationGroups) {
-            const animation = context.assetsContext.animationGroups[animationUniqueId];
-            // check if there is a target animation that has the target set to be the context
-            for (const targetAnimation of animation.targetedAnimations) {
-                if (targetAnimation.target === context) {
+            const animationGroup = context.assetsContext.animationGroups.find((animationGroup) => animationGroup.uniqueId == animationUniqueId);
+            if (animationGroup) {
+                // check if there is a target animation that has the target set to be the context
+                for (const targetAnimation of animationGroup.targetedAnimations) {
                     // check if the target property is the variable we are setting
                     if (targetAnimation.target === context) {
                         // check the variable name
                         if (targetAnimation.animation.targetProperty === variableName) {
                             // stop the animation
-                            animation.stop();
+                            animationGroup.stop();
                             // remove the animation from the currently running animations
                             const index = currentlyRunningAnimationGroups.indexOf(animationUniqueId);
                             if (index > -1) {

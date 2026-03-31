@@ -60,7 +60,10 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
     };
 };
 
-export const evaluatePrepareScene = async (
+export const evaluatePrepareScene = async ({
+    sceneMetadata,
+    globalConfig,
+}: {
     sceneMetadata: {
         sceneFolder?: string;
         sceneFilename?: string;
@@ -71,9 +74,9 @@ export const evaluatePrepareScene = async (
         functionToCall?: string;
         replace?: string;
         playgroundId?: string;
-    },
-    globalConfig: { root: string; snippetUrl: any; pgRoot: string }
-) => {
+    };
+    globalConfig: { root: string; snippetUrl: any; pgRoot: string };
+}) => {
     window.seed = 1;
     window.Math.random = function () {
         const x = Math.sin(window.seed++) * 10000;
@@ -96,7 +99,22 @@ export const evaluatePrepareScene = async (
         const runSnippet = async function () {
             const data = await fetch(globalConfig.snippetUrl + sceneMetadata.playgroundId!.replace(/#/g, "/"));
             const snippet = await data.json();
-            let code = JSON.parse(snippet.jsonPayload).code.toString();
+
+            const payload = JSON.parse(snippet.jsonPayload);
+            let code: string;
+            // Definitely v2 manifest
+            if (Object.prototype.hasOwnProperty.call(payload, "version")) {
+                const v2Manifest = JSON.parse(payload.code);
+                code = v2Manifest.files[v2Manifest.entry];
+                // Sanitize two common export types for existing and migrated PGs and newly-created PGs.
+                code = code
+                    .replace(/export default \w+/g, "")
+                    .replace(/export const /g, "const ")
+                    .replace(/export var /g, "var ");
+            } else {
+                code = payload.code.toString();
+            }
+
             code = code
                 .replace(/"\/textures\//g, '"' + globalConfig.pgRoot + "/textures/")
                 .replace(/"textures\//g, '"' + globalConfig.pgRoot + "/textures/")

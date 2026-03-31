@@ -1,12 +1,10 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraph, FrameGraphTextureCreationOptions, FrameGraphTextureHandle, AbstractEngine, Camera } from "core/index";
+import { type FrameGraph, type FrameGraphTextureCreationOptions, type FrameGraphTextureHandle, type AbstractEngine, type Camera } from "core/index";
 import { Constants } from "core/Engines/constants";
 import { FrameGraphTask } from "../../frameGraphTask";
-import { ThinDepthOfFieldEffectBlurLevel } from "core/PostProcesses/thinDepthOfFieldEffect";
+import { ThinDepthOfFieldEffectBlurLevel, ThinDepthOfFieldEffect } from "core/PostProcesses/thinDepthOfFieldEffect";
 import { FrameGraphDepthOfFieldMergeTask } from "./depthOfFieldMergeTask";
 import { FrameGraphCircleOfConfusionTask } from "./circleOfConfusionTask";
 import { FrameGraphDepthOfFieldBlurTask } from "./depthOfFieldBlurTask";
-import { ThinDepthOfFieldEffect } from "core/PostProcesses/thinDepthOfFieldEffect";
 
 /**
  * Task which applies a depth of field effect.
@@ -21,6 +19,17 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
      * The sampling mode to use for the source texture.
      */
     public sourceSamplingMode = Constants.TEXTURE_BILINEAR_SAMPLINGMODE;
+
+    /**
+     * The alpha mode to use when applying the depth of field effect.
+     */
+    public get alphaMode() {
+        return this._merge.alphaMode;
+    }
+
+    public set alphaMode(mode: number) {
+        this._merge.alphaMode = mode;
+    }
 
     /**
      * The depth texture to use for the depth of field effect.
@@ -127,20 +136,15 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
 
         this._merge = new FrameGraphDepthOfFieldMergeTask(`${name} Merge`, this._frameGraph, this.depthOfField._dofMerge);
 
-        this.onTexturesAllocatedObservable.add((context) => {
-            this._circleOfConfusion.onTexturesAllocatedObservable.notifyObservers(context);
-            for (let i = 0; i < blurCount; i++) {
-                this._blurX[i].onTexturesAllocatedObservable.notifyObservers(context);
-                this._blurY[i].onTexturesAllocatedObservable.notifyObservers(context);
-            }
-            this._merge.onTexturesAllocatedObservable.notifyObservers(context);
-        });
-
         this.outputTexture = this._frameGraph.textureManager.createDanglingHandle();
     }
 
     public override isReady() {
         return this.depthOfField.isReady();
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphDepthOfFieldTask";
     }
 
     public record(): void {
@@ -225,7 +229,9 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
 
         passDisabled.setRenderTarget(this.outputTexture);
         passDisabled.setExecuteFunc((context) => {
-            context.copyTexture(this.sourceTexture);
+            if (this.alphaMode === Constants.ALPHA_DISABLE) {
+                context.copyTexture(this.sourceTexture);
+            }
         });
     }
 

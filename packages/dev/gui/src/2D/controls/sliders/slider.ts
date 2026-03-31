@@ -1,10 +1,10 @@
 import { BaseSlider } from "./baseSlider";
 import { RegisterClass } from "core/Misc/typeStore";
 import { serialize } from "core/Misc/decorators";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
-import type { Nullable } from "core/types";
-import type { BaseGradient } from "../gradient/BaseGradient";
-import type { AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type Nullable } from "core/types";
+import { type BaseGradient } from "../gradient/BaseGradient";
+import { type AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
 import { Tools } from "core/Misc/tools";
 
 /**
@@ -133,7 +133,7 @@ export class Slider extends BaseSlider {
         const width = this._renderWidth;
         const height = this._renderHeight;
 
-        let radius = 0;
+        let radius: number;
 
         if (this.isThumbClamped && this.isThumbCircle) {
             if (this.isVertical) {
@@ -151,8 +151,8 @@ export class Slider extends BaseSlider {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         const thumbPosition = this._getThumbPosition();
@@ -230,8 +230,8 @@ export class Slider extends BaseSlider {
             if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
                 context.shadowColor = this.shadowColor;
                 context.shadowBlur = this.shadowBlur;
-                context.shadowOffsetX = this.shadowOffsetX;
-                context.shadowOffsetY = this.shadowOffsetY;
+                context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+                context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
             }
             if (this._isThumbCircle) {
                 context.beginPath();

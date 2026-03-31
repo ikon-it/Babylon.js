@@ -1,12 +1,7 @@
-import type {
-    FrameGraph,
-    Scene,
-    IThinHighlightLayerOptions,
-    // eslint-disable-next-line import/no-internal-modules
-} from "core/index";
+import { type FrameGraph, type Scene, type IThinHighlightLayerOptions } from "core/index";
 import { ThinHighlightLayer } from "core/Layers/thinHighlightLayer";
 import { Constants } from "core/Engines/constants";
-import { FrameGraphBaseLayerTask } from "./baseLayerTask";
+import { FrameGraphBaseLayerTask, FrameGraphBaseLayerBlurType } from "./baseLayerTask";
 import { HasStencilAspect } from "core/Materials/Textures/textureHelper.functions";
 
 /**
@@ -28,7 +23,20 @@ export class FrameGraphHighlightLayerTask extends FrameGraphBaseLayerTask {
     constructor(name: string, frameGraph: FrameGraph, scene: Scene, options?: IThinHighlightLayerOptions) {
         const alphaBlendingMode = options?.alphaBlendingMode ?? Constants.ALPHA_COMBINE;
 
-        super(name, frameGraph, scene, new ThinHighlightLayer(name, scene, options, true), 1, alphaBlendingMode === Constants.ALPHA_COMBINE, true, true);
+        super(
+            name,
+            frameGraph,
+            scene,
+            new ThinHighlightLayer(name, scene, options, true),
+            1,
+            alphaBlendingMode === Constants.ALPHA_COMBINE ? FrameGraphBaseLayerBlurType.Glow : FrameGraphBaseLayerBlurType.Standard,
+            true,
+            true
+        );
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphHighlightLayerTask";
     }
 
     public override record() {

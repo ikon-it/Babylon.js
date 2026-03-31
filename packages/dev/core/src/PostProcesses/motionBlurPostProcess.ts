@@ -1,14 +1,13 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Logger } from "../Misc/logger";
-import type { Camera } from "../Cameras/camera";
-import type { Effect } from "../Materials/effect";
-import type { PostProcessOptions } from "./postProcess";
-import { PostProcess } from "./postProcess";
+import { type Camera } from "../Cameras/camera";
+import { type Effect } from "../Materials/effect";
+import { type PostProcessOptions, PostProcess } from "./postProcess";
 import { Constants } from "../Engines/constants";
 import { GeometryBufferRenderer } from "../Rendering/geometryBufferRenderer";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { MotionBlurConfiguration } from "../Rendering/motionBlurConfiguration";
-import type { PrePassRenderer } from "../Rendering/prePassRenderer";
+import { type PrePassRenderer } from "../Rendering/prePassRenderer";
 
 import "../Animations/animatable";
 import "../Rendering/geometryBufferRendererSceneComponent";
@@ -16,8 +15,8 @@ import { serialize } from "../Misc/decorators";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { RegisterClass } from "../Misc/typeStore";
 
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { Scene } from "../scene";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type Scene } from "../scene";
 import { ThinMotionBlurPostProcess } from "./thinMotionBlurPostProcess";
 
 /**
@@ -80,13 +79,15 @@ export class MotionBlurPostProcess extends PostProcess {
         this._applyMode();
     }
 
+    private _forcedGeometryBuffer: Nullable<GeometryBufferRenderer> = null;
+
     private _forceGeometryBuffer: boolean = false;
     private get _geometryBufferRenderer(): Nullable<GeometryBufferRenderer> {
         if (!this._forceGeometryBuffer) {
             return null;
         }
 
-        return this._scene.geometryBufferRenderer;
+        return this._forcedGeometryBuffer ?? this._scene.geometryBufferRenderer;
     }
 
     private get _prePassRenderer(): Nullable<PrePassRenderer> {
@@ -130,7 +131,7 @@ export class MotionBlurPostProcess extends PostProcess {
         reusable?: boolean,
         textureType: number = Constants.TEXTURETYPE_UNSIGNED_BYTE,
         blockCompilation = false,
-        forceGeometryBuffer = false
+        forceGeometryBuffer: boolean | GeometryBufferRenderer = false
     ) {
         const localOptions = {
             uniforms: ThinMotionBlurPostProcess.Uniforms,
@@ -151,11 +152,18 @@ export class MotionBlurPostProcess extends PostProcess {
             ...localOptions,
         });
 
-        this._forceGeometryBuffer = forceGeometryBuffer;
+        if (forceGeometryBuffer instanceof GeometryBufferRenderer) {
+            this._forceGeometryBuffer = true;
+            this._forcedGeometryBuffer = forceGeometryBuffer;
+        } else {
+            this._forceGeometryBuffer = forceGeometryBuffer;
+        }
 
         // Set up assets
         if (this._forceGeometryBuffer) {
-            scene.enableGeometryBufferRenderer();
+            if (!this._forcedGeometryBuffer) {
+                scene.enableGeometryBufferRenderer();
+            }
 
             if (this._geometryBufferRenderer) {
                 this._geometryBufferRenderer.enableVelocity = this.isObjectBased;
@@ -219,7 +227,7 @@ export class MotionBlurPostProcess extends PostProcess {
      * @param camera The camera to dispose the post process on.
      */
     public override dispose(camera?: Camera): void {
-        if (this._geometryBufferRenderer) {
+        if (this._geometryBufferRenderer && !this._forcedGeometryBuffer) {
             // Clear previous transformation matrices dictionary used to compute objects velocities
             this._geometryBufferRenderer._previousTransformationMatrices = {};
             this._geometryBufferRenderer._previousBonesTransformationMatrices = {};

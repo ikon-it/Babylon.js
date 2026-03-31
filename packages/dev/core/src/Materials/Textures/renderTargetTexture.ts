@@ -1,26 +1,25 @@
-import type { Observer } from "../../Misc/observable";
-import { Observable } from "../../Misc/observable";
-import type { SmartArray } from "../../Misc/smartArray";
-import type { Nullable, Immutable } from "../../types";
-import type { Camera } from "../../Cameras/camera";
-import type { Scene } from "../../scene";
+import { type Observer, Observable } from "../../Misc/observable";
+import { type SmartArray } from "../../Misc/smartArray";
+import { type Nullable, type Immutable } from "../../types";
+import { type Camera } from "../../Cameras/camera";
+import { type Scene } from "../../scene";
 import { Matrix, Vector3 } from "../../Maths/math.vector";
-import type { Color4 } from "../../Maths/math.color";
-import type { RenderTargetCreationOptions, TextureSize } from "../../Materials/Textures/textureCreationOptions";
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
-import type { SubMesh } from "../../Meshes/subMesh";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type Color4 } from "../../Maths/math.color";
+import { type RenderTargetCreationOptions, type TextureSize } from "../../Materials/Textures/textureCreationOptions";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
+import { type SubMesh } from "../../Meshes/subMesh";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
 import { Texture } from "../../Materials/Textures/texture";
 import { PostProcessManager } from "../../PostProcesses/postProcessManager";
-import type { PostProcess } from "../../PostProcesses/postProcess";
+import { type PostProcess } from "../../PostProcesses/postProcess";
 import { Constants } from "../../Engines/constants";
-import type { IRenderTargetTexture, RenderTargetWrapper } from "../../Engines/renderTargetWrapper";
+import { type IRenderTargetTexture, type RenderTargetWrapper } from "../../Engines/renderTargetWrapper";
 
-import type { Material } from "../material";
+import { type Material } from "../material";
 import { FloorPOT, NearestPOT } from "../../Misc/tools.functions";
 import { Effect } from "../effect";
-import type { AbstractEngine } from "../../Engines/abstractEngine";
-import type { IParticleSystem } from "core/Particles/IParticleSystem";
+import { type AbstractEngine } from "../../Engines/abstractEngine";
+import { type IParticleSystem } from "core/Particles/IParticleSystem";
 import { Logger } from "../../Misc/logger";
 import { ObjectRenderer } from "core/Rendering/objectRenderer";
 
@@ -100,6 +99,9 @@ export interface RenderTargetTextureOptions {
 
     /** If not provided (default), a new object renderer instance will be created */
     existingObjectRenderer?: ObjectRenderer;
+
+    /** True to enable clustered lights (default: false) */
+    enableClusteredLights?: boolean;
 }
 
 /**
@@ -198,6 +200,28 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
 
     public set renderSprites(value: boolean) {
         this._objectRenderer.renderSprites = value;
+    }
+
+    /**
+     * Define if bounding box rendering should be enabled (still subject to Mesh.showBoundingBox or scene.forceShowBoundingBoxes). (Default: false).
+     */
+    public get enableBoundingBoxRendering() {
+        return this._objectRenderer.enableBoundingBoxRendering;
+    }
+
+    public set enableBoundingBoxRendering(value: boolean) {
+        this._objectRenderer.enableBoundingBoxRendering = value;
+    }
+
+    /**
+     * Define if outline/overlay rendering should be enabled (still subject to Mesh.renderOutline/Mesh.renderOverlay). (Default: true).
+     */
+    public get enableOutlineRendering() {
+        return this._objectRenderer.enableOutlineRendering;
+    }
+
+    public set enableOutlineRendering(value: boolean) {
+        this._objectRenderer.enableOutlineRendering = value;
     }
 
     /**
@@ -307,12 +331,12 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
     }
 
     /**
-     * An event triggered when the texture is unbind.
+     * An event triggered before the texture is bound to the output.
      */
     public onBeforeBindObservable = new Observable<RenderTargetTexture>();
 
     /**
-     * An event triggered when the texture is unbind.
+     * An event triggered after the texture is unbound.
      */
     public onAfterUnbindObservable = new Observable<RenderTargetTexture>();
 
@@ -603,6 +627,7 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
         let colorAttachment: InternalTexture | undefined = undefined;
         let gammaSpace = true;
         let existingObjectRenderer: ObjectRenderer | undefined = undefined;
+        let enableClusteredLights = false;
         if (typeof generateMipMaps === "object") {
             const options = generateMipMaps;
             generateMipMaps = !!options.generateMipMaps;
@@ -622,6 +647,7 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
             colorAttachment = options.colorAttachment;
             gammaSpace = options.gammaSpace ?? gammaSpace;
             existingObjectRenderer = options.existingObjectRenderer;
+            enableClusteredLights = !!options.enableClusteredLights;
         }
 
         super(null, scene, !generateMipMaps, undefined, samplingMode, undefined, undefined, undefined, undefined, format);
@@ -647,12 +673,16 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
             new ObjectRenderer(name, scene, {
                 numPasses: isCube ? 6 : this.getRenderLayers() || 1,
                 doNotChangeAspectRatio,
+                enableClusteredLights,
             });
 
         this._onBeforeRenderingManagerRenderObserver = this._objectRenderer.onBeforeRenderingManagerRenderObservable.add(() => {
+            // One of the actions below can dispose this RTT, so capture the scene first.
+            const scene = this._scene!;
+
             // Before clear
             if (!this._disableEngineStages) {
-                for (const step of this._scene!._beforeRenderTargetClearStage) {
+                for (const step of scene._beforeRenderTargetClearStage) {
                     step.action(this, this._currentFaceIndex, this._currentLayer);
                 }
             }
@@ -661,22 +691,30 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
             if (this.onClearObservable.hasObservers()) {
                 this.onClearObservable.notifyObservers(engine);
             } else if (!this.skipInitialClear) {
-                engine.clear(this.clearColor || this._scene!.clearColor, true, true, true);
+                engine.clear(this.clearColor ?? scene.clearColor, true, true, true);
             }
 
             if (!this._doNotChangeAspectRatio) {
-                this._scene!.updateTransformMatrix(true);
+                scene.updateTransformMatrix(true);
             }
 
             // Before Camera Draw
             if (!this._disableEngineStages) {
-                for (const step of this._scene!._beforeRenderTargetDrawStage) {
+                for (const step of scene._beforeRenderTargetDrawStage) {
                     step.action(this, this._currentFaceIndex, this._currentLayer);
                 }
+            }
+
+            if (engine._debugPushGroup) {
+                engine._debugPushGroup(`Render to ${this.name} (face #${this._currentFaceIndex} layer #${this._currentLayer})`);
             }
         });
 
         this._onAfterRenderingManagerRenderObserver = this._objectRenderer.onAfterRenderingManagerRenderObservable.add(() => {
+            if (engine._debugPopGroup) {
+                engine._debugPopGroup();
+            }
+
             // After Camera Draw
             if (!this._disableEngineStages) {
                 for (const step of this._scene!._afterRenderTargetDrawStage) {
@@ -1081,6 +1119,12 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
             useCameraPostProcess = this.useCameraPostProcesses;
         }
 
+        const engine = scene.getEngine();
+
+        if (engine._debugPushGroup) {
+            engine._debugPushGroup(`Render to ${this.name}`);
+        }
+
         this._objectRenderer.prepareRenderList();
 
         this.onBeforeBindObservable.notifyObservers(this);
@@ -1106,6 +1150,10 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
         this.onAfterUnbindObservable.notifyObservers(this);
 
         this._objectRenderer.finishRender();
+
+        if (engine._debugPopGroup) {
+            engine._debugPopGroup();
+        }
     }
 
     private _bestReflectionRenderTargetDimension(renderDimension: number, scale: number): number {
@@ -1174,11 +1222,7 @@ export class RenderTargetTexture extends Texture implements IRenderTargetTexture
 
         this._prepareFrame(scene, faceIndex, layer, useCameraPostProcess);
 
-        engine._debugPushGroup?.(`render to face #${faceIndex} layer #${layer}`, 2);
-
         this._objectRenderer.render(faceIndex + layer, true); // only faceIndex or layer (if any) will be different from 0 (we don't support array of cubes), so it's safe to add them to get the pass index
-
-        engine._debugPopGroup?.(2);
 
         this._unbindFrameBuffer(engine, faceIndex);
 

@@ -1,13 +1,13 @@
 import { Logger } from "../../Misc/logger";
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { Camera } from "../../Cameras/camera";
-import type { Scene } from "../../scene";
+import { type Scene } from "../../scene";
 import { Vector3 } from "../../Maths/math.vector";
 import { Color3, Color4 } from "../../Maths/math.color";
 import { Mesh } from "../../Meshes/mesh";
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
 import { Geometry } from "../../Meshes/geometry";
-import type { Node } from "../../node";
+import { type Node } from "../../node";
 import { TransformNode } from "../../Meshes/transformNode";
 import { Material } from "../../Materials/material";
 import { MultiMaterial } from "../../Materials/multiMaterial";
@@ -16,10 +16,12 @@ import { HDRCubeTexture } from "../../Materials/Textures/hdrCubeTexture";
 import { AnimationGroup } from "../../Animations/animationGroup";
 import { Light } from "../../Lights/light";
 import { SceneComponentConstants } from "../../sceneComponent";
-import { SceneLoader } from "../../Loading/sceneLoader";
+import { RegisterSceneLoaderPlugin } from "../../Loading/sceneLoader";
+import { SceneLoaderFlags } from "../sceneLoaderFlags";
+import { Constants } from "../../Engines/constants";
 import { AssetContainer } from "../../assetContainer";
 import { ActionManager } from "../../Actions/actionManager";
-import type { IParticleSystem } from "../../Particles/IParticleSystem";
+import { type IParticleSystem } from "../../Particles/IParticleSystem";
 import { Skeleton } from "../../Bones/skeleton";
 import { MorphTargetManager } from "../../Morph/morphTargetManager";
 import { CannonJSPlugin } from "../../Physics/v1/Plugins/cannonJSPlugin";
@@ -31,6 +33,11 @@ import { Tools } from "../../Misc/tools";
 import { PostProcess } from "../../PostProcesses/postProcess";
 import { SpriteManager } from "core/Sprites/spriteManager";
 import { GetIndividualParser, Parse } from "./babylonFileParser.function";
+import { Observable } from "../../Misc/observable";
+import { type MorphTarget } from "../../Morph/morphTarget";
+
+import "../../Physics/joinedPhysicsEngineComponent";
+import "../../Helpers/sceneHelpers";
 
 /** @internal */
 // eslint-disable-next-line @typescript-eslint/naming-convention, no-var
@@ -50,7 +57,9 @@ export class BabylonFileLoaderConfiguration {
 
 let TempIndexContainer: { [key: string]: Node } = {};
 let TempMaterialIndexContainer: { [key: string]: Material } = {};
+let TempMorphTargetIndexContainer: { [key: number]: MorphTarget } = {};
 let TempMorphTargetManagerIndexContainer: { [key: string]: MorphTargetManager } = {};
+let TempSkeletonIndexContainer: { [key: number]: Skeleton } = {};
 
 const ParseMaterialByPredicate = (predicate: (parsedMaterial: any) => boolean, parsedData: any, scene: Scene, rootUrl: string) => {
     if (!parsedData.materials) {
@@ -152,8 +161,52 @@ const FindMaterial = (materialId: any, scene: Scene) => {
     return TempMaterialIndexContainer[materialId];
 };
 
-const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError?: (message: string, exception?: any) => void, addToScene = false): AssetContainer => {
+/**
+ * @experimental
+ * Loads an AssetContainer from a serialized Babylon scene.
+ * @param scene The scene to load the asset container into.
+ * @param serializedScene The serialized scene data. This can be either a JSON string, or an object (e.g. from a call to JSON.parse).
+ * @param rootUrl The root URL for loading assets.
+ * @returns The loaded AssetContainer.
+ */
+export function LoadAssetContainerFromSerializedScene(scene: Scene, serializedScene: string | object, rootUrl: string): AssetContainer {
+    return LoadAssetContainer(scene, serializedScene, rootUrl);
+}
+
+const LoadAssetContainer = (scene: Scene, data: string | object, rootUrl: string, onError?: (message: string, exception?: any) => void, addToScene = false): AssetContainer => {
     const container = new AssetContainer(scene);
+
+    // When loading into a container (not directly into the scene), suppress entity-added
+    // observables to prevent scene events during loading. Entities still get added to scene
+    // arrays (so the linking code can find them), but no events fire.
+    // They are removed from the scene at the end via container.removeAllFromScene().
+    let savedObservables: Record<string, Observable<any>> | undefined;
+    if (!addToScene) {
+        savedObservables = {
+            mesh: scene.onNewMeshAddedObservable,
+            transformNode: scene.onNewTransformNodeAddedObservable,
+            light: scene.onNewLightAddedObservable,
+            camera: scene.onNewCameraAddedObservable,
+            material: scene.onNewMaterialAddedObservable,
+            multiMaterial: scene.onNewMultiMaterialAddedObservable,
+            texture: scene.onNewTextureAddedObservable,
+            skeleton: scene.onNewSkeletonAddedObservable,
+            geometry: scene.onNewGeometryAddedObservable,
+            animationGroup: scene.onNewAnimationGroupAddedObservable,
+            particleSystem: scene.onNewParticleSystemAddedObservable,
+        };
+        scene.onNewMeshAddedObservable = new Observable();
+        scene.onNewTransformNodeAddedObservable = new Observable();
+        scene.onNewLightAddedObservable = new Observable();
+        scene.onNewCameraAddedObservable = new Observable();
+        scene.onNewMaterialAddedObservable = new Observable();
+        scene.onNewMultiMaterialAddedObservable = new Observable();
+        scene.onNewTextureAddedObservable = new Observable();
+        scene.onNewSkeletonAddedObservable = new Observable();
+        scene.onNewGeometryAddedObservable = new Observable();
+        scene.onNewAnimationGroupAddedObservable = new Observable();
+        scene.onNewParticleSystemAddedObservable = new Observable();
+    }
 
     // Entire method running in try block, so ALWAYS logs as far as it got, only actually writes details
     // when SceneLoader.debugLogging = true (default), or exception encountered.
@@ -162,9 +215,9 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
     let log = "importScene has failed JSON parse";
     try {
         // eslint-disable-next-line no-var
-        var parsedData = JSON.parse(data);
+        var parsedData = typeof data === "object" ? data : JSON.parse(data);
         log = "";
-        const fullDetails = SceneLoader.loggingLevel === SceneLoader.DETAILED_LOGGING;
+        const fullDetails = SceneLoaderFlags.loggingLevel === Constants.SCENELOADER_DETAILED_LOGGING;
 
         let index: number;
         let cache: number;
@@ -322,13 +375,22 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
             }
         }
 
-        // Morph targets
+        // Morph target managers
         if (parsedData.morphTargetManagers !== undefined && parsedData.morphTargetManagers !== null) {
             for (const parsedManager of parsedData.morphTargetManagers) {
                 const manager = MorphTargetManager.Parse(parsedManager, scene);
                 TempMorphTargetManagerIndexContainer[parsedManager.id] = manager;
                 container.morphTargetManagers.push(manager);
                 manager._parentContainer = container;
+
+                // Morph targets - add to TempMorphTargetIndexContainer to later connect animations -> morph targets
+                for (let index = 0; index < parsedManager.targets.length; index++) {
+                    const parsedTarget = parsedManager.targets[index];
+                    if (parsedTarget.uniqueId !== undefined && parsedTarget.uniqueId !== null) {
+                        const target = manager.getTarget(index);
+                        TempMorphTargetIndexContainer[parsedTarget.uniqueId] = target;
+                    }
+                }
             }
         }
 
@@ -337,10 +399,20 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
             for (index = 0, cache = parsedData.skeletons.length; index < cache; index++) {
                 const parsedSkeleton = parsedData.skeletons[index];
                 const skeleton = Skeleton.Parse(parsedSkeleton, scene);
+                if (parsedSkeleton.uniqueId !== undefined && parsedSkeleton.uniqueId !== null) {
+                    TempSkeletonIndexContainer[parsedSkeleton.uniqueId] = skeleton;
+                }
                 container.skeletons.push(skeleton);
                 skeleton._parentContainer = container;
                 log += index === 0 ? "\n\tSkeletons:" : "";
                 log += "\n\t\t" + skeleton.toString(fullDetails);
+
+                // Bones - add to TempIndexContainer to later connect animations -> bones
+                for (let boneIndex = 0; boneIndex < parsedSkeleton.bones.length; boneIndex++) {
+                    const parsedBone = parsedSkeleton.bones[boneIndex];
+                    const bone = skeleton.bones[boneIndex]; // This was instantiated in Skeleton.Parse
+                    TempIndexContainer[parsedBone.uniqueId] = bone;
+                }
             }
         }
 
@@ -354,6 +426,7 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
             if (vertexData !== undefined && vertexData !== null) {
                 for (index = 0, cache = vertexData.length; index < cache; index++) {
                     const parsedVertexData = vertexData[index];
+
                     addedGeometry.push(Geometry.Parse(parsedVertexData, scene, rootUrl));
                 }
             }
@@ -424,10 +497,74 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
         }
 
         // Animation Groups
-        if (parsedData.animationGroups !== undefined && parsedData.animationGroups !== null) {
+        if (parsedData.animationGroups !== undefined && parsedData.animationGroups !== null && parsedData.animationGroups.length) {
+            // Build the nodeMap only for scenes with animationGroups.
+            let nodeMap: Nullable<Map<Node["id"], Node>> = null;
+
+            // Helper to get nodes by id more efficiently, building the nodeMap only on first access.
+            const getNodeById = (id: Node["id"]) => {
+                if (!nodeMap) {
+                    nodeMap = new Map<Node["id"], Node>();
+
+                    // Nodes in scene does not change when parsing animationGroups, so it's safe to build a map.
+                    // This follows the order of scene.getNodeById: mesh, transformNode, light, camera, bone
+                    for (let index = 0; index < scene.meshes.length; index++) {
+                        // This follows the behavior of scene.getXXXById, which picks the first match
+                        if (!nodeMap.has(scene.meshes[index].id)) {
+                            nodeMap.set(scene.meshes[index].id, scene.meshes[index]);
+                        }
+                    }
+                    for (let index = 0; index < scene.transformNodes.length; index++) {
+                        if (!nodeMap.has(scene.transformNodes[index].id)) {
+                            nodeMap.set(scene.transformNodes[index].id, scene.transformNodes[index]);
+                        }
+                    }
+                    for (let index = 0; index < scene.lights.length; index++) {
+                        if (!nodeMap.has(scene.lights[index].id)) {
+                            nodeMap.set(scene.lights[index].id, scene.lights[index]);
+                        }
+                    }
+                    for (let index = 0; index < scene.cameras.length; index++) {
+                        if (!nodeMap.has(scene.cameras[index].id)) {
+                            nodeMap.set(scene.cameras[index].id, scene.cameras[index]);
+                        }
+                    }
+                    for (let skeletonIndex = 0; skeletonIndex < scene.skeletons.length; skeletonIndex++) {
+                        const skeleton = scene.skeletons[skeletonIndex];
+                        for (let boneIndex = 0; boneIndex < skeleton.bones.length; boneIndex++) {
+                            if (!nodeMap.has(skeleton.bones[boneIndex].id)) {
+                                nodeMap.set(skeleton.bones[boneIndex].id, skeleton.bones[boneIndex]);
+                            }
+                        }
+                    }
+                }
+
+                return nodeMap.get(id);
+            };
+
+            const targetLookup = (parsedTargetAnimation: any) => {
+                let target = null;
+                const isMorphTarget = parsedTargetAnimation.animation.property === "influence";
+                const uniqueId = parsedTargetAnimation.targetUniqueId;
+
+                // Attempt to find animation targets by uniqueId first (tracked in TempXXXIndexContainer).
+                if (uniqueId !== undefined && uniqueId !== null) {
+                    target = isMorphTarget ? TempMorphTargetIndexContainer[uniqueId] : TempIndexContainer[uniqueId];
+                }
+
+                // Backwards compatibility: If no uniqueId is provided or no match is found,
+                // fall back to searching by id in the scene.
+                if (!target) {
+                    const id = parsedTargetAnimation.targetId;
+                    target = isMorphTarget ? scene.getMorphTargetById(id) : getNodeById(id);
+                }
+
+                return target;
+            };
+
             for (index = 0, cache = parsedData.animationGroups.length; index < cache; index++) {
                 const parsedAnimationGroup = parsedData.animationGroups[index];
-                const animationGroup = AnimationGroup.Parse(parsedAnimationGroup, scene);
+                const animationGroup = AnimationGroup.Parse(parsedAnimationGroup, scene, targetLookup);
                 container.animationGroups.push(animationGroup);
                 animationGroup._parentContainer = container;
                 log += index === 0 ? "\n\tAnimationGroups:" : "";
@@ -440,6 +577,8 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
             for (let index = 0, cache = parsedData.spriteManagers.length; index < cache; index++) {
                 const parsedSpriteManager = parsedData.spriteManagers[index];
                 const spriteManager = SpriteManager.Parse(parsedSpriteManager, scene, rootUrl);
+                container.spriteManagers.push(spriteManager);
+                spriteManager._parentContainer = container;
                 log += "\n\t\tSpriteManager " + spriteManager.name;
             }
         }
@@ -508,19 +647,45 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
             }
         }
 
-        // link skeleton transform nodes
+        // link meshes with skeletons
+        for (const mesh of scene.meshes) {
+            // First try to get it via uniqueId
+            if (mesh._waitingSkeletonUniqueId !== null) {
+                mesh.skeleton = TempSkeletonIndexContainer[mesh._waitingSkeletonUniqueId];
+            }
+
+            // If not possible or not found, try to get it from the scene (backwards compatibility)
+            if (mesh._waitingSkeletonId !== null && !mesh.skeleton) {
+                mesh.skeleton = scene.getLastSkeletonById(mesh._waitingSkeletonId);
+            }
+
+            mesh._waitingSkeletonId = null;
+            mesh._waitingSkeletonUniqueId = null;
+        }
+
+        // link bones to transform nodes
         for (index = 0, cache = scene.skeletons.length; index < cache; index++) {
             const skeleton = scene.skeletons[index];
             if (skeleton._hasWaitingData) {
                 if (skeleton.bones != null) {
                     for (const bone of skeleton.bones) {
-                        if (bone._waitingTransformNodeId) {
-                            const linkTransformNode = scene.getLastEntryById(bone._waitingTransformNodeId) as TransformNode;
-                            if (linkTransformNode) {
-                                bone.linkTransformNode(linkTransformNode);
-                            }
-                            bone._waitingTransformNodeId = null;
+                        let linkTransformNode: Nullable<Node> = null;
+                        // First try to get it via uniqueId
+                        if (bone._waitingTransformNodeUniqueId !== null) {
+                            linkTransformNode = TempIndexContainer[bone._waitingTransformNodeUniqueId];
                         }
+
+                        // If not possible or not found, try to get it from the scene (backwards compatibility)
+                        if (bone._waitingTransformNodeId !== null && !linkTransformNode) {
+                            linkTransformNode = scene.getLastEntryById(bone._waitingTransformNodeId);
+                        }
+
+                        if (linkTransformNode) {
+                            bone.linkTransformNode(linkTransformNode as TransformNode);
+                        }
+
+                        bone._waitingTransformNodeId = null;
+                        bone._waitingTransformNodeUniqueId = null;
                     }
                 }
 
@@ -597,20 +762,39 @@ const LoadAssetContainer = (scene: Scene, data: string, rootUrl: string, onError
     } finally {
         TempIndexContainer = {};
         TempMaterialIndexContainer = {};
+        TempMorphTargetIndexContainer = {};
         TempMorphTargetManagerIndexContainer = {};
+        TempSkeletonIndexContainer = {};
 
         if (!addToScene) {
+            // Restore observables before removing from scene
+            if (savedObservables) {
+                scene.onNewMeshAddedObservable = savedObservables.mesh;
+                scene.onNewTransformNodeAddedObservable = savedObservables.transformNode;
+                scene.onNewLightAddedObservable = savedObservables.light;
+                scene.onNewCameraAddedObservable = savedObservables.camera;
+                scene.onNewMaterialAddedObservable = savedObservables.material;
+                scene.onNewMultiMaterialAddedObservable = savedObservables.multiMaterial;
+                scene.onNewTextureAddedObservable = savedObservables.texture;
+                scene.onNewSkeletonAddedObservable = savedObservables.skeleton;
+                scene.onNewGeometryAddedObservable = savedObservables.geometry;
+                scene.onNewAnimationGroupAddedObservable = savedObservables.animationGroup;
+                scene.onNewParticleSystemAddedObservable = savedObservables.particleSystem;
+            }
+            // Removes entities from scene arrays and moves them to the container
             container.removeAllFromScene();
         }
-        if (log !== null && SceneLoader.loggingLevel !== SceneLoader.NO_LOGGING) {
-            Logger.Log(logOperation("loadAssets", parsedData ? parsedData.producer : "Unknown") + (SceneLoader.loggingLevel !== SceneLoader.MINIMAL_LOGGING ? log : ""));
+        if (log !== null && SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_NO_LOGGING) {
+            Logger.Log(
+                logOperation("loadAssets", parsedData ? parsedData.producer : "Unknown") + (SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_MINIMAL_LOGGING ? log : "")
+            );
         }
     }
 
     return container;
 };
 
-SceneLoader.RegisterPlugin({
+RegisterSceneLoaderPlugin({
     name: "babylon.js",
     extensions: ".babylon",
     canDirectLoad: (data: string) => {
@@ -640,7 +824,7 @@ SceneLoader.RegisterPlugin({
             // eslint-disable-next-line no-var
             var parsedData = JSON.parse(data);
             log = "";
-            const fullDetails = SceneLoader.loggingLevel === SceneLoader.DETAILED_LOGGING;
+            const fullDetails = SceneLoaderFlags.loggingLevel === Constants.SCENELOADER_DETAILED_LOGGING;
             if (!meshesNames) {
                 meshesNames = null;
             } else if (!Array.isArray(meshesNames)) {
@@ -785,15 +969,18 @@ SceneLoader.RegisterPlugin({
                                     const parsedSkeleton = parsedData.skeletons[skeletonIndex];
                                     if (parsedSkeleton.id === parsedMesh.skeletonId) {
                                         const skeleton = Skeleton.Parse(parsedSkeleton, scene);
-                                        skeletons.push(skeleton);
                                         loadedSkeletonsIds.push(parsedSkeleton.id);
+                                        if (parsedSkeleton.uniqueId !== undefined && parsedSkeleton.uniqueId !== null) {
+                                            TempSkeletonIndexContainer[parsedSkeleton.uniqueId] = skeleton;
+                                        }
+                                        skeletons.push(skeleton);
                                         log += "\n\tSkeleton " + skeleton.toString(fullDetails);
                                     }
                                 }
                             }
                         }
 
-                        // Morph targets ?
+                        // Morph target managers ?
                         if (parsedMesh.morphTargetManagerId > -1 && parsedData.morphTargetManagers !== undefined && parsedData.morphTargetManagers !== null) {
                             const morphTargetManagerAlreadyLoaded = loadedMorphTargetManagerIds.indexOf(parsedMesh.morphTargetManagerId) > -1;
                             if (!morphTargetManagerAlreadyLoaded) {
@@ -887,19 +1074,45 @@ SceneLoader.RegisterPlugin({
                     }
                 }
 
-                // link skeleton transform nodes
+                // link meshes with skeletons
+                for (const mesh of scene.meshes) {
+                    // First try to get it via uniqueId
+                    if (mesh._waitingSkeletonUniqueId !== null) {
+                        mesh.skeleton = TempSkeletonIndexContainer[mesh._waitingSkeletonUniqueId];
+                    }
+
+                    // If not possible or not found, try to get it from the scene (backwards compatibility)
+                    if (mesh._waitingSkeletonId !== null && !mesh.skeleton) {
+                        mesh.skeleton = scene.getLastSkeletonById(mesh._waitingSkeletonId);
+                    }
+
+                    mesh._waitingSkeletonId = null;
+                    mesh._waitingSkeletonUniqueId = null;
+                }
+
+                // link bones to transform nodes
                 for (let index = 0, cache = scene.skeletons.length; index < cache; index++) {
                     const skeleton = scene.skeletons[index];
                     if (skeleton._hasWaitingData) {
                         if (skeleton.bones != null) {
                             for (const bone of skeleton.bones) {
-                                if (bone._waitingTransformNodeId) {
-                                    const linkTransformNode = scene.getLastEntryById(bone._waitingTransformNodeId) as TransformNode;
-                                    if (linkTransformNode) {
-                                        bone.linkTransformNode(linkTransformNode);
-                                    }
-                                    bone._waitingTransformNodeId = null;
+                                let linkTransformNode: Nullable<Node> = null;
+                                // First try to get it via uniqueId
+                                if (bone._waitingTransformNodeUniqueId !== null) {
+                                    linkTransformNode = parsedIdToNodeMap.get(bone._waitingTransformNodeUniqueId) ?? null;
                                 }
+
+                                // If not possible or not found, try to get it from the scene (backwards compatibility)
+                                if (bone._waitingTransformNodeId !== null && !linkTransformNode) {
+                                    linkTransformNode = scene.getLastEntryById(bone._waitingTransformNodeId);
+                                }
+
+                                if (linkTransformNode) {
+                                    bone.linkTransformNode(linkTransformNode as TransformNode);
+                                }
+
+                                bone._waitingTransformNodeId = null;
+                                bone._waitingTransformNodeUniqueId = null;
                             }
                         }
 
@@ -946,11 +1159,14 @@ SceneLoader.RegisterPlugin({
                 throw err;
             }
         } finally {
-            if (log !== null && SceneLoader.loggingLevel !== SceneLoader.NO_LOGGING) {
-                Logger.Log(logOperation("importMesh", parsedData ? parsedData.producer : "Unknown") + (SceneLoader.loggingLevel !== SceneLoader.MINIMAL_LOGGING ? log : ""));
+            if (log !== null && SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_NO_LOGGING) {
+                Logger.Log(
+                    logOperation("importMesh", parsedData ? parsedData.producer : "Unknown") + (SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_MINIMAL_LOGGING ? log : "")
+                );
             }
             TempMaterialIndexContainer = {};
             TempMorphTargetManagerIndexContainer = {};
+            TempSkeletonIndexContainer = {};
         }
 
         return false;
@@ -968,7 +1184,7 @@ SceneLoader.RegisterPlugin({
 
             // Scene
             if (parsedData.useDelayedTextureLoading !== undefined && parsedData.useDelayedTextureLoading !== null) {
-                scene.useDelayedTextureLoading = parsedData.useDelayedTextureLoading && !SceneLoader.ForceFullSceneLoadingForIncremental;
+                scene.useDelayedTextureLoading = parsedData.useDelayedTextureLoading && !SceneLoaderFlags.ForceFullSceneLoadingForIncremental;
             }
             if (parsedData.autoClear !== undefined && parsedData.autoClear !== null) {
                 scene.autoClear = parsedData.autoClear;
@@ -1070,8 +1286,10 @@ SceneLoader.RegisterPlugin({
                 throw err;
             }
         } finally {
-            if (log !== null && SceneLoader.loggingLevel !== SceneLoader.NO_LOGGING) {
-                Logger.Log(logOperation("importScene", parsedData ? parsedData.producer : "Unknown") + (SceneLoader.loggingLevel !== SceneLoader.MINIMAL_LOGGING ? log : ""));
+            if (log !== null && SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_NO_LOGGING) {
+                Logger.Log(
+                    logOperation("importScene", parsedData ? parsedData.producer : "Unknown") + (SceneLoaderFlags.loggingLevel !== Constants.SCENELOADER_MINIMAL_LOGGING ? log : "")
+                );
             }
         }
         return false;

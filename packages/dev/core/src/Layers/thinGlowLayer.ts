@@ -1,20 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
 import { Vector2 } from "../Maths/math.vector";
 import { VertexBuffer } from "../Buffers/buffer";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
-import type { Texture } from "../Materials/Textures/texture";
-import type { Effect } from "../Materials/effect";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Mesh } from "../Meshes/mesh";
+import { type Texture } from "../Materials/Textures/texture";
+import { type Effect } from "../Materials/effect";
 import { Material } from "../Materials/material";
-import { ThinEffectLayer } from "./thinEffectLayer";
+import { ThinEffectLayer, type IThinEffectLayerOptions } from "./thinEffectLayer";
 import { Constants } from "../Engines/constants";
 import { Color4 } from "../Maths/math.color";
-import type { PBRMaterial } from "../Materials/PBR/pbrMaterial";
+import { type PBRMaterial } from "../Materials/PBR/pbrMaterial";
 
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
-import type { IThinEffectLayerOptions } from "./thinEffectLayer";
 import { ThinBlurPostProcess } from "core/PostProcesses/thinBlurPostProcess";
 
 /**
@@ -31,6 +30,14 @@ export interface IThinGlowLayerOptions extends IThinEffectLayerOptions {
      * Forces the merge step to be done in ldr (clamp values > 1). Default: false
      */
     ldrMerge?: boolean;
+
+    /**
+     * Exclude all meshes from the glow layer by default.
+     * This is useful if you have dynamic meshes and you want to control them specifically and
+     * make sure that there are no "leaking" glowing meshes.
+     * Default: false
+     */
+    excludeByDefault?: boolean;
 }
 
 /**
@@ -135,11 +142,13 @@ export class ThinGlowLayer extends ThinEffectLayer {
             mainTextureRatio: 0.5,
             mainTextureFixedSize: 0,
             mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
+            mainTextureFormat: Constants.TEXTUREFORMAT_RGBA,
             blurKernelSize: 32,
             camera: null,
             renderingGroupId: -1,
             ldrMerge: false,
             alphaBlendingMode: Constants.ALPHA_ADD,
+            excludeByDefault: false,
             ...options,
         };
 
@@ -176,6 +185,14 @@ export class ThinGlowLayer extends ThinEffectLayer {
 
     public override getEffectName(): string {
         return ThinGlowLayer.EffectName;
+    }
+
+    /** @internal */
+    public override _internalShouldRender(): boolean {
+        if (this._options.excludeByDefault && !this._includedOnlyMeshes.length) {
+            return false;
+        }
+        return super._internalShouldRender();
     }
 
     public override _createMergeEffect(): Effect {
@@ -298,6 +315,7 @@ export class ThinGlowLayer extends ThinEffectLayer {
 
     /**
      * Add a mesh in the exclusion list to prevent it to impact or being impacted by the glow layer.
+     * This will not have an effect if meshes are excluded by default (see setExcludedByDefault).
      * @param mesh The mesh to exclude from the glow layer
      */
     public addExcludedMesh(mesh: Mesh): void {
@@ -308,6 +326,7 @@ export class ThinGlowLayer extends ThinEffectLayer {
 
     /**
      * Remove a mesh from the exclusion list to let it impact or being impacted by the glow layer.
+     * This will not have an effect if meshes are excluded by default (see setExcludedByDefault).
      * @param mesh The mesh to remove
      */
     public removeExcludedMesh(mesh: Mesh): void {
@@ -336,6 +355,15 @@ export class ThinGlowLayer extends ThinEffectLayer {
         if (index !== -1) {
             this._includedOnlyMeshes.splice(index, 1);
         }
+    }
+
+    /**
+     * Set the excluded by default option.
+     * If true, all meshes will be excluded by default unless they are added to the inclusion list.
+     * @param value The boolean value to set the excluded by default option to
+     */
+    public setExcludedByDefault(value: boolean): void {
+        this._options.excludeByDefault = value;
     }
 
     public override hasMesh(mesh: AbstractMesh): boolean {

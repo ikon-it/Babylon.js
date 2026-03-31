@@ -1,10 +1,10 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Color4 } from "../Maths/math.color";
-import type { Mesh } from "../Meshes/mesh";
-import type { SubMesh } from "../Meshes/subMesh";
+import { type Mesh } from "../Meshes/mesh";
+import { type SubMesh } from "../Meshes/subMesh";
 import { VertexBuffer } from "../Buffers/buffer";
-import type { SmartArray } from "../Misc/smartArray";
-import type { Scene } from "../scene";
+import { type SmartArray } from "../Misc/smartArray";
+import { type Scene } from "../scene";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { Camera } from "../Cameras/camera";
@@ -15,12 +15,14 @@ import "../Shaders/depth.vertex";
 import { _WarnImport } from "../Misc/devTools";
 import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
 
-import type { Material } from "../Materials/material";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type Material } from "../Materials/material";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { BindBonesParameters, BindMorphTargetParameters, PrepareDefinesAndAttributesForMorphTargets, PushAttributesForInstances } from "../Materials/materialHelper.functions";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import type { IEffectCreationOptions } from "core/Materials";
+import { type IEffectCreationOptions } from "core/Materials/effect";
+import { type GaussianSplattingMaterial } from "../Materials/GaussianSplatting/gaussianSplattingMaterial";
+import { type GaussianSplattingMesh } from "../Meshes/GaussianSplatting/gaussianSplattingMesh";
 
 /**
  * This represents a depth renderer in Babylon.
@@ -62,6 +64,26 @@ export class DepthRenderer {
     /** Force writing the transparent objects into the depth map */
     public forceDepthWriteTransparentMeshes = false;
 
+    private _alphaBlendedDepth = false;
+    private _alphaBlendedDepthMaterialCache: Map<number, boolean> = new Map();
+
+    /**
+     * Enable or disable the alpha blending for depth rendering. When enabled,
+     * the depth renderer will blend the depth values with the alpha values of
+     * the transparent objects.
+     */
+    public get alphaBlendedDepth(): boolean {
+        return this._alphaBlendedDepth;
+    }
+    public set alphaBlendedDepth(value: boolean) {
+        if (this._alphaBlendedDepth === value) {
+            return;
+        }
+        this._alphaBlendedDepth = value;
+        // Clear the cache so materials will be recreated with the new define
+        this._alphaBlendedDepthMaterialCache.clear();
+    }
+
     /**
      * Specifies that the depth renderer will only be used within
      * the camera it is created for.
@@ -99,6 +121,7 @@ export class DepthRenderer {
      * @param samplingMode The sampling mode to be used with the render target (Linear, Nearest...) (default: TRILINEAR_SAMPLINGMODE)
      * @param storeCameraSpaceZ Defines whether the depth stored is the Z coordinate in camera space. If true, storeNonLinearDepth has no effect. (Default: false)
      * @param name Name of the render target (default: DepthRenderer)
+     * @param existingRenderTargetTexture An existing render target texture to use (default: undefined). If not provided, a new render target texture will be created.
      */
     constructor(
         scene: Scene,
@@ -107,7 +130,8 @@ export class DepthRenderer {
         storeNonLinearDepth = false,
         samplingMode = Texture.TRILINEAR_SAMPLINGMODE,
         storeCameraSpaceZ = false,
-        name?: string
+        name?: string,
+        existingRenderTargetTexture?: RenderTargetTexture
     ) {
         this._scene = scene;
         this._storeNonLinearDepth = storeNonLinearDepth;
@@ -139,20 +163,22 @@ export class DepthRenderer {
 
         // Render target
         const format = this.isPacked || !engine._features.supportExtendedTextureFormats ? Constants.TEXTUREFORMAT_RGBA : Constants.TEXTUREFORMAT_R;
-        this._depthMap = new RenderTargetTexture(
-            name ?? "DepthRenderer",
-            { width: engine.getRenderWidth(), height: engine.getRenderHeight() },
-            this._scene,
-            false,
-            true,
-            type,
-            false,
-            samplingMode,
-            undefined,
-            undefined,
-            undefined,
-            format
-        );
+        this._depthMap =
+            existingRenderTargetTexture ??
+            new RenderTargetTexture(
+                name ?? "DepthRenderer",
+                { width: engine.getRenderWidth(), height: engine.getRenderHeight() },
+                this._scene,
+                false,
+                true,
+                type,
+                false,
+                samplingMode,
+                undefined,
+                undefined,
+                undefined,
+                format
+            );
         this._depthMap.wrapU = Texture.CLAMP_ADDRESSMODE;
         this._depthMap.wrapV = Texture.CLAMP_ADDRESSMODE;
         this._depthMap.refreshRate = 1;
@@ -168,14 +194,6 @@ export class DepthRenderer {
         // set default depth value to 1.0 (far away)
         this._depthMap.onClearObservable.add((engine) => {
             engine.clear(this.clearColor, true, true, true);
-        });
-
-        this._depthMap.onBeforeBindObservable.add(() => {
-            engine._debugPushGroup?.("depth renderer", 1);
-        });
-
-        this._depthMap.onAfterUnbindObservable.add(() => {
-            engine._debugPopGroup?.(1);
         });
 
         this._depthMap.customIsReadyFunction = (mesh: AbstractMesh, refreshRate: number, preWarm?: boolean) => {
@@ -241,7 +259,21 @@ export class DepthRenderer {
             if (this.isReady(subMesh, hardwareInstancedRendering) && camera) {
                 subMesh._renderId = scene.getRenderId();
 
-                const renderingMaterial = effectiveMesh._internalAbstractMeshDataInfo._materialForRenderPass?.[engine.currentRenderPassId];
+                let renderingMaterial = effectiveMesh._internalAbstractMeshDataInfo._materialForRenderPass?.[engine.currentRenderPassId];
+                if (effectiveMesh.getClassName() === "GaussianSplattingMesh") {
+                    const cachedAlphaBlendedDepth = this._alphaBlendedDepthMaterialCache.get(effectiveMesh.uniqueId);
+                    const compoundMesh = (effectiveMesh as GaussianSplattingMesh).isCompound;
+                    // Recreate material if it doesn't exist or if alphaBlendedDepth changed
+                    if (renderingMaterial === undefined || cachedAlphaBlendedDepth !== this.alphaBlendedDepth) {
+                        const gsMaterial = effectiveMesh.material! as GaussianSplattingMaterial;
+                        renderingMaterial = gsMaterial.makeDepthRenderingMaterial(this._scene, this._shaderLanguage, this.alphaBlendedDepth, compoundMesh);
+                        this.setMaterialForRendering(effectiveMesh, renderingMaterial);
+                        this._alphaBlendedDepthMaterialCache.set(effectiveMesh.uniqueId, this.alphaBlendedDepth);
+                        if (!renderingMaterial.isReady()) {
+                            return;
+                        }
+                    }
+                }
 
                 let drawWrapper = subMesh._getDrawWrapper();
                 if (!drawWrapper && renderingMaterial) {
@@ -318,6 +350,13 @@ export class DepthRenderer {
                     }
                 }
 
+                // Alpha blending for transparent materials
+                if (this.alphaBlendedDepth && material.needAlphaBlendingForMesh(effectiveMesh)) {
+                    engine.setAlphaMode(Constants.ALPHA_COMBINE);
+                } else {
+                    engine.setAlphaMode(Constants.ALPHA_DISABLE);
+                }
+
                 // Draw
                 renderingMesh._processRendering(effectiveMesh, subMesh, effect, material.fillMode, batch, hardwareInstancedRendering, (isInstance, world) =>
                     effect.setMatrix("world", world)
@@ -331,6 +370,10 @@ export class DepthRenderer {
             transparentSubMeshes: SmartArray<SubMesh>,
             depthOnlySubMeshes: SmartArray<SubMesh>
         ): void => {
+            const engine = this._scene.getEngine();
+            // Save the current alpha mode to restore it after rendering
+            const previousAlphaMode = engine.getAlphaMode();
+
             let index;
 
             if (depthOnlySubMeshes.length) {
@@ -355,6 +398,10 @@ export class DepthRenderer {
                 for (index = 0; index < transparentSubMeshes.length; index++) {
                     transparentSubMeshes.data[index].getEffectiveMesh()._internalAbstractMeshDataInfo._isActiveIntermediate = false;
                 }
+            }
+
+            if (this.alphaBlendedDepth) {
+                engine.setAlphaMode(previousAlphaMode);
             }
         };
     }
@@ -512,7 +559,7 @@ export class DepthRenderer {
             const uniforms = [
                 "world",
                 "mBones",
-                "boneTextureWidth",
+                "boneTextureInfo",
                 "pointSize",
                 "viewProjection",
                 "view",

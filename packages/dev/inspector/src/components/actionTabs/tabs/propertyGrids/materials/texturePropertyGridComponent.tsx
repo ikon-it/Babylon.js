@@ -1,16 +1,16 @@
 import * as React from "react";
 
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { Tools } from "core/Misc/tools";
-import type { Observable } from "core/Misc/observable";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type Observable } from "core/Misc/observable";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Texture } from "core/Materials/Textures/texture";
 import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
 import { MultiRenderTarget } from "core/Materials/Textures/multiRenderTarget";
-import type { CubeTexture } from "core/Materials/Textures/cubeTexture";
+import { type CubeTexture } from "core/Materials/Textures/cubeTexture";
 import { Constants } from "core/Engines/constants";
 
-import type { PropertyChangedEvent } from "../../../../propertyChangedEvent";
+import { type PropertyChangedEvent } from "../../../../propertyChangedEvent";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
@@ -19,9 +19,9 @@ import { TextureLineComponent } from "../../../lines/textureLineComponent";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
-import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
+import { type LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
 import { ValueLineComponent } from "shared-ui-components/lines/valueLineComponent";
-import type { GlobalState } from "../../../../../components/globalState";
+import { type GlobalState } from "../../../../../components/globalState";
 
 import { AdvancedDynamicTextureInstrumentation } from "gui/2D/adtInstrumentation";
 import { AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
@@ -66,13 +66,26 @@ const TextureFormat = [
     { label: "Depth24Unorm/Stencil8", normalizable: 0, hideType: true, value: Constants.TEXTUREFORMAT_DEPTH24UNORM_STENCIL8 },
     { label: "Depth32Float/Stencil8", normalizable: 0, hideType: true, value: Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8 },
     { label: "RGBA BPTC UNorm", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA_BPTC_UNORM },
+    { label: "SRGB+A BPTC UNorm", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB_ALPHA_BPTC_UNORM },
     { label: "RGB BPTC UFloat", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT },
     { label: "RGB BPTC SFloat", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB_BPTC_SIGNED_FLOAT },
     { label: "RGBA S3TC DXT5", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT5 },
+    { label: "SRGB+A S3TC DXT5", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT },
     { label: "RGBA S3TC DXT3", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT3 },
+    { label: "SRGB+A S3TC DXT3", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT },
     { label: "RGBA S3TC DXT1", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT1 },
+    { label: "SRGB+A S3TC DXT1", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT },
     { label: "RGB S3TC DXT1", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB_S3TC_DXT1 },
+    { label: "SRGB S3TC DXT1", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB_S3TC_DXT1_EXT },
     { label: "RGBA ASTC 4x4", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4 },
+    { label: "SRGB+A ASTC 4x4", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR },
+    { label: "RGB ETC1", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB_ETC1_WEBGL },
+    { label: "RGB ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB8_ETC2 },
+    { label: "SRGB ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB8_ETC2 },
+    { label: "RGB+A1 ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 },
+    { label: "SRGB+A1 ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 },
+    { label: "RGBA ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_RGBA8_ETC2_EAC },
+    { label: "SRGB+A ETC2", normalizable: 0, compressed: true, value: Constants.TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC },
 ];
 
 const TextureType = [
@@ -94,6 +107,9 @@ const TextureType = [
     { label: "32-bits with only 8-bit used (stencil)", normalizable: 0, value: Constants.TEXTURETYPE_FLOAT_32_UNSIGNED_INT_24_8_REV },
 ];
 
+/**
+ *
+ */
 export class TexturePropertyGridComponent extends React.Component<ITexturePropertyGridComponentProps, ITexturePropertyGridComponentState> {
     private _adtInstrumentation: Nullable<AdvancedDynamicTextureInstrumentation>;
     private _popoutWindowRef: React.RefObject<PopupComponent>;
@@ -377,6 +393,7 @@ export class TexturePropertyGridComponent extends React.Component<ITextureProper
                     {texture.isRenderTarget && <TextLineComponent label="Depth/stencil texture format" value={oformatDepthStencil?.label ?? "no"} />}
                     {texture instanceof Texture && <TextLineComponent label="Stored as inverted on Y" value={texture.invertY ? "Yes" : "No"} />}
                     <TextLineComponent label="Has mipmaps" value={!texture.noMipmap ? "Yes" : "No"} />
+                    <TextLineComponent label="Samples" value={texture._texture?.samples.toString() ?? "unknown"} />
                     <SliderLineComponent
                         lockObject={this.props.lockObject}
                         label="UV set"

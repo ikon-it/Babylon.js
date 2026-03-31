@@ -1,17 +1,17 @@
-import type { WebGPUEngine } from "../Engines/webgpuEngine";
+import { type WebGPUEngine } from "../Engines/webgpuEngine";
 import { StorageBuffer } from "../Buffers/storageBuffer";
 import { ComputeShader } from "../Compute/computeShader";
 import { UniformBuffer } from "../Materials/uniformBuffer";
-import type { IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
-import type { Buffer, VertexBuffer } from "../Buffers/buffer";
-import type { GPUParticleSystem } from "./gpuParticleSystem";
+import { type IGPUParticleSystemPlatform } from "./IGPUParticleSystemPlatform";
+import { type Buffer, type VertexBuffer } from "../Buffers/buffer";
+import { type GPUParticleSystem } from "./gpuParticleSystem";
 
-import type { DataArray, Nullable } from "../types";
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataArray, type Nullable } from "../types";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { Constants } from "../Engines/constants";
 import { UniformBufferEffectCommonAccessor } from "../Materials/uniformBufferEffectCommonAccessor";
-import type { ComputeBindingMapping } from "../Engines/Extensions/engine.computeShader";
-import type { Effect } from "../Materials/effect";
+import { type ComputeBindingMapping } from "../Engines/Extensions/engine.computeShader";
+import { type Effect } from "../Materials/effect";
 import { RegisterClass } from "../Misc/typeStore";
 
 import "../ShadersWGSL/gpuUpdateParticles.compute";
@@ -93,6 +93,8 @@ export class ComputeShaderParticleSystem implements IGPUParticleSystemPlatform {
         this._simParamsComputeShader.addUniform("randomTextureSize", 1);
         this._simParamsComputeShader.addUniform("lifeTime", 2);
         this._simParamsComputeShader.addUniform("emitPower", 2);
+        this._simParamsComputeShader.addUniform("emitIndex", 1);
+        this._simParamsComputeShader.addUniform("emitCount", 1);
         if (!this._parent._colorGradientsTexture) {
             this._simParamsComputeShader.addUniform("color1", 4);
             this._simParamsComputeShader.addUniform("color2", 4);

@@ -1,16 +1,16 @@
 import { Camera } from "../../Cameras/camera";
 import { Engine } from "../../Engines/engine";
-import { Scene } from "../../scene";
+import { type ICreateSceneUboOptions, Scene } from "../../scene";
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
-import type { Nullable } from "../../types";
-import type { RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
+import { type Nullable } from "../../types";
+import { type RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
 import { Matrix, TmpVectors } from "../../Maths/math.vector";
 import { UniformBuffer } from "../../Materials/uniformBuffer";
 import { MultiviewRenderTarget } from "../../Materials/Textures/MultiviewRenderTarget";
 import { Frustum } from "../../Maths/math.frustum";
-import type { WebGLRenderTargetWrapper } from "../WebGL/webGLRenderTargetWrapper";
-import type { RenderTargetWrapper } from "../renderTargetWrapper";
-import type { AbstractEngine } from "../abstractEngine";
+import { type WebGLRenderTargetWrapper } from "../WebGL/webGLRenderTargetWrapper";
+import { type RenderTargetWrapper } from "../renderTargetWrapper";
+import { type AbstractEngine } from "../abstractEngine";
 
 declare module "../../Engines/engine" {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -175,6 +175,8 @@ declare module "../../scene" {
         /** @internal */
         _multiviewSceneUbo: Nullable<UniformBuffer>;
         /** @internal */
+        _multiviewSceneUboIsActive: boolean;
+        /** @internal */
         _createMultiviewUbo(): void;
         /** @internal */
         _updateMultiviewUbo(viewR?: Matrix, projectionR?: Matrix): void;
@@ -183,8 +185,8 @@ declare module "../../scene" {
     }
 }
 
-function CreateMultiviewUbo(engine: AbstractEngine, name?: string) {
-    const ubo = new UniformBuffer(engine, undefined, true, name);
+function CreateMultiviewUbo(engine: AbstractEngine, name?: string, trackUBOsInFrame?: boolean) {
+    const ubo = new UniformBuffer(engine, undefined, true, name, undefined, trackUBOsInFrame);
     ubo.addUniform("viewProjection", 16);
     ubo.addUniform("viewProjectionR", 16);
     ubo.addUniform("view", 16);
@@ -197,14 +199,18 @@ const CurrentCreateSceneUniformBuffer = Scene.prototype.createSceneUniformBuffer
 
 Scene.prototype._transformMatrixR = Matrix.Zero();
 Scene.prototype._multiviewSceneUbo = null;
+Scene.prototype._multiviewSceneUboIsActive = false;
 Scene.prototype._createMultiviewUbo = function () {
     this._multiviewSceneUbo = CreateMultiviewUbo(this.getEngine(), "scene_multiview");
+    this._multiviewSceneUboIsActive = true;
 };
-Scene.prototype.createSceneUniformBuffer = function (name?: string): UniformBuffer {
-    if (this._multiviewSceneUbo) {
-        return CreateMultiviewUbo(this.getEngine(), name);
+Scene.prototype.createSceneUniformBuffer = function (name?: string, trackUBOsInFrameOrOptions?: boolean | ICreateSceneUboOptions): UniformBuffer {
+    const forceMono = typeof trackUBOsInFrameOrOptions === "object" && !!trackUBOsInFrameOrOptions?.forceMono;
+    if (!forceMono && this._multiviewSceneUboIsActive) {
+        const trackUBOsInFrame = typeof trackUBOsInFrameOrOptions === "boolean" ? trackUBOsInFrameOrOptions : trackUBOsInFrameOrOptions?.trackUBOsInFrame;
+        return CreateMultiviewUbo(this.getEngine(), name, trackUBOsInFrame);
     }
-    return CurrentCreateSceneUniformBuffer.bind(this)(name);
+    return CurrentCreateSceneUniformBuffer.bind(this)(name, trackUBOsInFrameOrOptions);
 };
 Scene.prototype._updateMultiviewUbo = function (viewR?: Matrix, projectionR?: Matrix) {
     if (viewR && projectionR) {

@@ -1,21 +1,20 @@
-import { Observable } from "../Misc/observable";
-import type { FloatArray, Nullable } from "../types";
+import { type Observer, Observable } from "../Misc/observable";
+import { type FloatArray, type Nullable } from "../types";
 import { Constants } from "../Engines/constants";
 import { Logger } from "../Misc/logger";
-import type { IDisposable } from "../scene";
-import type { IPipelineContext } from "../Engines/IPipelineContext";
-import type { DataBuffer } from "../Buffers/dataBuffer";
-import type { IShaderProcessor } from "../Engines/Processors/iShaderProcessor";
-import type { _IProcessingOptions, ShaderCustomProcessingFunction, _IShaderProcessingContext } from "../Engines/Processors/shaderProcessingOptions";
-import type { IMatrixLike, IVector2Like, IVector3Like, IVector4Like, IColor3Like, IColor4Like, IQuaternionLike } from "../Maths/math.like";
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { IEffectFallbacks } from "./iEffectFallbacks";
+import { type IDisposable } from "../scene";
+import { type IPipelineContext } from "../Engines/IPipelineContext";
+import { type DataBuffer } from "../Buffers/dataBuffer";
+import { type IShaderProcessor } from "../Engines/Processors/iShaderProcessor";
+import { type _IProcessingOptions, type ShaderCustomProcessingFunction, type _IShaderProcessingContext } from "../Engines/Processors/shaderProcessingOptions";
+import { type IMatrixLike, type IVector2Like, type IVector3Like, type IVector4Like, type IColor3Like, type IColor4Like, type IQuaternionLike } from "../Maths/math.like";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type IEffectFallbacks } from "./iEffectFallbacks";
 import { ShaderStore as EngineShaderStore } from "../Engines/shaderStore";
 import { ShaderLanguage } from "./shaderLanguage";
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import type { ThinTexture } from "../Materials/Textures/thinTexture";
-import type { IPipelineGenerationOptions } from "./effect.functions";
-import { _ProcessShaderCode, getCachedPipeline, createAndPreparePipelineContext, resetCachedPipeline } from "./effect.functions";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
+import { type ThinTexture } from "../Materials/Textures/thinTexture";
+import { type IPipelineGenerationOptions, _ProcessShaderCode, getCachedPipeline, createAndPreparePipelineContext, resetCachedPipeline } from "./effect.functions";
 import { _RetryWithInterval } from "core/Misc/timingTools";
 
 /**
@@ -292,6 +291,8 @@ export class Effect implements IDisposable {
     private _processCodeAfterIncludes: ShaderCustomProcessingFunction | undefined = undefined;
     private _processFinalCode: Nullable<ShaderCustomProcessingFunction> = null;
 
+    private _onReleaseEffectsObserver: Nullable<Observer<AbstractEngine>> = null;
+
     /**
      * Gets the shader language type used to write vertex and fragment source code.
      */
@@ -403,7 +404,8 @@ export class Effect implements IDisposable {
             }
         }
 
-        this._engine.onReleaseEffectsObservable.addOnce(() => {
+        this._onReleaseEffectsObserver = this._engine.onReleaseEffectsObservable.addOnce(() => {
+            this._onReleaseEffectsObserver = null;
             if (this.isDisposed) {
                 return;
             }
@@ -887,8 +889,8 @@ export class Effect implements IDisposable {
         Logger.Error("Defines:\n" + this.defines);
         if (Effect.LogShaderCodeOnCompilationError) {
             let lineErrorVertex = null,
-                lineErrorFragment = null,
-                code = null;
+                lineErrorFragment = null;
+            let code: Nullable<string>;
             if (this._pipelineContext?._getVertexShaderCode()) {
                 [code, lineErrorVertex] = this._getShaderCodeAndErrorLine(this._pipelineContext._getVertexShaderCode(), this._compilationError, false);
                 if (code) {
@@ -1520,6 +1522,11 @@ export class Effect implements IDisposable {
         if (this._refCount > 0 || this._isDisposed) {
             // Others are still using the effect or the effect was already disposed
             return;
+        }
+
+        if (this._onReleaseEffectsObserver) {
+            this._engine.onReleaseEffectsObservable.remove(this._onReleaseEffectsObserver);
+            this._onReleaseEffectsObserver = null;
         }
 
         if (this._pipelineContext) {

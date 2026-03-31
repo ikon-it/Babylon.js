@@ -1,14 +1,14 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { VertexBuffer } from "core/Meshes/buffer";
-import type { GaussianSplattingMesh } from "core/Meshes/GaussianSplatting/gaussianSplattingMesh";
+import { type GaussianSplattingMesh } from "core/Meshes/GaussianSplatting/gaussianSplattingMesh";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import { type NodeMaterial, type NodeMaterialDefines } from "../../nodeMaterial";
 
 /**
  * Block used for the Gaussian Splatting
@@ -102,11 +102,15 @@ export class GaussianSplattingBlock extends NodeMaterialBlock {
     }
     /**
      * Update defines for shader compilation
-     * @param mesh defines the mesh to be rendered
-     * @param nodeMaterial defines the node material requesting the update
      * @param defines defines the material defines to update
+     * @param nodeMaterial defines the node material requesting the update
+     * @param mesh defines the mesh to be rendered
      */
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(defines: NodeMaterialDefines, nodeMaterial: NodeMaterial, mesh?: AbstractMesh) {
+        if (!mesh) {
+            return;
+        }
+
         if (mesh.getClassName() == "GaussianSplattingMesh") {
             defines.setValue("SH_DEGREE", (<GaussianSplattingMesh>mesh).shDegree, true);
         }
@@ -130,6 +134,10 @@ export class GaussianSplattingBlock extends NodeMaterialBlock {
         state._emitUniformFromString("kernelSize", NodeMaterialBlockConnectionPointTypes.Float);
         state._emitUniformFromString("eyePosition", NodeMaterialBlockConnectionPointTypes.Vector3);
         state.attributes.push(VertexBuffer.PositionKind);
+        state.attributes.push("splatIndex0");
+        state.attributes.push("splatIndex1");
+        state.attributes.push("splatIndex2");
+        state.attributes.push("splatIndex3");
         state.sharedData.nodeMaterial.backFaceCulling = false;
 
         const splatPosition = this.splatPosition;
@@ -158,15 +166,14 @@ export class GaussianSplattingBlock extends NodeMaterialBlock {
             if (state.shaderLanguage === ShaderLanguage.WGSL) {
                 state.compilationString += `let worldRot: mat3x3f =  mat3x3f(${world.associatedVariableName}[0].xyz, ${world.associatedVariableName}[1].xyz, ${world.associatedVariableName}[2].xyz);`;
                 state.compilationString += `let normWorldRot: mat3x3f = inverseMat3(worldRot);`;
-                state.compilationString += `var dir: vec3f = normalize(normWorldRot * (${splatPosition.associatedVariableName}.xyz - uniforms.eyePosition));\n`;
+                state.compilationString += `var eyeToSplatLocalSpace: vec3f = normalize(normWorldRot * (${splatPosition.associatedVariableName}.xyz - uniforms.eyePosition));\n`;
             } else {
                 state.compilationString += `mat3 worldRot = mat3(${world.associatedVariableName});`;
                 state.compilationString += `mat3 normWorldRot = inverseMat3(worldRot);`;
-                state.compilationString += `vec3 dir = normalize(normWorldRot * (${splatPosition.associatedVariableName}.xyz - eyePosition));\n`;
+                state.compilationString += `vec3 eyeToSplatLocalSpace = normalize(normWorldRot * (${splatPosition.associatedVariableName}.xyz - eyePosition));\n`;
             }
 
-            state.compilationString += `dir *= vec3${addF}(1.,1.,-1.);\n`;
-            state.compilationString += `${state._declareOutput(sh)} = computeSH(splat, dir);\n`;
+            state.compilationString += `${state._declareOutput(sh)} = computeSH(splat, eyeToSplatLocalSpace);\n`;
             state.compilationString += `#else\n`;
             state.compilationString += `${state._declareOutput(sh)} = vec3${addF}(0.,0.,0.);\n`;
             state.compilationString += `#endif;\n`;
@@ -174,7 +181,7 @@ export class GaussianSplattingBlock extends NodeMaterialBlock {
             state.compilationString += `${state._declareOutput(sh)} = vec3${addF}(0.,0.,0.);`;
         }
 
-        state.compilationString += `${state._declareOutput(output)} = gaussianSplatting(${input}, ${splatPosition.associatedVariableName}, ${splatScaleParameter}, covA, covB, ${world.associatedVariableName}, ${view.associatedVariableName}, ${projection.associatedVariableName}${uniforms});\n`;
+        state.compilationString += `${state._declareOutput(output)} = gaussianSplatting(${input}.xy, ${splatPosition.associatedVariableName}, ${splatScaleParameter}, covA, covB, ${world.associatedVariableName}, ${view.associatedVariableName}, ${projection.associatedVariableName}${uniforms});\n`;
         return this;
     }
 }

@@ -1,27 +1,26 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { serialize } from "../Misc/decorators";
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Scene } from "../scene";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Mesh } from "../Meshes/mesh";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import type { Effect } from "../Materials/effect";
-import type { Material } from "../Materials/material";
-import type { PostProcess } from "../PostProcesses/postProcess";
+import { type Effect } from "../Materials/effect";
+import { type Material } from "../Materials/material";
+import { type PostProcess } from "../PostProcesses/postProcess";
 import { BlurPostProcess } from "../PostProcesses/blurPostProcess";
-import type { IThinGlowLayerOptions } from "./thinGlowLayer";
+import { type IThinGlowLayerOptions, ThinGlowLayer } from "./thinGlowLayer";
 import { EffectLayer } from "./effectLayer";
 import { Constants } from "../Engines/constants";
 import { RegisterClass } from "../Misc/typeStore";
-import type { Color4 } from "core/Maths/math.color";
+import { type Color4 } from "core/Maths/math.color";
 
 import "../Layers/effectLayerSceneComponent";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { GetExponentOfTwo } from "../Misc/tools.functions";
-import { ThinGlowLayer } from "./thinGlowLayer";
-import type { ThinBlurPostProcess } from "core/PostProcesses/thinBlurPostProcess";
+import { type ThinBlurPostProcess } from "core/PostProcesses/thinBlurPostProcess";
 
 declare module "../scene" {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -171,6 +170,7 @@ export class GlowLayer extends EffectLayer {
             alphaBlendingMode: Constants.ALPHA_ADD,
             mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
             generateStencilBuffer: false,
+            excludeByDefault: false,
             ...options,
         };
 
@@ -206,7 +206,7 @@ export class GlowLayer extends EffectLayer {
         blurTextureWidth = this._engine.needPOTTextures ? GetExponentOfTwo(blurTextureWidth, this._maxSize) : blurTextureWidth;
         blurTextureHeight = this._engine.needPOTTextures ? GetExponentOfTwo(blurTextureHeight, this._maxSize) : blurTextureHeight;
 
-        let textureType = 0;
+        let textureType: number;
         if (this._engine.getCaps().textureHalfFloatRender) {
             textureType = Constants.TEXTURETYPE_HALF_FLOAT;
         } else {
@@ -334,6 +334,9 @@ export class GlowLayer extends EffectLayer {
         this._postProcesses.map((pp) => {
             pp.autoClear = false;
         });
+
+        this._mainTextureCreatedSize.width = this._mainTextureDesiredSize.width;
+        this._mainTextureCreatedSize.height = this._mainTextureDesiredSize.height;
     }
 
     /**
@@ -400,6 +403,7 @@ export class GlowLayer extends EffectLayer {
 
     /**
      * Add a mesh in the exclusion list to prevent it to impact or being impacted by the glow layer.
+     * This will not have an effect if meshes are excluded by default (see setExcludedByDefault).
      * @param mesh The mesh to exclude from the glow layer
      */
     public addExcludedMesh(mesh: Mesh): void {
@@ -408,6 +412,7 @@ export class GlowLayer extends EffectLayer {
 
     /**
      * Remove a mesh from the exclusion list to let it impact or being impacted by the glow layer.
+     * This will not have an effect if meshes are excluded by default (see setExcludedByDefault).
      * @param mesh The mesh to remove
      */
     public removeExcludedMesh(mesh: Mesh): void {
@@ -428,6 +433,15 @@ export class GlowLayer extends EffectLayer {
      */
     public removeIncludedOnlyMesh(mesh: Mesh): void {
         this._thinEffectLayer.removeIncludedOnlyMesh(mesh);
+    }
+
+    /**
+     * Set the excluded by default option.
+     * If true, all meshes will be excluded by default unless they are added to the inclusion list.
+     * @param value The boolean value to set the excluded by default option to
+     */
+    public setExcludedByDefault(value: boolean): void {
+        this._thinEffectLayer.setExcludedByDefault(value);
     }
 
     /**

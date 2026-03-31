@@ -1,18 +1,16 @@
 import { serialize, serializeAsColor3, expandToProperty } from "../Misc/decorators";
-import type { Nullable } from "../types";
-import type { Scene } from "../scene";
-import type { Matrix } from "../Maths/math.vector";
-import { Vector3 } from "../Maths/math.vector";
+import { type Nullable } from "../types";
+import { type Scene } from "../scene";
+import { type Matrix, Vector3 } from "../Maths/math.vector";
 import { Color3, TmpColors } from "../Maths/math.color";
 import { Node } from "../node";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Effect } from "../Materials/effect";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Effect } from "../Materials/effect";
 import { UniformBuffer } from "../Materials/uniformBuffer";
-import type { IShadowGenerator } from "./Shadows/shadowGenerator";
+import { type IShadowGenerator } from "./Shadows/shadowGenerator";
 import { GetClass } from "../Misc/typeStore";
-import type { ISortableLight } from "./lightConstants";
-import { LightConstants } from "./lightConstants";
-import type { Camera } from "../Cameras/camera";
+import { type ISortableLight, LightConstants } from "./lightConstants";
+import { type Camera } from "../Cameras/camera";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 /**
  * Base class of all the lights in Babylon. It groups all the generic information about lights.
@@ -144,7 +142,8 @@ export abstract class Light extends Node implements ISortableLight {
     public intensity = 1.0;
 
     private _range = Number.MAX_VALUE;
-    protected _inverseSquaredRange = 0;
+    /** @internal */
+    public _inverseSquaredRange = 0;
 
     /**
      * Defines how far from the source the light is impacting in scene units.
@@ -368,21 +367,32 @@ export abstract class Light extends Node implements ISortableLight {
     private _lastUseSpecular: boolean;
 
     /**
+     * Used internally by ClusteredLight to sort lights
+     * @internal
+     */
+    public _currentViewDepth = 0;
+
+    /**
      * Creates a Light object in the scene.
      * Documentation : https://doc.babylonjs.com/features/featuresDeepDive/lights/lights_introduction
      * @param name The friendly name of the light
      * @param scene The scene the light belongs too
+     * @param dontAddToScene True to not add the light to the scene
      */
-    constructor(name: string, scene?: Scene) {
+    constructor(name: string, scene?: Scene, dontAddToScene?: boolean) {
         super(name, scene, false);
-        this.getScene().addLight(this);
+        if (!dontAddToScene) {
+            this.getScene().addLight(this);
+        }
         this._uniformBuffer = new UniformBuffer(this.getScene().getEngine(), undefined, undefined, name);
         this._buildUniformLayout();
 
         this.includedOnlyMeshes = [] as AbstractMesh[];
         this.excludedMeshes = [] as AbstractMesh[];
 
-        this._resyncMeshes();
+        if (!dontAddToScene) {
+            this._resyncMeshes();
+        }
     }
 
     protected abstract _buildUniformLayout(): void;
@@ -483,7 +493,7 @@ export abstract class Light extends Node implements ISortableLight {
      */
     public override toString(fullDetails?: boolean): string {
         let ret = "Name: " + this.name;
-        ret += ", type: " + ["Point", "Directional", "Spot", "Hemispheric"][this.getTypeID()];
+        ret += ", type: " + ["Point", "Directional", "Spot", "Hemispheric", "Clustered"][this.getTypeID()];
         if (this.animations) {
             for (let i = 0; i < this.animations.length; i++) {
                 ret += ", animation[0]: " + this.animations[i].toString(fullDetails);

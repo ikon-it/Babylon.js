@@ -1,24 +1,19 @@
-import type { Nullable } from "../../types";
-import type { AbstractAudioNode } from "../abstractAudio";
-import type { ISoundSourceOptions } from "../abstractAudio/abstractSoundSource";
-import { AbstractSoundSource } from "../abstractAudio/abstractSoundSource";
-import { _HasSpatialAudioOptions } from "../abstractAudio/subProperties/abstractSpatialAudio";
-import type { _SpatialAudio } from "../abstractAudio/subProperties/spatialAudio";
+import { type Nullable } from "../../types";
+import { type AbstractAudioNode } from "../abstractAudio/abstractAudioNode";
+import { type ISoundSourceOptions, AbstractSoundSource } from "../abstractAudio/abstractSoundSource";
+import { type AbstractSpatialAudio, _HasSpatialAudioOptions } from "../abstractAudio/subProperties/abstractSpatialAudio";
 import { _StereoAudio } from "../abstractAudio/subProperties/stereoAudio";
 import { _WebAudioBusAndSoundSubGraph } from "./subNodes/webAudioBusAndSoundSubGraph";
 import { _SpatialWebAudio } from "./subProperties/spatialWebAudio";
-import type { _WebAudioEngine } from "./webAudioEngine";
-import type { IWebAudioInNode } from "./webAudioNode";
+import { type _WebAudioEngine } from "./webAudioEngine";
+import { type IWebAudioInNode } from "./webAudioNode";
 
 /** @internal */
 export class _WebAudioSoundSource extends AbstractSoundSource {
-    private _spatial: Nullable<_SpatialWebAudio> = null;
-    private readonly _spatialAutoUpdate: boolean = true;
-    private readonly _spatialMinUpdateTime: number = 0;
     private _stereo: Nullable<_StereoAudio> = null;
 
     protected _subGraph: _WebAudioBusAndSoundSubGraph;
-    protected _webAudioNode: AudioNode;
+    protected _webAudioNode: Nullable<AudioNode> = null;
 
     /** @internal */
     public _audioContext: AudioContext | OfflineAudioContext;
@@ -28,15 +23,7 @@ export class _WebAudioSoundSource extends AbstractSoundSource {
 
     /** @internal */
     public constructor(name: string, webAudioNode: AudioNode, engine: _WebAudioEngine, options: Partial<ISoundSourceOptions>) {
-        super(name, engine);
-
-        if (typeof options.spatialAutoUpdate === "boolean") {
-            this._spatialAutoUpdate = options.spatialAutoUpdate;
-        }
-
-        if (typeof options.spatialMinUpdateTime === "number") {
-            this._spatialMinUpdateTime = options.spatialMinUpdateTime;
-        }
+        super(name, engine, options);
 
         this._audioContext = this.engine._audioContext;
         this._webAudioNode = webAudioNode;
@@ -73,14 +60,6 @@ export class _WebAudioSoundSource extends AbstractSoundSource {
     }
 
     /** @internal */
-    public override get spatial(): _SpatialAudio {
-        if (this._spatial) {
-            return this._spatial;
-        }
-        return this._initSpatialProperty();
-    }
-
-    /** @internal */
     public override get stereo(): _StereoAudio {
         return this._stereo ?? (this._stereo = new _StereoAudio(this._subGraph));
     }
@@ -89,8 +68,16 @@ export class _WebAudioSoundSource extends AbstractSoundSource {
     public override dispose(): void {
         super.dispose();
 
-        this._spatial?.dispose();
-        this._spatial = null;
+        if (this._webAudioNode) {
+            if (this._webAudioNode instanceof MediaStreamAudioSourceNode) {
+                for (const track of this._webAudioNode.mediaStream.getTracks()) {
+                    track.stop();
+                }
+            }
+
+            this._webAudioNode.disconnect();
+            this._webAudioNode = null;
+        }
 
         this._stereo = null;
 
@@ -133,12 +120,8 @@ export class _WebAudioSoundSource extends AbstractSoundSource {
         return true;
     }
 
-    private _initSpatialProperty(): _SpatialAudio {
-        if (!this._spatial) {
-            this._spatial = new _SpatialWebAudio(this._subGraph, this._spatialAutoUpdate, this._spatialMinUpdateTime);
-        }
-
-        return this._spatial;
+    protected override _createSpatialProperty(autoUpdate: boolean, minUpdateTime: number): AbstractSpatialAudio {
+        return new _SpatialWebAudio(this._subGraph, autoUpdate, minUpdateTime);
     }
 
     private static _SubGraph = class extends _WebAudioBusAndSoundSubGraph {
@@ -155,10 +138,10 @@ export class _WebAudioSoundSource extends AbstractSoundSource {
         protected override _onSubNodesChanged(): void {
             super._onSubNodesChanged();
 
-            this._owner._inNode.disconnect();
+            this._owner._inNode?.disconnect();
 
             if (this._owner._subGraph._inNode) {
-                this._owner._inNode.connect(this._owner._subGraph._inNode);
+                this._owner._inNode?.connect(this._owner._subGraph._inNode);
             }
         }
     };

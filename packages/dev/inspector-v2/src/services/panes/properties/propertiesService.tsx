@@ -1,210 +1,163 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { IDisposable } from "core/index";
+import { type IDisposable, type IReadonlyObservable } from "core/index";
+import { type DynamicAccordionSection, type DynamicAccordionSectionContent, type SectionsImperativeRef } from "../../../components/extensibleAccordion";
+import { type PropertyChangeInfo, PropertyContext } from "../../../contexts/propertyContext";
+import { type IService, type ServiceDefinition } from "../../../modularity/serviceDefinition";
+import { type ISelectionService, SelectionServiceIdentity } from "../../selectionService";
+import { type IShellService, ShellServiceIdentity } from "../../shellService";
 
-import type { IService, ServiceDefinition } from "../../../modularity/serviceDefinition";
-import type { ISelectionService } from "../../selectionService";
-import type { IShellService } from "../../shellService";
-
-import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Body1Strong, makeStyles, Subtitle1, tokens } from "@fluentui/react-components";
 import { DocumentTextRegular } from "@fluentui/react-icons";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
+import { Observable } from "core/Misc/observable";
+import { useImpulse } from "shared-ui-components/fluent/hooks/transientStateHooks";
+import { PropertiesPane } from "../../../components/properties/propertiesPane";
 import { useObservableCollection, useObservableState, useOrderedObservableCollection } from "../../../hooks/observableHooks";
 import { ObservableCollection } from "../../../misc/observableCollection";
-import { SelectionServiceIdentity } from "../../selectionService";
-import { ShellServiceIdentity } from "../../shellService";
 
-export type PropertiesServiceSection = Readonly<{
-    /**
-     * A unique identity for the section, which can be referenced by section content.
-     */
-    identity: symbol;
+/**
+ * The unique identity symbol for the properties service.
+ */
+export const PropertiesServiceIdentity = Symbol("PropertiesService");
 
-    /**
-     * An optional order for the section, relative to other sections.
-     * Defaults to 0.
-     */
-    order?: number;
-
-    /**
-     * An optional flag indicating whether the section should be collapsed by default.
-     * Defaults to false.
-     */
-    collapseByDefault?: boolean;
-}>;
-
-export type PropertiesServiceSectionContent<EntityT> = Readonly<{
+type PropertiesSectionContent<EntityT> = {
     /**
      * A unique key for the the content.
      */
     key: string;
 
     /**
-     * A predicate function that determines if the content is applicable to the given entity.
+     * A predicate function to determine if the content applies to the given entity.
      */
     predicate: (entity: unknown) => entity is EntityT;
-
-    /**
-     * The content that is added to individual sections.
-     */
-    content: readonly Readonly<{
-        /**
-         * The section this content belongs to.
-         */
-        section: symbol;
-
-        /**
-         * An optional order for the content within the section.
-         * Defaults to 0.
-         */
-        order?: number;
-
-        /**
-         * The React component that will be rendered for this content.
-         */
-        component: ComponentType<{ entity: EntityT }>;
-    }>[];
-}>;
-
-export const PropertiesServiceIdentity = Symbol("PropertiesService");
+} & {
+    content: readonly Omit<DynamicAccordionSectionContent<EntityT>, "key">[];
+};
 
 /**
- * Provides a properties pane that enables displaying and editing properties of an entity such as a mesh or a texture.
+ * Allows new sections or content to be added to the properties pane.
  */
 export interface IPropertiesService extends IService<typeof PropertiesServiceIdentity> {
     /**
      * Adds a new section (e.g. "General", "Transforms", etc.).
      * @param section A description of the section to add.
      */
-    addSection(section: PropertiesServiceSection): IDisposable;
+    addSection(section: DynamicAccordionSection): IDisposable;
 
     /**
      * Adds content to one or more sections.
      * @param content A description of the content to add.
      */
-    addSectionContent<EntityT>(content: PropertiesServiceSectionContent<EntityT>): IDisposable;
+    addSectionContent<EntityT>(content: PropertiesSectionContent<EntityT>): IDisposable;
+
+    /**
+     * Highlights the specified sections temporarily to draw the user's attention to them.
+     * @remarks All other sections are collapsed (but can be expanded by the user) until a different entity is selected.
+     * @param sectionIds The identities of the sections to highlight.
+     */
+    highlightSections(sectionIds: readonly string[]): void;
+
+    /**
+     * An observable that notifies when a property has been changed by the user.
+     * @remarks This observable only fires for changes made through the properties pane.
+     */
+    readonly onPropertyChanged: IReadonlyObservable<PropertyChangeInfo>;
 }
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const useStyles = makeStyles({
-    rootDiv: {
-        flex: 1,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-    },
-    placeholderDiv: {
-        padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM}`,
-    },
-    accordion: {
-        overflowY: "auto",
-        paddingBottom: tokens.spacingVerticalM,
-    },
-    panelDiv: {
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-    },
-});
-
+/**
+ * Provides a properties pane that enables displaying and editing properties of an entity such as a mesh or a texture.
+ */
 export const PropertiesServiceDefinition: ServiceDefinition<[IPropertiesService], [IShellService, ISelectionService]> = {
     friendlyName: "Properties Editor",
     produces: [PropertiesServiceIdentity],
     consumes: [ShellServiceIdentity, SelectionServiceIdentity],
     factory: (shellService, selectionService) => {
-        const sectionsCollection = new ObservableCollection<PropertiesServiceSection>();
-        const sectionContentCollection = new ObservableCollection<PropertiesServiceSectionContent<unknown>>();
+        const sectionsCollection = new ObservableCollection<DynamicAccordionSection>();
+        const sectionContentCollection = new ObservableCollection<PropertiesSectionContent<unknown>>();
+        const onPropertyChanged = new Observable<PropertyChangeInfo>();
+        const onHighlightSectionsRequested = new Observable<readonly string[]>(undefined, true);
 
         const registration = shellService.addSidePane({
             key: "Properties",
             title: "Properties",
             icon: DocumentTextRegular,
             horizontalLocation: "right",
-            suppressTeachingMoment: true,
+            verticalLocation: "top",
+            order: 100,
+            teachingMoment: false,
+            keepMounted: true,
             content: () => {
-                const classes = useStyles();
-
                 const sections = useOrderedObservableCollection(sectionsCollection);
                 const sectionContent = useObservableCollection(sectionContentCollection);
-                const boundEntity = useObservableState(() => selectionService.selectedEntity, selectionService.onSelectedEntityChanged);
-                const [version, setVersion] = useState(0);
+                const entity = useObservableState(() => selectionService.selectedEntity, selectionService.onSelectedEntityChanged);
+                const applicableContent = useMemo(
+                    () =>
+                        entity
+                            ? sectionContent
+                                  .filter((section) => section.predicate(entity))
+                                  .flatMap((section) => {
+                                      return section.content.map((content) => {
+                                          return {
+                                              key: section.key,
+                                              section: content.section,
+                                              order: content.order,
+                                              component: content.component,
+                                          };
+                                      });
+                                  })
+                            : [],
+                    [sectionContent, entity]
+                );
 
-                const visibleSections = useMemo(() => {
-                    // When any of this state changes, we should re-render the Accordion so the defaultOpenItems are re-evaluated.
-                    setVersion((prev) => prev + 1);
+                const sectionsRef = useRef<SectionsImperativeRef>(null);
 
-                    if (!boundEntity) {
-                        return [];
+                // The selected entity may be set at the same time as a highlight is requested.
+                // To account for this, we need to wait for one React render to complete before
+                // requesting the section highlight.
+                const [pendingHighlight, pulsePendingHighlightSections] = useImpulse<readonly string[]>();
+
+                useEffect(() => {
+                    const observer = onHighlightSectionsRequested.add((sectionIds) => {
+                        // Now this UI component is observing, so we don't need to cache pending requests anymore.
+                        onHighlightSectionsRequested.notifyIfTriggered = false;
+                        onHighlightSectionsRequested.cleanLastNotifiedState();
+                        pulsePendingHighlightSections(sectionIds);
+                    });
+
+                    return () => {
+                        observer.remove();
+                        // Now this UI component is no longer observing, so we need to cache pending requests again.
+                        onHighlightSectionsRequested.notifyIfTriggered = true;
+                    };
+                }, []);
+
+                useEffect(() => {
+                    if (pendingHighlight && sectionsRef.current) {
+                        sectionsRef.current.highlightSections(pendingHighlight);
                     }
-
-                    const applicableContent = sectionContent.filter((content) => content.predicate(boundEntity));
-                    return sections
-                        .map((section) => {
-                            // Get a flat list of the section content, preserving the key so it can be used when each component for each section is rendered.
-                            const contentForSection = applicableContent
-                                .flatMap((entry) => entry.content.map((content) => ({ key: entry.key, ...content })))
-                                .filter((content) => content.section === section.identity);
-
-                            // If there is no content for this section, we skip it.
-                            if (contentForSection.length === 0) {
-                                return null; // No content for this section
-                            }
-
-                            // Sort the content for this section by order, defaulting to 0 if not specified.
-                            contentForSection.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-                            // Return the section with its identity, collapseByDefault flag, and the content components to render.
-                            return {
-                                identity: section.identity,
-                                collapseByDefault: section.collapseByDefault ?? false,
-                                components: contentForSection.map((content) => ({ key: content.key, component: content.component })),
-                            };
-                        })
-                        .filter((section) => section !== null);
-                }, [sections, sectionContent, boundEntity]);
+                }, [pendingHighlight]);
 
                 return (
-                    <div className={classes.rootDiv}>
-                        {visibleSections.length > 0 ? (
-                            <Accordion
-                                key={version}
-                                className={classes.accordion}
-                                collapsible
-                                multiple
-                                defaultOpenItems={visibleSections.filter((section) => !section.collapseByDefault).map((section) => section.identity.description)}
-                            >
-                                {visibleSections.map((section) => {
-                                    return (
-                                        <AccordionItem key={section.identity.description} value={section.identity.description}>
-                                            <AccordionHeader expandIconPosition="end">
-                                                <Subtitle1>{section.identity.description}</Subtitle1>
-                                            </AccordionHeader>
-                                            <AccordionPanel>
-                                                <div className={classes.panelDiv}>
-                                                    {section.components.map((component) => {
-                                                        return <component.component key={component.key} entity={boundEntity} />;
-                                                    })}
-                                                </div>
-                                            </AccordionPanel>
-                                        </AccordionItem>
-                                    );
-                                })}
-                            </Accordion>
-                        ) : (
-                            <div className={classes.placeholderDiv}>
-                                <Body1Strong italic>
-                                    {boundEntity ? `Can't show properties for the selected entity type (${boundEntity.toString()})` : "No entity selected."}
-                                </Body1Strong>
-                            </div>
-                        )}
-                    </div>
+                    <PropertyContext.Provider value={{ onPropertyChanged }}>
+                        <PropertiesPane
+                            uniqueId="Properties"
+                            sections={sections}
+                            sectionContent={applicableContent}
+                            context={entity}
+                            sectionsRef={sectionsRef}
+                            enablePinnedItems
+                            enableHiddenItems
+                            enableSearchItems
+                        />
+                    </PropertyContext.Provider>
                 );
             },
         });
 
         return {
             addSection: (section) => sectionsCollection.add(section),
-            addSectionContent: (content) => sectionContentCollection.add(content as PropertiesServiceSectionContent<unknown>),
+            addSectionContent: (content) => sectionContentCollection.add(content as PropertiesSectionContent<unknown>),
+            onPropertyChanged,
+            highlightSections: (sectionIds: readonly string[]) => onHighlightSectionsRequested.notifyObservers(sectionIds),
             dispose: () => registration.dispose(),
         };
     },

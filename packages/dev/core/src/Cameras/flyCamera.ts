@@ -1,17 +1,16 @@
 import { serialize, serializeAsVector3 } from "../Misc/decorators";
-import type { Nullable } from "../types";
-import type { Scene } from "../scene";
-import type { Quaternion } from "../Maths/math.vector";
-import { Vector3 } from "../Maths/math.vector";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type Nullable } from "../types";
+import { type Scene } from "../scene";
+import { type Quaternion, Vector3 } from "../Maths/math.vector";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { TargetCamera } from "./targetCamera";
 import { FlyCameraInputsManager } from "./flyCameraInputsManager";
-import type { FlyCameraMouseInput } from "../Cameras/Inputs/flyCameraMouseInput";
-import type { FlyCameraKeyboardInput } from "../Cameras/Inputs/flyCameraKeyboardInput";
+import { type FlyCameraMouseInput } from "../Cameras/Inputs/flyCameraMouseInput";
+import { type FlyCameraKeyboardInput } from "../Cameras/Inputs/flyCameraKeyboardInput";
 import { Tools } from "../Misc/tools";
 import { RegisterClass } from "../Misc/typeStore";
 
-import type { Collider } from "../Collisions/collider";
+import { type Collider } from "../Collisions/collider";
 import { AbstractEngine } from "core/Engines/abstractEngine";
 
 /**
@@ -56,7 +55,7 @@ export class FlyCamera extends TargetCamera {
      * Define the current local rotation of the camera as a quaternion to prevent Gimbal lock.
      * This overrides and empties cameraRotation.
      */
-    public override rotationQuaternion: Quaternion;
+    public override rotationQuaternion: Nullable<Quaternion>;
 
     /**
      * Track Roll to maintain the wanted Rolling when looking around.

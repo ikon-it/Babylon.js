@@ -1,11 +1,10 @@
-import type { Quaternion, Vector3 } from "../../../Maths/math.vector";
-import type { Node } from "../../../node";
-import type { Nullable } from "../../../types";
+import { type Quaternion, type Vector3 } from "../../../Maths/math.vector";
+import { type Node } from "../../../node";
+import { type Nullable } from "../../../types";
 import { SpatialAudioAttachmentType } from "../../spatialAudioAttachmentType";
-import type { _AbstractAudioSubGraph } from "../subNodes/abstractAudioSubGraph";
+import { type _AbstractAudioSubGraph } from "../subNodes/abstractAudioSubGraph";
 import { AudioSubNode } from "../subNodes/audioSubNode";
-import type { _SpatialAudioSubNode } from "../subNodes/spatialAudioSubNode";
-import { _GetSpatialAudioSubNode, _SetSpatialAudioProperty } from "../subNodes/spatialAudioSubNode";
+import { type _SpatialAudioSubNode, _GetSpatialAudioSubNode, _SetSpatialAudioProperty } from "../subNodes/spatialAudioSubNode";
 import { _SpatialAudioDefaults, AbstractSpatialAudio } from "./abstractSpatialAudio";
 
 /** @internal */
@@ -16,6 +15,7 @@ export abstract class _SpatialAudio extends AbstractSpatialAudio {
     private _distanceModel: DistanceModelType = _SpatialAudioDefaults.distanceModel;
     private _maxDistance: number = _SpatialAudioDefaults.maxDistance;
     private _minDistance: number = _SpatialAudioDefaults.minDistance;
+    private _orientation: Vector3;
     private _panningModel: PanningModelType = _SpatialAudioDefaults.panningModel;
     private _position: Vector3;
     private _rolloffFactor: number = _SpatialAudioDefaults.rolloffFactor;
@@ -29,10 +29,12 @@ export abstract class _SpatialAudio extends AbstractSpatialAudio {
 
         const subNode = _GetSpatialAudioSubNode(subGraph);
         if (subNode) {
+            this._orientation = subNode.orientation.clone();
             this._position = subNode.position.clone();
             this._rotation = subNode.rotation.clone();
             this._rotationQuaternion = subNode.rotationQuaternion.clone();
         } else {
+            this._orientation = _SpatialAudioDefaults.orientation.clone();
             this._position = _SpatialAudioDefaults.position.clone();
             this._rotation = _SpatialAudioDefaults.rotation.clone();
             this._rotationQuaternion = _SpatialAudioDefaults.rotationQuaternion.clone();
@@ -42,6 +44,12 @@ export abstract class _SpatialAudio extends AbstractSpatialAudio {
         }
 
         this._subGraph = subGraph;
+    }
+
+    /** @internal */
+    public dispose(): void {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this._subGraph.removeSubNodeAsync(_GetSpatialAudioSubNode(this._subGraph));
     }
 
     /** @internal */
@@ -111,6 +119,16 @@ export abstract class _SpatialAudio extends AbstractSpatialAudio {
     public set minDistance(value: number) {
         this._minDistance = value;
         _SetSpatialAudioProperty(this._subGraph, "minDistance", value);
+    }
+
+    /** @internal */
+    public get orientation(): Vector3 {
+        return this._orientation;
+    }
+
+    public set orientation(value: Vector3) {
+        this._orientation = value;
+        this._updateRotation();
     }
 
     /** @internal */
@@ -228,9 +246,18 @@ export abstract class _SpatialAudio extends AbstractSpatialAudio {
         if (!subNode.rotationQuaternion.equalsWithEpsilon(this._rotationQuaternion)) {
             subNode.rotationQuaternion.copyFrom(this._rotationQuaternion);
             subNode._updateRotation();
+            this._orientation.copyFrom(subNode.orientation);
+            this._rotation.copyFrom(subNode.rotation);
         } else if (!subNode.rotation.equalsWithEpsilon(this._rotation)) {
             subNode.rotation.copyFrom(this._rotation);
             subNode._updateRotation();
+            this._orientation.copyFrom(subNode.orientation);
+            this._rotationQuaternion.copyFrom(subNode.rotationQuaternion);
+        } else if (!subNode.orientation.equalsWithEpsilon(this._orientation)) {
+            subNode.orientation.copyFrom(this._orientation);
+            subNode._updateRotation();
+            this._rotation.copyFrom(subNode.rotation);
+            this._rotationQuaternion.copyFrom(subNode.rotationQuaternion);
         }
     }
 }

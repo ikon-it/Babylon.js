@@ -1,12 +1,23 @@
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/naming-convention */
-// eslint-disable-next-line import/no-internal-modules
-import type { Nullable, Observable } from "core/index";
-import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
-import type { CameraOrbit, EnvironmentOptions, HotSpot, ResetFlag, ShadowQuality, ToneMapping, ViewerDetails, ViewerHotSpotResult } from "./viewer";
-import type { CanvasViewerOptions } from "./viewerFactory";
+import { type Nullable, type Observable } from "core/index";
+import { type CSSResultGroup, type PropertyValues, type TemplateResult, LitElement, css, html } from "lit";
+import {
+    type CameraOrbit,
+    type EnvironmentOptions,
+    type HotSpot,
+    type ResetFlag,
+    type ShadowQuality,
+    type SSAOOptions,
+    type ToneMapping,
+    type ViewerDetails,
+    type ViewerHotSpotResult,
+    IsShadowQuality,
+    IsToneMapping,
+    Viewer,
+} from "./viewer";
+import { type CanvasViewerOptions, CreateViewerForCanvas } from "./viewerFactory";
 
-import { LitElement, css, html } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { ref } from "lit/directives/ref.js";
 
@@ -15,8 +26,6 @@ import { AsyncLock } from "core/Misc/asyncLock";
 import { Deferred } from "core/Misc/deferred";
 import { AbortError } from "core/Misc/error";
 import { Logger } from "core/Misc/logger";
-import { IsShadowQuality, IsToneMapping, Viewer } from "./viewer";
-import { CreateViewerForCanvas } from "./viewerFactory";
 
 // Icon SVG is pulled from https://iconcloud.design
 const playFilledIcon =
@@ -144,7 +153,6 @@ export interface ViewerElement {
 }
 
 /**
- * @experimental
  * Base class for the viewer custom element.
  */
 export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends LitElement {
@@ -153,7 +161,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     private _viewerDetails?: Readonly<ViewerDetails & { viewer: ViewerClass }>;
 
     /**
-     * @experimental
      * Creates an instance of a ViewerElement subclass.
      * @param _viewerClass The Viewer subclass to use when creating the Viewer instance.
      * @param _options The options to use when creating the Viewer and binding it to the specified canvas.
@@ -212,6 +219,12 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
             (details) => details.viewer.onPostProcessingChanged,
             (details) => (details.viewer.postProcessing = { exposure: this.exposure ?? undefined }),
             (details) => (this.exposure = details.viewer.postProcessing.exposure)
+        ),
+        this._createPropertyBinding(
+            "ssao",
+            (details) => details.viewer.onPostProcessingChanged,
+            (details) => (details.viewer.postProcessing = { ssao: this.ssao ?? undefined }),
+            (details) => (this.ssao = details.viewer.postProcessing.ssao)
         ),
         this._createPropertyBinding(
             "cameraAutoOrbit",
@@ -727,6 +740,12 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     public exposure: Nullable<number> = this._options.postProcessing?.exposure ?? null;
 
     /**
+     * Enables or disables screen space ambient occlusion (SSAO).
+     */
+    @property({ type: String })
+    public ssao: Nullable<SSAOOptions> = this._options.postProcessing?.ssao ?? null;
+
+    /**
      * The clear color (e.g. background color) for the viewer.
      */
     @property({
@@ -783,7 +802,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     public hotSpots: Record<string, HotSpot> = this._options.hotSpots ?? {};
 
     /**
-     * @experimental
      * True if the viewer has any hotspots.
      */
     protected get _hasHotSpots(): boolean {
@@ -804,7 +822,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * True if the loaded model has any animations.
      */
     protected get _hasAnimations(): boolean {
@@ -1013,7 +1030,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Renders the progress bar.
      * @returns The template result for the progress bar.
      */
@@ -1034,7 +1050,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Renders the toolbar.
      * @returns The template result for the toolbar.
      */
@@ -1139,7 +1154,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Renders the reload button.
      * @returns The template result for the reload button.
      */
@@ -1156,7 +1170,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Renders UI elements that overlay the viewer.
      * Override this method to provide additional rendering for the component.
      * @returns TemplateResult The rendered template result.
@@ -1172,7 +1185,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Dispatches a custom event.
      * @param type The type of the event.
      * @param event A function that creates the event.
@@ -1182,7 +1194,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles changes to the selected animation.
      * @param event The change event.
      */
@@ -1192,7 +1203,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles changes to the animation speed.
      * @param event The change event.
      */
@@ -1202,7 +1212,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles changes to the animation timeline.
      * @param event The change event.
      */
@@ -1217,7 +1226,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles pointer down events on the animation timeline.
      * @param event The pointer down event.
      */
@@ -1230,7 +1238,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles changes to the selected material variant.
      * @param event The change event.
      */
@@ -1240,7 +1247,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Handles changes to the hot spot list.
      * @param event The change event.
      */
@@ -1269,6 +1275,14 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
         updateViewer: (viewerDetails: NonNullable<this["viewerDetails"]>) => void,
         updateElement: (viewerDetails: NonNullable<this["viewerDetails"]>) => void
     ) {
+        const tryUpdateViewer = (viewerDetails: NonNullable<this["viewerDetails"]>) => {
+            try {
+                updateViewer(viewerDetails);
+            } catch (error) {
+                Logger.Error(error);
+            }
+        };
+
         return {
             property,
             // Called each time a Viewer instance is created.
@@ -1276,12 +1290,12 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
                 getObservable(viewerDetails).add(() => {
                     updateElement(viewerDetails);
                 });
-                updateViewer(viewerDetails);
+                tryUpdateViewer(viewerDetails);
             },
             // Called when the HTML3DElement property should be propagated to the Viewer.
             updateViewer: () => {
                 if (this._viewerDetails) {
-                    updateViewer(this._viewerDetails);
+                    tryUpdateViewer(this._viewerDetails);
                 }
             },
         };
@@ -1351,6 +1365,7 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
                                             toneMapping: coerceToneMapping(viewerElement.getAttribute("tone-mapping")) ?? target.postProcessing?.toneMapping,
                                             contrast: coerceNumericAttribute(viewerElement.getAttribute("contrast")) ?? target.postProcessing?.contrast,
                                             exposure: coerceNumericAttribute(viewerElement.getAttribute("exposure")) ?? target.postProcessing?.exposure,
+                                            ssao: viewerElement.hasAttribute("ssao") || target.postProcessing?.ssao,
                                         };
                                     case "selectedMaterialVariant":
                                         return viewerElement.getAttribute("material-variant") ?? target.selectedMaterialVariant;
@@ -1441,7 +1456,6 @@ export abstract class ViewerElement<ViewerClass extends Viewer = Viewer> extends
     }
 
     /**
-     * @experimental
      * Creates a viewer for the specified canvas.
      * @param canvas The canvas to create the viewer for.
      * @param options The options to use for the viewer.

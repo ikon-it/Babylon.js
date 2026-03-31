@@ -1,7 +1,7 @@
 // Attributes
 attribute position: vec3f;
 #if defined(INSTANCES)
-attribute instanceMeshID: vec4f;
+attribute instanceMeshID: f32;
 #endif
 
 #include<bonesDeclaration>
@@ -16,21 +16,22 @@ uniform viewProjection: mat4x4f;
 
 // Output
 #if defined(INSTANCES)
-varying vMeshID: vec4f;
+flat varying vMeshID: f32;
 #endif
 
 @vertex
 fn main(input : VertexInputs) -> FragmentInputs {
     
+    var positionUpdated: vec3f = vertexInputs.position;
 #include<morphTargetsVertexGlobal>
 #include<morphTargetsVertex>[0..maxSimultaneousMorphTargets]
 #include<instancesVertex>
 #include<bonesVertex>
 #include<bakedVertexAnimation>
-    var worldPos: vec4f = finalWorld * vec4f(input.position, 1.0);
+    var worldPos: vec4f = finalWorld * vec4f(positionUpdated, 1.0);
 	vertexOutputs.position = uniforms.viewProjection * worldPos;
 
 #if defined(INSTANCES)
-    vertexOutputs.vMeshID = input.instanceMeshID;
+    vertexOutputs.vMeshID = vertexInputs.instanceMeshID;
 #endif
 }

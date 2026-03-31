@@ -1,15 +1,16 @@
-import type { Skeleton } from "../../Bones/skeleton";
+import { type Skeleton } from "../../Bones/skeleton";
 import { Vector3, Matrix, TmpVectors, Quaternion } from "../../Maths/math.vector";
-import type { Scene } from "../../scene";
+import { type Scene } from "../../scene";
 import { PhysicsAggregate } from "./physicsAggregate";
 import { PhysicsConstraint } from "./physicsConstraint";
-import type { Mesh } from "../../Meshes/mesh";
-import { Axis, Space } from "core/Maths/math.axis";
+import { type Mesh } from "../../Meshes/mesh";
+import { Axis, Space } from "../../Maths/math.axis";
 import { PhysicsShapeType, PhysicsConstraintType, PhysicsMotionType } from "./IPhysicsEnginePlugin";
-import type { Nullable } from "../../types";
-import type { Bone } from "../../Bones/bone";
+import { type Nullable } from "../../types";
+import { type Bone } from "../../Bones/bone";
 import { Logger } from "../../Misc/logger";
 import { TransformNode } from "../../Meshes/transformNode";
+import { type Observer } from "../../Misc/observable";
 
 /**
  * Ragdoll bone properties
@@ -81,6 +82,7 @@ export class Ragdoll {
     private _rootBoneIndex: number = -1;
     private _mass: number = 10;
     private _restitution: number = 0;
+    private _beforeRenderObserver: Nullable<Observer<Scene>> = null;
 
     /**
      * Pause synchronization between physics and bone position/orientation
@@ -227,13 +229,10 @@ export class Ragdoll {
 
             const boneParentIndex = this._boneNames.indexOf(nearestParent.name);
 
-            let distanceFromParentBoxToBone = this._bones[i].getAbsolutePosition(this._rootTransformNode).subtract(this._transforms[boneParentIndex].position);
-
             const wmat = this._transforms[boneParentIndex].computeWorldMatrix();
             const invertedWorldMat = Matrix.Invert(wmat);
-            distanceFromParentBoxToBone = Vector3.TransformCoordinates(this._bones[i].getAbsolutePosition(this._rootTransformNode), invertedWorldMat);
-
             const boneAbsPos = this._bones[i].getAbsolutePosition(this._rootTransformNode);
+            const distanceFromParentBoxToBone = Vector3.TransformCoordinates(boneAbsPos, invertedWorldMat);
             const boxAbsPos = this._transforms[i].position.clone();
             const myConnectedPivot = boneAbsPos.subtract(boxAbsPos);
 
@@ -362,7 +361,7 @@ export class Ragdoll {
         }
 
         this._initJoints();
-        this._scene.registerBeforeRender(() => {
+        this._beforeRenderObserver = this._scene.onBeforeRenderObservable.add(() => {
             this._syncBonesAndBoxes();
         });
         this._syncBonesToPhysics();
@@ -391,6 +390,20 @@ export class Ragdoll {
     dispose(): void {
         for (const aggregate of this._aggregates) {
             aggregate.dispose();
+        }
+        this._aggregates.length = 0;
+        for (const transform of this._transforms) {
+            transform.dispose();
+        }
+        this._transforms.length = 0;
+        for (const constraint of this._constraints) {
+            constraint.dispose();
+        }
+        this._constraints.length = 0;
+
+        if (this._beforeRenderObserver) {
+            this._scene.onBeforeRenderObservable.remove(this._beforeRenderObserver);
+            this._beforeRenderObserver = null;
         }
     }
 }

@@ -1,4 +1,4 @@
-import type { IDisposable } from "core/scene";
+import { type IDisposable } from "core/scene";
 
 /**
  * Class handling undo / redo operations
@@ -63,7 +63,7 @@ export class HistoryStack implements IDisposable {
         this._historyStack = [];
         this._redoStack = [];
         this._activeData = null;
-        this.store();
+        void this.storeAsync();
     }
 
     /**
@@ -181,28 +181,45 @@ export class HistoryStack implements IDisposable {
     /**
      * Stores the current state
      */
-    public store() {
+    public async storeAsync() {
         if (this._locked || !this.isEnabled) {
             return;
         }
 
-        const data = this._copy(this._dataProvider());
-
-        if (this._activeData) {
-            const diff = this._generateJSONDiff(data, this._activeData);
-            if (!diff) {
+        this._locked = true;
+        try {
+            // _dataProvider can return T or Promise<T>; await handles both.
+            const provided = await this._dataProvider();
+            if (provided == null) {
                 return;
             }
-            this._historyStack.push(JSON.stringify(diff));
+            const data = this._copy(provided);
+
+            if (this._activeData) {
+                const diff = this._generateJSONDiff(data, this._activeData);
+                if (!diff) {
+                    return; // finally will still run and release the lock
+                }
+                this._historyStack.push(JSON.stringify(diff));
+            }
+
+            this._activeData = data;
+
+            if (this._historyStack.length > this._maxHistoryLength) {
+                this._historyStack.shift();
+            }
+
+            this._redoStack.length = 0;
+        } finally {
+            this._locked = false;
         }
+    }
 
-        this._activeData = data;
-
-        if (this._historyStack.length > this._maxHistoryLength) {
-            this._historyStack.shift();
-        }
-
-        this._redoStack.length = 0;
+    /**
+     * Checks if there is any data in the history stack
+     */
+    public get hasData(): boolean {
+        return this._historyStack.length > 0;
     }
 
     /**

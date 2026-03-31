@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Observable } from "./observable";
 import { GetDOMTextContent, IsNavigatorAvailable, IsWindowObjectExist } from "./domManagement";
 import { Logger } from "./logger";
@@ -7,10 +7,10 @@ import { DeepCopier } from "./deepCopier";
 import { PrecisionDate } from "./precisionDate";
 import { _WarnImport } from "./devTools";
 import { WebRequest } from "./webRequest";
-import type { IFileRequest } from "./fileRequest";
+import { type IFileRequest } from "./fileRequest";
 import { EngineStore } from "../Engines/engineStore";
-import type { ReadFileError } from "./fileTools";
 import {
+    type ReadFileError,
     FileToolsOptions,
     DecodeBase64UrlToBinary,
     IsBase64DataUrl,
@@ -19,16 +19,20 @@ import {
     ReadFile as FileToolsReadFile,
     SetCorsBehavior,
 } from "./fileTools";
-import type { IOfflineProvider } from "../Offline/IOfflineProvider";
+import { type IOfflineProvider } from "../Offline/IOfflineProvider";
 import { TimingTools } from "./timingTools";
 import { InstantiationTools } from "./instantiationTools";
 import { RandomGUID } from "./guid";
-import type { IScreenshotSize } from "./interfaces/screenshotSize";
-import type { Camera } from "../Cameras/camera";
-import type { IColor4Like } from "../Maths/math.like";
+import { type IScreenshotSize } from "./interfaces/screenshotSize";
+import { type Camera } from "../Cameras/camera";
+import { type IColor4Like } from "../Maths/math.like";
 import { IsExponentOfTwo, Mix } from "./tools.functions";
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
+import { type INative, NativeTraceLevel } from "../Engines/Native/nativeInterfaces";
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+declare const _native: INative;
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 declare function importScripts(...urls: string[]): void;
@@ -228,8 +232,8 @@ export class Tools {
      * @param color defines the output color
      */
     public static FetchToRef(u: number, v: number, width: number, height: number, pixels: Uint8Array, color: IColor4Like): void {
-        const wrappedU = (Math.abs(u) * width) % width | 0;
-        const wrappedV = (Math.abs(v) * height) % height | 0;
+        const wrappedU = ((Math.abs(u) * width) % width) | 0;
+        const wrappedV = ((Math.abs(v) * height) % height) | 0;
 
         const position = (wrappedU + wrappedV * width) * 4;
         color.r = pixels[position] / 255;
@@ -493,6 +497,14 @@ export class Tools {
     public static readonly _DefaultCdnUrl = "https://cdn.babylonjs.com";
 
     /**
+     * The CDN version to use when constructing versioned CDN URLs.
+     * Injected at build time by the version update script.
+     * When set, unversioned CDN URLs will be rewritten to include this version prefix.
+     * @internal
+     */
+    public static _CdnVersion = "9.0.0";
+
+    /**
      * @internal
      */
     public static readonly _DefaultAssetsUrl = "https://assets.babylonjs.com/core";
@@ -510,7 +522,7 @@ export class Tools {
 
         if (Tools.AssetBaseUrl && url.startsWith(Tools._DefaultAssetsUrl)) {
             // normalize the baseUrl
-            const baseUrl = Tools.AssetBaseUrl[Tools.AssetBaseUrl.length - 1] === "/" ? Tools.AssetBaseUrl.substring(0, Tools.AssetBaseUrl.length - 1) : Tools.AssetBaseUrl;
+            const baseUrl = Tools.AssetBaseUrl.endsWith("/") ? Tools.AssetBaseUrl.slice(0, -1) : Tools.AssetBaseUrl;
             return url.replace(Tools._DefaultAssetsUrl, baseUrl);
         }
 
@@ -527,19 +539,28 @@ export class Tools {
         if (!scriptUrl) {
             return "";
         }
-        // if the base URL was set, and the script Url is an absolute path change the default path
-        if (Tools.ScriptBaseUrl && scriptUrl.startsWith(Tools._DefaultCdnUrl)) {
-            // change the default host, which is https://cdn.babylonjs.com with the one defined
-            // make sure no trailing slash is present
-
-            const baseUrl = Tools.ScriptBaseUrl[Tools.ScriptBaseUrl.length - 1] === "/" ? Tools.ScriptBaseUrl.substring(0, Tools.ScriptBaseUrl.length - 1) : Tools.ScriptBaseUrl;
-            scriptUrl = scriptUrl.replace(Tools._DefaultCdnUrl, baseUrl);
+        if (scriptUrl.startsWith(Tools._DefaultCdnUrl)) {
+            if (Tools.ScriptBaseUrl) {
+                // if the base URL was set, and the script Url is an absolute path change the default path
+                // change the default host, which is https://cdn.babylonjs.com with the one defined
+                // make sure no trailing slash is present
+                const baseUrl = Tools.ScriptBaseUrl.endsWith("/") ? Tools.ScriptBaseUrl.slice(0, -1) : Tools.ScriptBaseUrl;
+                scriptUrl = scriptUrl.replace(Tools._DefaultCdnUrl, baseUrl);
+            } else if (Tools._CdnVersion) {
+                // If a CDN version is set (injected at build time), rewrite unversioned CDN URLs to versioned ones
+                const versionedBase = `${Tools._DefaultCdnUrl}/v${Tools._CdnVersion}`;
+                // Guard against double-versioning if the URL already contains the version prefix
+                // (e.g. when GetBabylonScriptURL is called multiple times on the same URL)
+                if (!scriptUrl.startsWith(versionedBase)) {
+                    scriptUrl = scriptUrl.replace(Tools._DefaultCdnUrl, versionedBase);
+                }
+            }
         }
 
         // run the preprocessor
         scriptUrl = Tools.ScriptPreprocessUrl(scriptUrl);
 
-        if (forceAbsoluteUrl) {
+        if (forceAbsoluteUrl && !Tools.IsAbsoluteUrl(scriptUrl)) {
             scriptUrl = Tools.GetAbsoluteUrl(scriptUrl);
         }
 
@@ -570,16 +591,29 @@ export class Tools {
         return await Tools.LoadScriptAsync(scriptUrl);
     }
 
-    /**
-     * This function is used internally by babylon components to load a script (identified by an url). When the url returns, the
-     * content of this file is added into a new script element, attached to the DOM (body element)
-     * @param scriptUrl defines the url of the script to load
-     * @param onSuccess defines the callback called when the script is loaded
-     * @param onError defines the callback to call if an error occurs
-     * @param scriptId defines the id of the script element
-     * @param useModule defines if we should use the module strategy to load the script
-     */
-    public static LoadScript(scriptUrl: string, onSuccess?: () => void, onError?: (message?: string, exception?: any) => void, scriptId?: string, useModule = false) {
+    private static _LoadScriptNative(scriptUrl: string, onSuccess?: () => void, onError?: (message?: string, exception?: any) => void) {
+        if (_native) {
+            Tools.LoadFile(
+                scriptUrl,
+                (data) => {
+                    Function(data as string).apply(null);
+                    if (onSuccess) {
+                        onSuccess();
+                    }
+                },
+                undefined,
+                undefined,
+                false,
+                (_request, exception) => {
+                    if (onError) {
+                        onError("LoadScript Error", exception);
+                    }
+                }
+            );
+        }
+    }
+
+    private static _LoadScriptWeb(scriptUrl: string, onSuccess?: () => void, onError?: (message?: string, exception?: any) => void, scriptId?: string, useModule = false) {
         if (typeof importScripts === "function") {
             try {
                 importScripts(scriptUrl);
@@ -621,6 +655,18 @@ export class Tools {
 
         head.appendChild(script);
     }
+
+    /**
+     * This function is used internally by babylon components to load a script (identified by an url). When the url returns, the
+     * content of this file is added into a new script element, attached to the DOM (body element)
+     * @param scriptUrl defines the url of the script to load
+     * @param onSuccess defines the callback called when the script is loaded
+     * @param onError defines the callback to call if an error occurs
+     * @param scriptId defines the id of the script element
+     * @param useModule defines if we should use the module strategy to load the script
+     */
+    public static LoadScript: (scriptUrl: string, onSuccess?: () => void, onError?: (message?: string, exception?: any) => void, scriptId?: string, useModule?: boolean) => void =
+        typeof _native === "undefined" ? this._LoadScriptWeb : this._LoadScriptNative;
 
     /**
      * Load an asynchronous script (identified by an url). When the url returns, the
@@ -1328,24 +1374,39 @@ export class Tools {
 
     private static _Performance: Performance;
 
+    private static readonly _NativePerformanceCounterHandles = new Map<string, unknown>();
+
     /**
      * Sets the current performance log level
      */
     public static set PerformanceLogLevel(level: number) {
         if ((level & Tools.PerformanceUserMarkLogLevel) === Tools.PerformanceUserMarkLogLevel) {
-            Tools.StartPerformanceCounter = Tools._StartUserMark;
-            Tools.EndPerformanceCounter = Tools._EndUserMark;
+            if (_native?.enablePerformanceLogging) {
+                _native.enablePerformanceLogging(NativeTraceLevel.Mark);
+                Tools.StartPerformanceCounter = Tools._StartMarkNative;
+                Tools.EndPerformanceCounter = Tools._EndMarkNative;
+            } else {
+                Tools.StartPerformanceCounter = Tools._StartUserMark;
+                Tools.EndPerformanceCounter = Tools._EndUserMark;
+            }
             return;
         }
 
         if ((level & Tools.PerformanceConsoleLogLevel) === Tools.PerformanceConsoleLogLevel) {
-            Tools.StartPerformanceCounter = Tools._StartPerformanceConsole;
-            Tools.EndPerformanceCounter = Tools._EndPerformanceConsole;
+            if (_native?.enablePerformanceLogging) {
+                _native.enablePerformanceLogging(NativeTraceLevel.Log);
+                Tools.StartPerformanceCounter = Tools._StartMarkNative;
+                Tools.EndPerformanceCounter = Tools._EndMarkNative;
+            } else {
+                Tools.StartPerformanceCounter = Tools._StartPerformanceConsole;
+                Tools.EndPerformanceCounter = Tools._EndPerformanceConsole;
+            }
             return;
         }
 
         Tools.StartPerformanceCounter = Tools._StartPerformanceCounterDisabled;
         Tools.EndPerformanceCounter = Tools._EndPerformanceCounterDisabled;
+        _native?.disablePerformanceLogging?.();
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1396,6 +1457,29 @@ export class Tools {
         Tools._EndUserMark(counterName, condition);
 
         console.timeEnd(counterName);
+    }
+
+    private static _StartMarkNative(counterName: string, condition = true): void {
+        if (condition && _native?.startPerformanceCounter) {
+            if (Tools._NativePerformanceCounterHandles.has(counterName)) {
+                Tools.Warn(`Performance counter with name ${counterName} is already started.`);
+            } else {
+                const handle = _native.startPerformanceCounter(counterName);
+                Tools._NativePerformanceCounterHandles.set(counterName, handle);
+            }
+        }
+    }
+
+    private static _EndMarkNative(counterName: string, condition = true): void {
+        if (condition && _native?.endPerformanceCounter) {
+            const handle = Tools._NativePerformanceCounterHandles.get(counterName);
+            if (handle) {
+                _native.endPerformanceCounter(handle);
+                Tools._NativePerformanceCounterHandles.delete(counterName);
+            } else {
+                Tools.Warn(`Performance counter with name ${counterName} was not started.`);
+            }
+        }
     }
 
     /**

@@ -1,24 +1,23 @@
 import { NodeMaterialBlock } from "../../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import { NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint, NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
+import { type NodeMaterial, type NodeMaterialDefines } from "../../nodeMaterial";
 import { NodeMaterialSystemValues } from "../../Enums/nodeMaterialSystemValues";
 import { InputBlock } from "../Input/inputBlock";
-import type { Light } from "../../../../Lights/light";
-import type { Nullable } from "../../../../types";
+import { type Light } from "../../../../Lights/light";
+import { type Nullable } from "../../../../types";
 import { RegisterClass } from "../../../../Misc/typeStore";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { Effect } from "../../../effect";
-import type { Mesh } from "../../../../Meshes/mesh";
+import { type AbstractMesh } from "../../../../Meshes/abstractMesh";
+import { type Effect } from "../../../effect";
+import { type Mesh } from "../../../../Meshes/mesh";
 import { PBRBaseMaterial } from "../../../PBR/pbrBaseMaterial";
-import type { Scene } from "../../../../scene";
+import { type Scene } from "../../../../scene";
 import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Decorators/nodeDecorator";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
 import { SheenBlock } from "./sheenBlock";
-import type { BaseTexture } from "../../../Textures/baseTexture";
+import { type BaseTexture } from "../../../Textures/baseTexture";
 import { GetEnvironmentBRDFTexture } from "../../../../Misc/brdfTextureTools";
 import { MaterialFlags } from "../../../materialFlags";
 import { AnisotropyBlock } from "./anisotropyBlock";
@@ -26,8 +25,8 @@ import { ReflectionBlock } from "./reflectionBlock";
 import { ClearCoatBlock } from "./clearCoatBlock";
 import { IridescenceBlock } from "./iridescenceBlock";
 import { SubSurfaceBlock } from "./subSurfaceBlock";
-import type { RefractionBlock } from "./refractionBlock";
-import type { PerturbNormalBlock } from "../Fragment/perturbNormalBlock";
+import { type RefractionBlock } from "./refractionBlock";
+import { type PerturbNormalBlock } from "../Fragment/perturbNormalBlock";
 import { Constants } from "../../../../Engines/constants";
 import { Color3 } from "../../../../Maths/math.color";
 import { Logger } from "core/Misc/logger";
@@ -453,6 +452,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
 
         state._excludeVariableName("vClipSpacePosition");
         state._excludeVariableName("vDebugMode");
+        state._excludeVariableName("vViewDepth");
 
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
         this._initShaderSourceAsync(state.shaderLanguage);
@@ -695,6 +695,11 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         return this._outputs[12];
     }
 
+    /**
+     * Auto configure the block based on the material
+     * @param material - the node material
+     * @param additionalFilteringInfo - additional filtering info
+     */
     public override autoConfigure(material: NodeMaterial, additionalFilteringInfo: (node: NodeMaterialBlock) => boolean = () => true) {
         if (!this.cameraPosition.isConnected) {
             let cameraPositionInput = material.getInputBlockByPredicate((b) => b.systemValue === NodeMaterialSystemValues.CameraPosition && additionalFilteringInfo(b));
@@ -717,7 +722,17 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         }
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    /**
+     * Prepare the list of defines
+     * @param defines - the list of defines to update
+     * @param nodeMaterial - the node material
+     * @param mesh - the mesh to prepare defines for
+     */
+    public override prepareDefines(defines: NodeMaterialDefines, nodeMaterial: NodeMaterial, mesh?: AbstractMesh) {
+        if (!mesh) {
+            return;
+        }
+
         // General
         defines.setValue("PBR", true);
         defines.setValue("METALLICWORKFLOW", true);
@@ -782,6 +797,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
 
         // Advanced
         defines.setValue("BRDF_V_HEIGHT_CORRELATED", true);
+        defines.setValue("LEGACY_SPECULAR_ENERGY_CONSERVATION", true);
         defines.setValue("MS_BRDF_ENERGY_CONSERVATION", this.useEnergyConservation, true);
         defines.setValue("RADIANCEOCCLUSION", this.useRadianceOcclusion, true);
         defines.setValue("HORIZONOCCLUSION", this.useHorizonOcclusion, true);
@@ -828,6 +844,13 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         }
     }
 
+    /**
+     * Update the uniforms and samples
+     * @param state - the build state
+     * @param nodeMaterial - the node material
+     * @param defines - the list of defines
+     * @param uniformBuffers - the uniform buffers
+     */
     public override updateUniformsAndSamples(state: NodeMaterialBuildState, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines, uniformBuffers: string[]) {
         for (let lightIndex = 0; lightIndex < nodeMaterial.maxSimultaneousLights; lightIndex++) {
             if (!defines["LIGHT" + lightIndex]) {
@@ -841,11 +864,20 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                 defines["PROJECTEDLIGHTTEXTURE" + lightIndex],
                 uniformBuffers,
                 onlyUpdateBuffersList,
-                defines["IESLIGHTTEXTURE" + lightIndex]
+                defines["IESLIGHTTEXTURE" + lightIndex],
+                defines["CLUSTLIGHT" + lightIndex],
+                defines["RECTAREALIGHTEMISSIONTEXTURE" + lightIndex]
             );
         }
     }
 
+    /**
+     * Checks if the block is ready
+     * @param mesh - the mesh to check
+     * @param nodeMaterial - the node material
+     * @param defines - the list of defines
+     * @returns true if ready
+     */
     public override isReady(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
         if (this._environmentBRDFTexture && !this._environmentBRDFTexture.isReady()) {
             return false;
@@ -860,6 +892,12 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         return true;
     }
 
+    /**
+     * Bind data to effect
+     * @param effect - the effect to bind data to
+     * @param nodeMaterial - the node material
+     * @param mesh - the mesh to bind data for
+     */
     public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh) {
         if (!mesh) {
             return;
@@ -904,6 +942,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         const worldNormal = this.worldNormal;
         const comments = `//${this.name}`;
         const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
+        const scene = state.sharedData.nodeMaterial.getScene();
 
         // Declaration
         if (!this.light) {
@@ -964,6 +1003,10 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
             state.compilationString += `${state._declareLocalVar("worldPos", NodeMaterialBlockConnectionPointTypes.Vector4)} = ${worldPos.associatedVariableName};\n`;
             if (this.view.isConnected) {
                 state.compilationString += `${state._declareLocalVar("view", NodeMaterialBlockConnectionPointTypes.Matrix)} = ${this.view.associatedVariableName};\n`;
+                state._emitVaryingFromString("vViewDepth", NodeMaterialBlockConnectionPointTypes.Float);
+                state.compilationString +=
+                    (state.shaderLanguage === ShaderLanguage.WGSL ? "vertexOutputs." : "") +
+                    `vViewDepth = ${scene.useRightHandedSystem ? "-" : ""}(${this.view.associatedVariableName} * ${worldPos.associatedVariableName}).z;\n`;
             }
             state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
                 repeatKey: "maxSimultaneousLights",
@@ -1109,27 +1152,24 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         const normalShading = this.perturbedNormal;
 
         let worldPosVarName = this.worldPosition.associatedVariableName;
+        let worldPosVarName4 = this.worldPosition.associatedVariableName;
         let worldNormalVarName = this.worldNormal.associatedVariableName;
         if (this.generateOnlyFragmentCode) {
             worldPosVarName = state._getFreeVariableName("globalWorldPos");
-            state._emitFunction(
-                "pbr_globalworldpos",
-                isWebGPU ? `var<private> ${worldPosVarName}:vec3${state.fSuffix};\n` : `vec3${state.fSuffix} ${worldPosVarName};\n`,
-                comments
-            );
+            state._emitFunction("pbr_globalworldpos", `${state._declareLocalVar(worldPosVarName, NodeMaterialBlockConnectionPointTypes.Vector3, false, true)};\n`, comments);
             state.compilationString += `${worldPosVarName} = ${this.worldPosition.associatedVariableName}.xyz;\n`;
 
+            worldPosVarName4 = state._getFreeVariableName("globalWorldPos4");
+            state._emitFunction("pbr_globalworldpos4", `${state._declareLocalVar(worldPosVarName4, NodeMaterialBlockConnectionPointTypes.Vector4, false, true)};\n`, comments);
+            state.compilationString += `${worldPosVarName4} = ${this.worldPosition.associatedVariableName};\n`;
+
             worldNormalVarName = state._getFreeVariableName("globalWorldNormal");
-            state._emitFunction(
-                "pbr_globalworldnorm",
-                isWebGPU ? `var<private> ${worldNormalVarName}:vec4${state.fSuffix};\n` : `vec4${state.fSuffix} ${worldNormalVarName};\n`,
-                comments
-            );
+            state._emitFunction("pbr_globalworldnorm", `${state._declareLocalVar(worldNormalVarName, NodeMaterialBlockConnectionPointTypes.Vector4, false, true)};\n`, comments);
             state.compilationString += `${worldNormalVarName} = ${this.worldNormal.associatedVariableName};\n`;
 
             state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
                 repeatKey: "maxSimultaneousLights",
-                substitutionVars: this.generateOnlyFragmentCode ? `worldPos,${this.worldPosition.associatedVariableName}` : undefined,
+                substitutionVars: `worldPos,${this.worldPosition.associatedVariableName}`,
             });
 
             state.compilationString += `#if DEBUGMODE > 0\n`;
@@ -1170,6 +1210,10 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         // Includes
         //
         if (!this.light) {
+            if (this.generateOnlyFragmentCode && this.view.isConnected) {
+                state.compilationString += `${state._declareLocalVar("vViewDepth", NodeMaterialBlockConnectionPointTypes.Float)} = (${this.view.associatedVariableName} * ${worldPosVarName4}).z;\n`;
+            }
+
             // Emit for all lights
             state._emitFunctionFromInclude(state.supportUniformBuffers ? "lightUboDeclaration" : "lightFragmentDeclaration", comments, {
                 repeatKey: "maxSimultaneousLights",
@@ -1211,6 +1255,11 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         state._emitFunctionFromInclude("pbrBlockAmbientOcclusion", comments);
         state._emitFunctionFromInclude("pbrBlockAlphaFresnel", comments);
         state._emitFunctionFromInclude("pbrBlockAnisotropic", comments);
+
+        if (!isWebGPU) {
+            // In WebGPU, those functions are part of pbrDirectLightingFunctions
+            state._emitFunctionFromInclude("pbrClusteredLightingFunctions", comments);
+        }
 
         //
         // code
@@ -1405,9 +1454,18 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                 ],
             });
         } else {
+            let substitutionVars = `vPositionW,${worldPosVarName}.xyz`;
+
+            if (isWebGPU) {
+                substitutionVars = "fragmentInputs." + substitutionVars;
+                if (this.generateOnlyFragmentCode) {
+                    substitutionVars += `,fragmentInputs.vViewDepth,vViewDepth`;
+                }
+            }
+
             state.compilationString += state._emitCodeFromInclude("lightFragment", comments, {
                 repeatKey: "maxSimultaneousLights",
-                substitutionVars: `${isWebGPU ? "fragmentInputs." : ""}vPositionW,${worldPosVarName}.xyz,uniforms.vReflectivityColor,vReflectivityColor`,
+                substitutionVars: substitutionVars + ",uniforms.vReflectivityColor,vReflectivityColor",
             });
         }
 
@@ -1488,7 +1546,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                         state.compilationString += `#endif\n`;
                     }
                 } else {
-                    Logger.Error(`There's no remapping for the ${output.name} end point! No code generated`);
+                    state.sharedData.raiseBuildError(`There's no remapping for the ${output.name} end point! No code generated`);
                 }
             }
         }
@@ -1520,6 +1578,10 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         return codeString;
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -1549,6 +1611,12 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block
+     * @param serializationObject - the object to deserialize from
+     * @param scene - the scene to deserialize in
+     * @param rootUrl - the root URL for assets
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

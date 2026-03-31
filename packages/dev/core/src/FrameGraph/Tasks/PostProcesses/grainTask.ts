@@ -1,4 +1,4 @@
-import type { FrameGraph } from "core/FrameGraph/frameGraph";
+import { type FrameGraph } from "core/FrameGraph/frameGraph";
 import { ThinGrainPostProcess } from "core/PostProcesses/thinGrainPostProcess";
 import { FrameGraphPostProcessTask } from "./postProcessTask";
 
@@ -16,5 +16,9 @@ export class FrameGraphGrainTask extends FrameGraphPostProcessTask {
      */
     constructor(name: string, frameGraph: FrameGraph, thinPostProcess?: ThinGrainPostProcess) {
         super(name, frameGraph, thinPostProcess || new ThinGrainPostProcess(name, frameGraph.engine));
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphGrainTask";
     }
 }

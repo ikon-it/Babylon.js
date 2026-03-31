@@ -1,14 +1,14 @@
 import { serialize } from "../Misc/decorators";
-import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
+import { type Camera } from "../Cameras/camera";
+import { type Scene } from "../scene";
 import { Matrix, Vector3 } from "../Maths/math.vector";
 import { Node } from "../node";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { Light } from "./light";
 import { ShadowLight } from "./shadowLight";
-import type { Effect } from "../Materials/effect";
+import { type Effect } from "../Materials/effect";
 import { RegisterClass } from "../Misc/typeStore";
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Constants } from "core/Engines/constants";
 
 Node.AddNodeConstructor("Light_Type_1", (name, scene) => {
@@ -134,9 +134,10 @@ export class DirectionalLight extends ShadowLight {
      * @param name The friendly name of the light
      * @param direction The direction of the light
      * @param scene The scene the light belongs to
+     * @param dontAddToScene True to not add the light to the scene
      */
-    constructor(name: string, direction: Vector3, scene?: Scene) {
-        super(name, scene);
+    constructor(name: string, direction: Vector3, scene?: Scene, dontAddToScene?: boolean) {
+        super(name, scene, dontAddToScene);
         this.position = direction.scale(-1.0);
         this.direction = direction;
     }
@@ -181,15 +182,11 @@ export class DirectionalLight extends ShadowLight {
     protected _setDefaultFixedFrustumShadowProjectionMatrix(matrix: Matrix): void {
         const activeCamera = this.getScene().activeCamera;
 
-        if (!activeCamera) {
-            return;
-        }
-
         Matrix.OrthoLHToRef(
             this.shadowFrustumSize,
             this.shadowFrustumSize,
-            this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera.minZ,
-            this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera.maxZ,
+            this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera ? activeCamera.minZ : Constants.ShadowMinZ,
+            this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera ? activeCamera.maxZ : Constants.ShadowMaxZ,
             matrix,
             this.getScene().getEngine().isNDCHalfZRange
         );

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Tools } from "./tools";
 import { Vector3 } from "../Maths/math.vector";
 import { ILog2 } from "../Maths/math.scalar.functions";
@@ -12,12 +12,13 @@ import { PostProcess } from "../PostProcesses/postProcess";
 import { Logger } from "../Misc/logger";
 import { RGBDTextureTools } from "./rgbdTextureTools";
 import { DumpDataAsync } from "../Misc/dumpTools";
-import { ShaderLanguage } from "core/Materials";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
-import type { RenderTargetWrapper } from "../Engines/renderTargetWrapper";
-import type { Engine, WebGPUEngine } from "core/Engines";
+import { type RenderTargetWrapper } from "../Engines/renderTargetWrapper";
+import { type Engine, type WebGPUEngine } from "core/Engines";
 
 import "../Materials/Textures/baseTexture.polynomial";
+import { GetBlobBufferSource } from "../Buffers/bufferUtils";
 
 const DefaultEnvironmentTextureImageType = "image/png";
 const CurrentVersion = 2;
@@ -115,6 +116,11 @@ export interface EnvironmentTextureIrradianceTextureInfoV1 {
      * This contains all the images data needed to reconstruct the cubemap.
      */
     faces: Array<BufferImageData>;
+
+    /**
+     * The dominant direction of light in the environment texture.
+     */
+    dominantDirection?: Array<number>;
 }
 
 /**
@@ -195,7 +201,7 @@ export function GetEnvInfo(data: ArrayBufferView): Nullable<EnvironmentTextureIn
 
     // Read json manifest - collect characters up to null terminator
     let manifestString = "";
-    let charCode = 0x00;
+    let charCode: number;
     while ((charCode = dataView.getUint8(pos++))) {
         manifestString += String.fromCharCode(charCode);
     }
@@ -360,6 +366,7 @@ export async function CreateEnvTextureAsync(texture: BaseTexture, options: Creat
         info.irradiance.irradianceTexture = {
             size: irradianceTexture.getSize().width,
             faces: [],
+            dominantDirection: irradianceTexture._dominantDirection?.asArray(),
         };
 
         for (let face = 0; face < 6; face++) {
@@ -574,7 +581,11 @@ export function UploadEnvLevelsAsync(texture: InternalTexture, data: ArrayBuffer
     const irradianceTexture = info.irradiance?.irradianceTexture;
     if (irradianceTexture) {
         const irradianceImageData = CreateIrradianceImageDataArrayBufferViews(data, info);
-        promises.push(UploadIrradianceLevelsAsync(texture, irradianceImageData, irradianceTexture.size, info.imageType));
+        let dominantDirection = null;
+        if (info.irradiance?.irradianceTexture?.dominantDirection) {
+            dominantDirection = Vector3.FromArray(info.irradiance.irradianceTexture.dominantDirection);
+        }
+        promises.push(UploadIrradianceLevelsAsync(texture, irradianceImageData, irradianceTexture.size, info.imageType, dominantDirection));
     }
 
     return Promise.all(promises);
@@ -673,20 +684,22 @@ export async function UploadRadianceLevelsAsync(texture: InternalTexture, imageD
  * @param imageData defines the array buffer views of image data [mipmap][face]
  * @param size defines the size of the texture faces
  * @param imageType the mime type of the image data
+ * @param dominantDirection the dominant direction of light in the environment texture, if available
  * @returns a promise
  */
 export async function UploadIrradianceLevelsAsync(
     mainTexture: InternalTexture,
     imageData: ArrayBufferView[],
     size: number,
-    imageType: string = DefaultEnvironmentTextureImageType
+    imageType: string = DefaultEnvironmentTextureImageType,
+    dominantDirection: Nullable<Vector3> = null
 ): Promise<void> {
     // Gets everything ready.
     const engine = mainTexture.getEngine() as Engine;
     const texture = new InternalTexture(engine, InternalTextureSource.RenderTarget);
     const baseTexture = new BaseTexture(engine, texture);
     mainTexture._irradianceTexture = baseTexture;
-
+    baseTexture._dominantDirection = dominantDirection;
     texture.isCube = true;
     texture.format = Constants.TEXTUREFORMAT_RGBA;
     texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
@@ -848,13 +861,14 @@ async function _UploadLevelsAsync(
         for (let face = 0; face < 6; face++) {
             // Constructs an image element from image data
             const bytes = imageData[i][face];
-            const blob = new Blob([bytes], { type: imageType });
+            const buffer = GetBlobBufferSource(bytes);
+            const blob = new Blob([buffer], { type: imageType });
             const url = URL.createObjectURL(blob);
             let promise: Promise<void>;
 
             if (engine._features.forceBitmapOverHTMLImageElement) {
                 // eslint-disable-next-line github/no-then
-                promise = engine.createImageBitmap(blob, { premultiplyAlpha: "none" }).then(async (img) => {
+                promise = engine.createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }).then(async (img) => {
                     return await _OnImageReadyAsync(img, engine, expandTexture, rgbdPostProcess, url, face, i, generateNonLODTextures, lodTextures, cubeRtt, texture);
                 });
             } else {
@@ -1070,6 +1084,7 @@ export const EnvironmentTextureTools = {
      * @param texture defines the internal texture to upload to
      * @param imageData defines the array buffer views of image data [mipmap][face]
      * @param imageType the mime type of the image data
+     * @param dominantDirection the dominant direction of light in the environment texture, if available
      * @returns a promise
      */
     UploadIrradianceLevelsAsync,

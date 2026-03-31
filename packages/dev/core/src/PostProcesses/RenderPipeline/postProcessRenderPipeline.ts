@@ -1,12 +1,13 @@
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { Tools } from "../../Misc/tools";
 import { serialize } from "../../Misc/decorators";
-import type { Camera } from "../../Cameras/camera";
-import type { AbstractEngine } from "../../Engines/abstractEngine";
-import type { PostProcessRenderEffect } from "./postProcessRenderEffect";
-import type { IInspectable } from "../../Misc/iInspectable";
+import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
+import { type Camera } from "../../Cameras/camera";
+import { type AbstractEngine } from "../../Engines/abstractEngine";
+import { type PostProcessRenderEffect } from "./postProcessRenderEffect";
+import { type IInspectable } from "../../Misc/iInspectable";
 
-import type { PrePassRenderer } from "../../Rendering/prePassRenderer";
+import { type PrePassRenderer } from "../../Rendering/prePassRenderer";
 
 /**
  * PostProcessRenderPipeline
@@ -37,6 +38,11 @@ export class PostProcessRenderPipeline {
     public get name(): string {
         return this._name;
     }
+
+    /**
+     * Gets the unique id of the post process rendering pipeline
+     */
+    public readonly uniqueId = UniqueIdGenerator.UniqueId;
 
     /** Gets the list of attached cameras */
     public get cameras() {

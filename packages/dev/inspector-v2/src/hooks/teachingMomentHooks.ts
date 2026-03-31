@@ -1,10 +1,9 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Nullable } from "core/index";
+import { type Nullable } from "core/index";
 
-import type { OnOpenChangeData, PositioningImperativeRef } from "@fluentui/react-components";
+import { type OnOpenChangeData, type PositioningImperativeRef } from "@fluentui/react-components";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocalStorage } from "usehooks-ts";
+import { useSetting } from "./settingsHooks";
 
 import { AsyncLock } from "core/Misc/asyncLock";
 import { Deferred } from "core/Misc/deferred";
@@ -18,7 +17,7 @@ const SequencerLock = new AsyncLock();
  */
 export function MakeTeachingMoment(name: string) {
     return (suppress?: boolean) => {
-        const [hasDisplayed, setHasDisplayed, resetDisplayed] = useLocalStorage(`Babylon/TeachingMoments/${name}`, false);
+        const [hasDisplayed, setHasDisplayed, resetDisplayed] = useSetting({ key: `TeachingMoments/${name}`, defaultValue: false });
         const [shouldDisplay, setShouldDisplay] = useState(false);
 
         const deferredRef = useRef<Deferred<void>>();

@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraph, FrameGraphTextureHandle, FrameGraphRenderPass } from "core/index";
+import { type FrameGraph, type FrameGraphTextureHandle, type FrameGraphRenderPass } from "core/index";
 import { FrameGraphPostProcessTask } from "./postProcessTask";
 import { ThinMotionBlurPostProcess } from "core/PostProcesses/thinMotionBlurPostProcess";
 
@@ -29,6 +28,10 @@ export class FrameGraphMotionBlurTask extends FrameGraphPostProcessTask {
      */
     constructor(name: string, frameGraph: FrameGraph, thinPostProcess?: ThinMotionBlurPostProcess) {
         super(name, frameGraph, thinPostProcess || new ThinMotionBlurPostProcess(name, frameGraph.scene));
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphMotionBlurTask";
     }
 
     public override record(skipCreationOfDisabledPasses = false): FrameGraphRenderPass {

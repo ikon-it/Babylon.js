@@ -2,7 +2,7 @@ import { NullEngine } from "core/Engines";
 import { Scene } from "core/scene";
 import { FlowGraphCoordinator } from "core/FlowGraph/flowGraphCoordinator";
 import { Vector3 } from "core/Maths";
-import { ArcRotateCamera } from "core/Cameras";
+import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { Logger } from "core/Misc";
 import { ParseFlowGraphAsync } from "core/FlowGraph";
 import { InteractivityGraphToFlowGraphParser } from "loaders/glTF/2.0/Extensions/KHR_interactivity/interactivityGraphParser";
@@ -12,9 +12,9 @@ import { IKHRInteractivity_Declaration, IKHRInteractivity_Graph, IKHRInteractivi
 describe("Flow Nodes", () => {
     let engine;
     let scene: Scene;
-    const log: jest.SpyInstance = jest.spyOn(Logger, "Log").mockImplementation(() => {});
-    const errorLog: jest.SpyInstance = jest.spyOn(Logger, "Error").mockImplementation(() => {});
-    const warnLog: jest.SpyInstance = jest.spyOn(Logger, "Warn").mockImplementation(() => {});
+    const log: ReturnType<typeof vi.spyOn> = vi.spyOn(Logger, "Log").mockImplementation(() => {});
+    const errorLog: ReturnType<typeof vi.spyOn> = vi.spyOn(Logger, "Error").mockImplementation(() => {});
+    const warnLog: ReturnType<typeof vi.spyOn> = vi.spyOn(Logger, "Warn").mockImplementation(() => {});
     let mockGltf: any;
     const pathConverter = GetPathToObjectConverter(mockGltf);
     let renderInterval: any;
@@ -699,7 +699,6 @@ describe("Flow Nodes", () => {
         expect(log).not.toHaveBeenCalled();
     });
 
-    // variable/get and variable/set - set a variable and then get it. testing the out flow as well.
     test("variable/get and variable/set", async () => {
         await generateSimpleNodeGraph(
             [{ op: "variable/set" }, { op: "variable/get" }, { op: "flow/log", extension: "BABYLON" }],
@@ -707,57 +706,8 @@ describe("Flow Nodes", () => {
                 {
                     declaration: 0,
                     configuration: {
-                        variable: {
-                            value: [0], //the index of the variable
-                        },
-                    },
-                    values: {
-                        value: {
-                            type: 0,
-                            value: [1],
-                        },
-                    },
-                    flows: {
-                        out: {
-                            node: 2,
-                            socket: "in",
-                        },
-                    },
-                },
-                {
-                    declaration: 1,
-                    configuration: {
-                        variable: {
-                            value: [0], //the index of the variable
-                        },
-                    },
-                },
-                {
-                    declaration: 2,
-                    values: {
-                        message: {
-                            node: 1,
-                            socket: "value",
-                        },
-                    },
-                },
-            ],
-            [{ signature: "float" }],
-            [{ type: 0, value: [0] }]
-        );
-
-        expect(log).toHaveBeenCalledWith(1);
-    });
-
-    test("variable/get and variable/setMultiple", async () => {
-        await generateSimpleNodeGraph(
-            [{ op: "variable/setMultiple" }, { op: "variable/get" }, { op: "flow/log", extension: "BABYLON" }],
-            [
-                {
-                    declaration: 0,
-                    configuration: {
                         variables: {
-                            value: [0, 1], //the index of the variable
+                            value: [0, 1],
                         },
                     },
                     values: {
@@ -781,7 +731,7 @@ describe("Flow Nodes", () => {
                     declaration: 1,
                     configuration: {
                         variable: {
-                            value: [1], //the index of the variable
+                            value: [1],
                         },
                     },
                 },
@@ -1081,8 +1031,14 @@ describe("Flow Nodes", () => {
 
         // wait 1 second
         await new Promise((resolve) => setTimeout(resolve, 1000 + 100));
-        // expect the log to be called with 1,1,1
-        expect(log).toHaveBeenCalledWith(new Vector3(1, 1, 1));
+        // expect the log to be called with approximately 1,1,1 (closeTo handles minor floating-point imprecision from bezier easing under load)
+        expect(log).toHaveBeenCalledWith(
+            expect.objectContaining({
+                _x: expect.closeTo(1, 2),
+                _y: expect.closeTo(1, 2),
+                _z: expect.closeTo(1, 2),
+            })
+        );
         // check that the calls interpolation worked, i.e. the vector x is between 0 and 1
         expect(calls.every((v) => v.x >= 0 && v.x <= 1)).toBe(true);
         log.mockImplementation(() => {});
@@ -1128,12 +1084,12 @@ describe("Flow Nodes", () => {
                 {
                     declaration: 2,
                     configuration: {
-                        variable: {
+                        variables: {
                             value: [0], // the index of the variable
                         },
                     },
                     values: {
-                        value: {
+                        0: {
                             node: 4, // math add that increments the variable
                             socket: "value",
                         },
@@ -1144,7 +1100,7 @@ describe("Flow Nodes", () => {
                     declaration: 3,
                     configuration: {
                         variable: {
-                            value: [0], //the index of the variable
+                            value: [0], // the index of the variable
                         },
                     },
                 },

@@ -1,17 +1,17 @@
-import type { Animatable } from "./animatable.core";
-import { Animation } from "./animation";
-import type { IMakeAnimationAdditiveOptions } from "./animation";
-import type { IAnimationKey } from "./animationKey";
+import { type Animatable } from "./animatable.core";
+import { Animation, type IMakeAnimationAdditiveOptions } from "./animation";
+import { type IAnimationKey } from "./animationKey";
 
-import type { Scene, IDisposable } from "../scene";
+import { type Scene, type IDisposable } from "../scene";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { EngineStore } from "../Engines/engineStore";
 
 import { Tags } from "../Misc/tags";
-import type { AnimationGroupMask } from "./animationGroupMask";
+import { type AnimationGroupMask } from "./animationGroupMask";
 import "./animatable";
-import type { IAssetContainer } from "core/IAssetContainer";
+import { type IAssetContainer } from "core/IAssetContainer";
+import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
 
 /**
  * This class defines the direct association between an animation and a target
@@ -21,10 +21,16 @@ export class TargetedAnimation {
      * Animation to perform
      */
     public animation: Animation;
+
     /**
      * Target to animate
      */
     public target: any;
+
+    /**
+     * Gets or sets the unique id of the targeted animation
+     */
+    public readonly uniqueId = UniqueIdGenerator.UniqueId;
 
     /**
      * Returns the string "TargetedAnimation"
@@ -35,6 +41,12 @@ export class TargetedAnimation {
     }
 
     /**
+     * Creates a new targeted animation
+     * @param parent The animation group to which the animation belongs
+     */
+    constructor(public readonly parent: AnimationGroup) {}
+
+    /**
      * Serialize the object
      * @returns the JSON object representing the current entity
      */
@@ -42,6 +54,7 @@ export class TargetedAnimation {
         const serializationObject: any = {};
         serializationObject.animation = this.animation.serialize();
         serializationObject.targetId = this.target.id;
+        serializationObject.targetUniqueId = this.target.uniqueId;
 
         return serializationObject;
     }
@@ -493,6 +506,14 @@ export class AnimationGroup implements IDisposable {
     }
 
     /**
+     * Gets the scene the animation group belongs to
+     * @returns The scene the animation group belongs to
+     */
+    public getScene(): Scene {
+        return this._scene;
+    }
+
+    /**
      * Instantiates a new Animation Group.
      * This helps managing several animations at once.
      * @see https://doc.babylonjs.com/features/featuresDeepDive/animation/groupAnimations
@@ -523,7 +544,7 @@ export class AnimationGroup implements IDisposable {
      * @returns the TargetedAnimation object
      */
     public addTargetedAnimation(animation: Animation, target: any): TargetedAnimation {
-        const targetedAnimation = new TargetedAnimation();
+        const targetedAnimation = new TargetedAnimation(this);
         targetedAnimation.animation = animation;
         targetedAnimation.target = target;
 
@@ -885,11 +906,7 @@ export class AnimationGroup implements IDisposable {
         this._animatables.length = 0;
 
         // Remove from scene
-        const index = this._scene.animationGroups.indexOf(this);
-
-        if (index > -1) {
-            this._scene.animationGroups.splice(index, 1);
-        }
+        this._scene.removeAnimationGroup(this);
 
         if (this._parentContainer) {
             const index = this._parentContainer.animationGroups.indexOf(this);
@@ -929,9 +946,10 @@ export class AnimationGroup implements IDisposable {
      * @param newName defines the name of the new group
      * @param targetConverter defines an optional function used to convert current animation targets to new ones
      * @param cloneAnimations defines if the animations should be cloned or referenced
+     * @param cloneAnimationKeys defines if the animation keys should be cloned when cloning animations (false by default). No effect if cloneAnimations is false
      * @returns the new animation group
      */
-    public clone(newName: string, targetConverter?: (oldTarget: any) => any, cloneAnimations = false): AnimationGroup {
+    public clone(newName: string, targetConverter?: (oldTarget: any) => any, cloneAnimations = false, cloneAnimationKeys = false): AnimationGroup {
         const newGroup = new AnimationGroup(newName || this.name, this._scene, this._weight, this._playOrder);
 
         newGroup._from = this.from;
@@ -946,7 +964,7 @@ export class AnimationGroup implements IDisposable {
 
         for (const targetAnimation of this._targetedAnimations) {
             newGroup.addTargetedAnimation(
-                cloneAnimations ? targetAnimation.animation.clone() : targetAnimation.animation,
+                cloneAnimations ? targetAnimation.animation.clone(cloneAnimationKeys) : targetAnimation.animation,
                 targetConverter ? targetConverter(targetAnimation.target) : targetAnimation.target
             );
         }
@@ -995,26 +1013,23 @@ export class AnimationGroup implements IDisposable {
      * Returns a new AnimationGroup object parsed from the source provided.
      * @param parsedAnimationGroup defines the source
      * @param scene defines the scene that will receive the animationGroup
+     * @param targetLookup a callback that will be used instead of the default lookup
      * @returns a new AnimationGroup
      */
-    public static Parse(parsedAnimationGroup: any, scene: Scene): AnimationGroup {
+    public static Parse(parsedAnimationGroup: any, scene: Scene, targetLookup?: (parsedTargetAnimation: any) => any): AnimationGroup {
         const animationGroup = new AnimationGroup(parsedAnimationGroup.name, scene, parsedAnimationGroup.weight, parsedAnimationGroup.playOrder);
         for (let i = 0; i < parsedAnimationGroup.targetedAnimations.length; i++) {
             const targetedAnimation = parsedAnimationGroup.targetedAnimations[i];
             const animation = Animation.Parse(targetedAnimation.animation);
-            const id = targetedAnimation.targetId;
-            if (targetedAnimation.animation.property === "influence") {
-                // morph target animation
-                const morphTarget = scene.getMorphTargetById(id);
-                if (morphTarget) {
-                    animationGroup.addTargetedAnimation(animation, morphTarget);
-                }
-            } else {
-                const targetNode = scene.getNodeById(id);
 
-                if (targetNode != null) {
-                    animationGroup.addTargetedAnimation(animation, targetNode);
-                }
+            const target = targetLookup
+                ? targetLookup(targetedAnimation)
+                : targetedAnimation.animation.property === "influence"
+                  ? scene.getMorphTargetById(targetedAnimation.targetId)
+                  : scene.getNodeById(targetedAnimation.targetId);
+
+            if (target) {
+                animationGroup.addTargetedAnimation(animation, target);
             }
         }
 

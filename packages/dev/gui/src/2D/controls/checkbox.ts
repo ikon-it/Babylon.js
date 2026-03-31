@@ -1,13 +1,13 @@
 import { Observable } from "core/Misc/observable";
-import type { Vector2 } from "core/Maths/math.vector";
+import { type Vector2 } from "core/Maths/math.vector";
 
 import { Control } from "./control";
 import { StackPanel } from "./stackPanel";
 import { TextBlock } from "./textBlock";
 import { RegisterClass } from "core/Misc/typeStore";
-import type { PointerInfoBase } from "core/Events/pointerEvents";
+import { type PointerInfoBase } from "core/Events/pointerEvents";
 import { serialize } from "core/Misc/decorators";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
 
 /**
  * Class used to represent a 2D checkbox
@@ -113,8 +113,8 @@ export class Checkbox extends Control {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         context.fillStyle = this._isEnabled ? this._background : this._disabledColor;

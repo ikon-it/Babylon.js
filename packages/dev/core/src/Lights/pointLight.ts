@@ -1,11 +1,11 @@
 import { serialize } from "../Misc/decorators";
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
 import { Matrix, Vector3 } from "../Maths/math.vector";
 import { Node } from "../node";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { Light } from "./light";
 import { ShadowLight } from "./shadowLight";
-import type { Effect } from "../Materials/effect";
+import { type Effect } from "../Materials/effect";
 import { RegisterClass } from "../Misc/typeStore";
 
 Node.AddNodeConstructor("Light_Type_0", (name, scene) => {
@@ -76,9 +76,10 @@ export class PointLight extends ShadowLight {
      * @param name The light friendly name
      * @param position The position of the point light in the scene
      * @param scene The scene the lights belongs to
+     * @param dontAddToScene True to not add the light to the scene
      */
-    constructor(name: string, position: Vector3, scene?: Scene) {
-        super(name, scene);
+    constructor(name: string, position: Vector3, scene?: Scene, dontAddToScene?: boolean) {
+        super(name, scene, dontAddToScene);
         this.position = position;
     }
 
@@ -149,12 +150,8 @@ export class PointLight extends ShadowLight {
     protected _setDefaultShadowProjectionMatrix(matrix: Matrix, viewMatrix: Matrix, renderList: Array<AbstractMesh>): void {
         const activeCamera = this.getScene().activeCamera;
 
-        if (!activeCamera) {
-            return;
-        }
-
-        const minZ = this.shadowMinZ !== undefined ? this.shadowMinZ : activeCamera.minZ;
-        const maxZ = this.shadowMaxZ !== undefined ? this.shadowMaxZ : activeCamera.maxZ;
+        const minZ = this.getDepthMinZ(activeCamera);
+        const maxZ = this.getDepthMaxZ(activeCamera);
 
         const useReverseDepthBuffer = this.getScene().getEngine().useReverseDepthBuffer;
 
@@ -188,10 +185,18 @@ export class PointLight extends ShadowLight {
      * @returns The point light
      */
     public transferToEffect(effect: Effect, lightIndex: string): PointLight {
+        const offset = this._scene.floatingOriginOffset;
         if (this.computeTransformedInformation()) {
-            this._uniformBuffer.updateFloat4("vLightData", this.transformedPosition.x, this.transformedPosition.y, this.transformedPosition.z, 0.0, lightIndex);
+            this._uniformBuffer.updateFloat4(
+                "vLightData",
+                this.transformedPosition.x - offset.x,
+                this.transformedPosition.y - offset.y,
+                this.transformedPosition.z - offset.z,
+                0.0,
+                lightIndex
+            );
         } else {
-            this._uniformBuffer.updateFloat4("vLightData", this.position.x, this.position.y, this.position.z, 0, lightIndex);
+            this._uniformBuffer.updateFloat4("vLightData", this.position.x - offset.x, this.position.y - offset.y, this.position.z - offset.z, 0, lightIndex);
         }
 
         this._uniformBuffer.updateFloat4("vLightFalloff", this.range, this._inverseSquaredRange, 0, 0, lightIndex);
@@ -199,10 +204,11 @@ export class PointLight extends ShadowLight {
     }
 
     public transferToNodeMaterialEffect(effect: Effect, lightDataUniformName: string) {
+        const offset = this._scene.floatingOriginOffset;
         if (this.computeTransformedInformation()) {
-            effect.setFloat3(lightDataUniformName, this.transformedPosition.x, this.transformedPosition.y, this.transformedPosition.z);
+            effect.setFloat3(lightDataUniformName, this.transformedPosition.x - offset.x, this.transformedPosition.y - offset.y, this.transformedPosition.z - offset.z);
         } else {
-            effect.setFloat3(lightDataUniformName, this.position.x, this.position.y, this.position.z);
+            effect.setFloat3(lightDataUniformName, this.position.x - offset.x, this.position.y - offset.y, this.position.z - offset.z);
         }
 
         return this;

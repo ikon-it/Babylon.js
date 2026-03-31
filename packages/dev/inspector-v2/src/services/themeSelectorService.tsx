@@ -1,19 +1,30 @@
-import type { MenuButtonProps, MenuCheckedValueChangeData, MenuCheckedValueChangeEvent } from "@fluentui/react-components";
-import type { TernaryDarkMode } from "usehooks-ts";
-import type { ServiceDefinition } from "../modularity/serviceDefinition";
-import type { IShellService } from "../services/shellService";
+import {
+    type MenuButtonProps,
+    type MenuCheckedValueChangeData,
+    type MenuCheckedValueChangeEvent,
+    makeStyles,
+    Menu,
+    MenuItemRadio,
+    MenuList,
+    MenuPopover,
+    MenuTrigger,
+    SplitButton,
+    Tooltip,
+} from "@fluentui/react-components";
+import { type ServiceDefinition } from "../modularity/serviceDefinition";
+import { type IShellService, ShellServiceIdentity } from "../services/shellService";
+import { type ThemeMode } from "../services/themeService";
 
-import { makeStyles, Menu, MenuItemRadio, MenuList, MenuPopover, MenuTrigger, SplitButton, Tooltip } from "@fluentui/react-components";
 import { WeatherMoonRegular, WeatherSunnyRegular } from "@fluentui/react-icons";
 import { useCallback } from "react";
-import { useTernaryDarkMode } from "usehooks-ts";
 
-import { ShellServiceIdentity } from "../services/shellService";
+import { useThemeMode } from "../hooks/themeHooks";
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const useStyles = makeStyles({
-    themeButton: {},
-    themeMenu: {
+    themeButton: {
+        margin: 0,
+    },
+    themeMenuPopover: {
         minWidth: 0,
     },
 });
@@ -26,23 +37,23 @@ export const ThemeSelectorServiceDefinition: ServiceDefinition<[], [IShellServic
             key: "ThemeSelector",
             horizontalLocation: "right",
             verticalLocation: "top",
-            suppressTeachingMoment: true,
+            teachingMoment: false,
             order: -300,
             component: () => {
                 const classes = useStyles();
 
-                const { isDarkMode, ternaryDarkMode, setTernaryDarkMode } = useTernaryDarkMode();
+                const { isDarkMode, themeMode, setThemeMode } = useThemeMode();
 
                 const onSelectedThemeChange = useCallback((e: MenuCheckedValueChangeEvent, data: MenuCheckedValueChangeData) => {
-                    setTernaryDarkMode(data.checkedItems.includes("System") ? "system" : (data.checkedItems[0].toLocaleLowerCase() as TernaryDarkMode));
+                    setThemeMode(data.checkedItems.includes("System") ? "system" : (data.checkedItems[0].toLocaleLowerCase() as ThemeMode));
                 }, []);
 
                 const toggleTheme = useCallback(() => {
-                    setTernaryDarkMode(isDarkMode ? "light" : "dark");
+                    setThemeMode(isDarkMode ? "light" : "dark");
                 }, [isDarkMode]);
 
                 return (
-                    <Menu positioning="below-end" checkedValues={{ theme: [ternaryDarkMode] }} onCheckedValueChange={onSelectedThemeChange}>
+                    <Menu positioning="below-end" checkedValues={{ theme: [themeMode] }} onCheckedValueChange={onSelectedThemeChange}>
                         <MenuTrigger disableButtonEnhancement={true}>
                             {(triggerProps: MenuButtonProps) => (
                                 <Tooltip content="Select Theme" relationship="label">
@@ -51,7 +62,7 @@ export const ThemeSelectorServiceDefinition: ServiceDefinition<[], [IShellServic
                                         menuButton={triggerProps}
                                         primaryActionButton={{ onClick: toggleTheme }}
                                         size="small"
-                                        appearance="secondary"
+                                        appearance="transparent"
                                         shape="circular"
                                         icon={isDarkMode ? <WeatherSunnyRegular /> : <WeatherMoonRegular />}
                                     ></SplitButton>
@@ -59,15 +70,15 @@ export const ThemeSelectorServiceDefinition: ServiceDefinition<[], [IShellServic
                             )}
                         </MenuTrigger>
 
-                        <MenuPopover className={classes.themeMenu}>
+                        <MenuPopover className={classes.themeMenuPopover}>
                             <MenuList>
-                                <MenuItemRadio name="theme" value={"system" satisfies TernaryDarkMode}>
+                                <MenuItemRadio name="theme" value={"system" satisfies ThemeMode}>
                                     System
                                 </MenuItemRadio>
-                                <MenuItemRadio name="theme" value={"light" satisfies TernaryDarkMode}>
+                                <MenuItemRadio name="theme" value={"light" satisfies ThemeMode}>
                                     Light
                                 </MenuItemRadio>
-                                <MenuItemRadio name="theme" value={"dark" satisfies TernaryDarkMode}>
+                                <MenuItemRadio name="theme" value={"dark" satisfies ThemeMode}>
                                     Dark
                                 </MenuItemRadio>
                             </MenuList>

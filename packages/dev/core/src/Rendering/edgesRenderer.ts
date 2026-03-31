@@ -1,19 +1,18 @@
-import type { Immutable, Nullable } from "../types";
+import { type Immutable, type Nullable } from "../types";
 import { VertexBuffer } from "../Buffers/buffer";
 import { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
+import { type Mesh } from "../Meshes/mesh";
 import { LinesMesh, InstancedLinesMesh } from "../Meshes/linesMesh";
-import type { Matrix } from "../Maths/math.vector";
-import { Vector3, TmpVectors } from "../Maths/math.vector";
-import type { IDisposable, Scene } from "../scene";
-import type { Observer } from "../Misc/observable";
+import { type Matrix, Vector3, TmpVectors } from "../Maths/math.vector";
+import { type IDisposable, type Scene } from "../scene";
+import { type Observer } from "../Misc/observable";
 import { Material } from "../Materials/material";
 import { ShaderMaterial } from "../Materials/shaderMaterial";
 import { Camera } from "../Cameras/camera";
 import { Constants } from "../Engines/constants";
-import type { Node } from "../node";
+import { type Node } from "../node";
 
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { SmartArray } from "../Misc/smartArray";
 import { DrawWrapper } from "../Materials/drawWrapper";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
@@ -272,6 +271,7 @@ export class EdgesRenderer implements IEdgesRenderer {
             shader.disableDepthWrite = true;
             shader.backFaceCulling = false;
             shader.checkReadyOnEveryCall = scene.getEngine().isWebGPU;
+            shader.doNotSerialize = true;
 
             scene._edgeRenderLineShader = shader;
 
@@ -950,6 +950,7 @@ export class EdgesRenderer implements IEdgesRenderer {
      */
     public render(): void {
         const scene = this._source.getScene();
+        const floatingOriginOffset = scene.floatingOriginOffset;
 
         const currentDrawWrapper = this._lineShader._getDrawWrapper();
         if (this._drawWrapper) {
@@ -973,7 +974,8 @@ export class EdgesRenderer implements IEdgesRenderer {
             this._buffersForInstances["world3"] = (this._source as Mesh).getVertexBuffer("world3");
 
             if (hasInstances) {
-                const instanceStorage = (this._source as Mesh)._instanceDataStorage;
+                const instanceStorage = (this._source as Mesh)._getInstanceDataStorage();
+                const isFrozen = (this._source as Mesh)._instanceDataStorage.isFrozen;
 
                 instanceCount = this.customInstances.length;
 
@@ -984,11 +986,17 @@ export class EdgesRenderer implements IEdgesRenderer {
                     return;
                 }
 
-                if (!instanceStorage.isFrozen) {
+                if (!isFrozen) {
                     let offset = 0;
 
                     for (let i = 0; i < instanceCount; ++i) {
-                        this.customInstances.data[i].copyToArray(instanceStorage.instancesData, offset);
+                        const instanceMatrix = this.customInstances.data[i];
+                        instanceMatrix.copyToArray(instanceStorage.instancesData, offset);
+                        // Subtract from Float64 source to preserve precision at large coordinates.
+                        const instanceM = instanceMatrix.asArray();
+                        instanceStorage.instancesData[offset + 12] = instanceM[12] - floatingOriginOffset.x;
+                        instanceStorage.instancesData[offset + 13] = instanceM[13] - floatingOriginOffset.y;
+                        instanceStorage.instancesData[offset + 14] = instanceM[14] - floatingOriginOffset.z;
                         offset += 16;
                     }
 

@@ -1,26 +1,26 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { IEffectCreationOptions, IShaderPath } from "../Materials/effect";
-import type { _IShaderProcessingContext } from "./Processors/shaderProcessingOptions";
-import type { Nullable, DataArray, IndicesArray, FloatArray, DeepImmutable } from "../types";
-import type { IColor4Like } from "../Maths/math.like";
-import type { DataBuffer } from "../Buffers/dataBuffer";
-import type { IPipelineContext } from "./IPipelineContext";
-import type { WebGLPipelineContext } from "./WebGL/webGLPipelineContext";
-import type { VertexBuffer } from "../Buffers/buffer";
-import type { InstancingAttributeInfo } from "./instancingAttributeInfo";
-import type { ThinTexture } from "../Materials/Textures/thinTexture";
-import type { IEffectFallbacks } from "../Materials/iEffectFallbacks";
-import type { IHardwareTextureWrapper } from "../Materials/Textures/hardwareTextureWrapper";
-import type { DrawWrapper } from "../Materials/drawWrapper";
-import type { IMaterialContext } from "./IMaterialContext";
-import type { IDrawContext } from "./IDrawContext";
-import type { ICanvas, ICanvasRenderingContext } from "./ICanvas";
-import type { IStencilState } from "../States/IStencilState";
-import type { InternalTextureCreationOptions, TextureSize } from "../Materials/Textures/textureCreationOptions";
-import type { RenderTargetWrapper } from "./renderTargetWrapper";
-import type { WebGLRenderTargetWrapper } from "./WebGL/webGLRenderTargetWrapper";
-import type { VideoTexture } from "../Materials/Textures/videoTexture";
-import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
+import { type IEffectCreationOptions, type IShaderPath, Effect } from "../Materials/effect";
+import { type _IShaderProcessingContext } from "./Processors/shaderProcessingOptions";
+import { type Nullable, type DataArray, type IndicesArray, type FloatArray, type DeepImmutable } from "../types";
+import { type IColor4Like } from "../Maths/math.like";
+import { type DataBuffer } from "../Buffers/dataBuffer";
+import { type IPipelineContext } from "./IPipelineContext";
+import { type WebGLPipelineContext } from "./WebGL/webGLPipelineContext";
+import { type VertexBuffer } from "../Buffers/buffer";
+import { type InstancingAttributeInfo } from "./instancingAttributeInfo";
+import { type ThinTexture } from "../Materials/Textures/thinTexture";
+import { type IEffectFallbacks } from "../Materials/iEffectFallbacks";
+import { type IHardwareTextureWrapper } from "../Materials/Textures/hardwareTextureWrapper";
+import { type DrawWrapper } from "../Materials/drawWrapper";
+import { type IMaterialContext } from "./IMaterialContext";
+import { type IDrawContext } from "./IDrawContext";
+import { type ICanvas, type ICanvasRenderingContext } from "./ICanvas";
+import { type IStencilState } from "../States/IStencilState";
+import { type InternalTextureCreationOptions, type TextureSize } from "../Materials/Textures/textureCreationOptions";
+import { type RenderTargetWrapper } from "./renderTargetWrapper";
+import { type WebGLRenderTargetWrapper } from "./WebGL/webGLRenderTargetWrapper";
+import { type VideoTexture } from "../Materials/Textures/videoTexture";
+import { type RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import {
     createPipelineContext,
     createRawShaderProgram,
@@ -35,8 +35,8 @@ import {
     _isRenderingStateCompiled,
 } from "./thinEngine.functions";
 
-import type { AbstractEngineOptions, ISceneLike, PrepareTextureFunction, PrepareTextureProcessFunction } from "./abstractEngine";
-import type { PerformanceMonitor } from "../Misc/performanceMonitor";
+import { type AbstractEngineOptions, type ISceneLike, type PrepareTextureFunction, type PrepareTextureProcessFunction, AbstractEngine } from "./abstractEngine";
+import { type PerformanceMonitor } from "../Misc/performanceMonitor";
 import { IsWrapper } from "../Materials/drawWrapper.functions";
 import { Logger } from "../Misc/logger";
 import { IsWindowObjectExist } from "../Misc/domManagement";
@@ -44,15 +44,14 @@ import { WebGLShaderProcessor } from "./WebGL/webGLShaderProcessors";
 import { WebGL2ShaderProcessor } from "./WebGL/webGL2ShaderProcessors";
 import { WebGLDataBuffer } from "../Meshes/WebGL/webGLDataBuffer";
 import { GetExponentOfTwo } from "../Misc/tools.functions";
-import { AbstractEngine } from "./abstractEngine";
 import { Constants } from "./constants";
 import { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
 import { ShaderLanguage } from "../Materials/shaderLanguage";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
-import { Effect } from "../Materials/effect";
 import { _ConcatenateShader, _GetGlobalDefines } from "./abstractEngine.functions";
 import { resetCachedPipeline } from "core/Materials/effect.functions";
 import { HasStencilAspect, IsDepthTexture } from "core/Materials/Textures/textureHelper.functions";
+import { AlphaState } from "../States/alphaCullingState";
 
 /**
  * Keeps track of all the buffer info used in engine.
@@ -92,8 +91,9 @@ export interface EngineOptions extends AbstractEngineOptions, WebGLContextAttrib
     failIfMajorPerformanceCaveat?: boolean;
 
     /**
-     * If sRGB Buffer support is not set during construction, use this value to force a specific state
-     * This is added due to an issue when processing textures in chrome/edge/firefox
+     * If sRGB buffer support is not set during construction, use this value to force a specific state
+     * This was originally added to mitigate an issue when processing textures in chrome/edge/firefox.
+     * The browser issue has since been fixed. This option remains for backward compatibility.
      * This will not influence NativeEngine and WebGPUEngine which set the behavior to true during construction.
      */
     forceSRGBBufferSupportState?: boolean;
@@ -211,8 +211,6 @@ export class ThinEngine extends AbstractEngine {
     // Cache
 
     /** @internal */
-    public _currentMaterialContext: IMaterialContext;
-    /** @internal */
     protected _currentProgram: Nullable<WebGLProgram>;
     private _vertexAttribArraysEnabled: boolean[] = [];
     private _cachedVertexArrayObject: Nullable<WebGLVertexArrayObject>;
@@ -282,7 +280,7 @@ export class ThinEngine extends AbstractEngine {
             return;
         }
 
-        let canvas: Nullable<HTMLCanvasElement> = null;
+        let canvas: Nullable<HTMLCanvasElement>;
         if ((canvasOrContext as any).getContext) {
             canvas = <HTMLCanvasElement>canvasOrContext;
 
@@ -396,7 +394,7 @@ export class ThinEngine extends AbstractEngine {
                 try {
                     this._gl = <WebGL2RenderingContext>(canvas.getContext("webgl", options) || canvas.getContext("experimental-webgl", options));
                 } catch (e) {
-                    throw new Error("WebGL not supported");
+                    throw new Error("WebGL not supported", { cause: e });
                 }
             }
 
@@ -506,6 +504,7 @@ export class ThinEngine extends AbstractEngine {
             maxVaryingVectors: this._gl.getParameter(this._gl.MAX_VARYING_VECTORS),
             maxFragmentUniformVectors: this._gl.getParameter(this._gl.MAX_FRAGMENT_UNIFORM_VECTORS),
             maxVertexUniformVectors: this._gl.getParameter(this._gl.MAX_VERTEX_UNIFORM_VECTORS),
+            shaderFloatPrecision: 0,
             parallelShaderCompile: this._gl.getExtension("KHR_parallel_shader_compile") || undefined,
             standardDerivatives: this._webGLVersion > 1 || this._gl.getExtension("OES_standard_derivatives") !== null,
             maxAnisotropy: 1,
@@ -533,6 +532,7 @@ export class ThinEngine extends AbstractEngine {
             drawBuffersExtension: false,
             maxMSAASamples: 1,
             colorBufferFloat: !!(this._webGLVersion > 1 && this._gl.getExtension("EXT_color_buffer_float")),
+            blendFloat: this._gl.getExtension("EXT_float_blend") !== null,
             supportFloatTexturesResolve: false,
             rg11b10ufColorRenderable: false,
             colorBufferHalfFloat: !!(this._webGLVersion > 1 && this._gl.getExtension("EXT_color_buffer_half_float")),
@@ -559,6 +559,9 @@ export class ThinEngine extends AbstractEngine {
             texture2DArrayMaxLayerCount: this._webGLVersion > 1 ? this._gl.getParameter(this._gl.MAX_ARRAY_TEXTURE_LAYERS) : 128,
             disableMorphTargetTexture: false,
             textureNorm16: this._gl.getExtension("EXT_texture_norm16") ? true : false,
+            blendParametersPerTarget: false,
+            dualSourceBlending: false,
+            supportReadWriteStorageTextures: false,
         };
 
         this._caps.supportFloatTexturesResolve = this._caps.colorBufferFloat;
@@ -622,6 +625,23 @@ export class ThinEngine extends AbstractEngine {
             this._gl.RGB16_SNORM_EXT = 0x8f9a;
             this._gl.RGBA16_SNORM_EXT = 0x8f9b;
         }
+
+        const oesDrawBuffersIndexed = this._gl.getExtension("OES_draw_buffers_indexed");
+        this._caps.blendParametersPerTarget = oesDrawBuffersIndexed ? true : false;
+
+        this._alphaState = new AlphaState(this._caps.blendParametersPerTarget);
+
+        if (oesDrawBuffersIndexed) {
+            this._gl.blendEquationSeparateIndexed = oesDrawBuffersIndexed.blendEquationSeparateiOES.bind(oesDrawBuffersIndexed);
+            this._gl.blendEquationIndexed = oesDrawBuffersIndexed.blendEquationiOES.bind(oesDrawBuffersIndexed);
+            this._gl.blendFuncSeparateIndexed = oesDrawBuffersIndexed.blendFuncSeparateiOES.bind(oesDrawBuffersIndexed);
+            this._gl.blendFuncIndexed = oesDrawBuffersIndexed.blendFunciOES.bind(oesDrawBuffersIndexed);
+            this._gl.colorMaskIndexed = oesDrawBuffersIndexed.colorMaskiOES.bind(oesDrawBuffersIndexed);
+            this._gl.disableIndexed = oesDrawBuffersIndexed.disableiOES.bind(oesDrawBuffersIndexed);
+            this._gl.enableIndexed = oesDrawBuffersIndexed.enableiOES.bind(oesDrawBuffersIndexed);
+        }
+
+        this._caps.dualSourceBlending = this._gl.getExtension("WEBGL_blend_func_extended") ? true : false;
 
         // Compressed formats
         if (this._caps.astc) {
@@ -717,6 +737,19 @@ export class ThinEngine extends AbstractEngine {
 
             if (vertexhighp && fragmenthighp) {
                 this._caps.highPrecisionShaderSupported = vertexhighp.precision !== 0 && fragmenthighp.precision !== 0;
+                this._caps.shaderFloatPrecision = Math.min(vertexhighp.precision, fragmenthighp.precision);
+            }
+            // This will check both the capability and the `useHighPrecisionFloats` option
+            if (!this._shouldUseHighPrecisionShader) {
+                const vertexmedp = this._gl.getShaderPrecisionFormat(this._gl.VERTEX_SHADER, this._gl.MEDIUM_FLOAT);
+                const fragmentmedp = this._gl.getShaderPrecisionFormat(this._gl.FRAGMENT_SHADER, this._gl.MEDIUM_FLOAT);
+                if (vertexmedp && fragmentmedp) {
+                    this._caps.shaderFloatPrecision = Math.min(vertexmedp.precision, fragmentmedp.precision);
+                }
+            }
+            if (this._caps.shaderFloatPrecision < 10) {
+                // WebGL spec requires mediump precision to atleast be 10
+                this._caps.shaderFloatPrecision = 10;
             }
         }
 
@@ -807,7 +840,6 @@ export class ThinEngine extends AbstractEngine {
             supportSpriteInstancing: true,
             forceVertexBufferStrideAndOffsetMultiple4Bytes: false,
             _checkNonFloatVertexBuffersDontRecreatePipelineContext: false,
-            _collectUbosUpdatedInFrame: false,
         };
     }
 
@@ -903,8 +935,9 @@ export class ThinEngine extends AbstractEngine {
      * @param backBuffer defines if the back buffer must be cleared
      * @param depth defines if the depth buffer must be cleared
      * @param stencil defines if the stencil buffer must be cleared
+     * @param stencilClearValue defines the value to use to clear the stencil buffer (default is 0)
      */
-    public clear(color: Nullable<IColor4Like>, backBuffer: boolean, depth: boolean, stencil: boolean = false): void {
+    public clear(color: Nullable<IColor4Like>, backBuffer: boolean, depth: boolean, stencil: boolean = false, stencilClearValue = 0): void {
         const useStencilGlobalOnly = this.stencilStateComposer.useStencilGlobalOnly;
         this.stencilStateComposer.useStencilGlobalOnly = true; // make sure the stencil mask is coming from the global stencil and not from a material (effect) which would currently be in effect
 
@@ -958,7 +991,7 @@ export class ThinEngine extends AbstractEngine {
             mode |= this._gl.DEPTH_BUFFER_BIT;
         }
         if (stencil) {
-            this._gl.clearStencil(0);
+            this._gl.clearStencil(stencilClearValue);
             mode |= this._gl.STENCIL_BUFFER_BIT;
         }
         this._gl.clear(mode);
@@ -1799,7 +1832,6 @@ export class ThinEngine extends AbstractEngine {
             this._currentInstanceBuffers.splice(index, 1);
 
             shouldClean = true;
-            index = this._currentInstanceLocations.indexOf(attributeLocation);
         }
 
         if (shouldClean) {
@@ -2603,7 +2635,7 @@ export class ThinEngine extends AbstractEngine {
             return false;
         }
 
-        this._gl.uniformMatrix4fv(uniform, false, matrices);
+        this._gl.uniformMatrix4fv(uniform, false, matrices as Float32List);
         return true;
     }
 
@@ -2715,7 +2747,7 @@ export class ThinEngine extends AbstractEngine {
     public applyStates() {
         this._depthCullingState.apply(this._gl);
         this._stencilStateComposer.apply(this._gl);
-        this._alphaState.apply(this._gl);
+        this._alphaState.apply(this._gl, this._currentRenderTarget && this._currentRenderTarget.textures ? this._currentRenderTarget.textures!.length : 1);
 
         if (this._colorWriteChanged) {
             this._colorWriteChanged = false;
@@ -2754,8 +2786,7 @@ export class ThinEngine extends AbstractEngine {
             this._depthCullingState.depthFunc = this._gl.LEQUAL;
 
             this._alphaState.reset();
-            this._alphaMode = Constants.ALPHA_ADD;
-            this._alphaEquation = Constants.ALPHA_DISABLE;
+            this._resetAlphaMode();
 
             this._colorWrite = true;
             this._colorWriteChanged = true;
@@ -2909,7 +2940,7 @@ export class ThinEngine extends AbstractEngine {
         delayGPUTextureCreation = true,
         source = InternalTextureSource.Unknown
     ): InternalTexture {
-        let generateMipMaps = false;
+        let generateMipMaps: boolean;
         let createMipMaps = false;
         let type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
         let samplingMode = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE;
@@ -2919,6 +2950,7 @@ export class ThinEngine extends AbstractEngine {
         let label: string | undefined;
         let createMSAATexture = false;
         let comparisonFunction = 0;
+        let isCube = false;
         if (options !== undefined && typeof options === "object") {
             generateMipMaps = !!options.generateMipMaps;
             createMipMaps = !!options.createMipMaps;
@@ -2930,6 +2962,7 @@ export class ThinEngine extends AbstractEngine {
             label = options.label;
             createMSAATexture = !!options.createMSAATexture;
             comparisonFunction = options.comparisonFunction || 0;
+            isCube = !!options.isCube;
         } else {
             generateMipMaps = !!options;
         }
@@ -2958,7 +2991,7 @@ export class ThinEngine extends AbstractEngine {
         const depth = (<{ width: number; height: number; depth?: number; layers?: number }>size).depth || 0;
         const layers = (<{ width: number; height: number; depth?: number; layers?: number }>size).layers || 0;
         const filters = this._getSamplingParameters(samplingMode, (generateMipMaps || createMipMaps) && !isDepthTexture);
-        const target = layers !== 0 ? gl.TEXTURE_2D_ARRAY : depth !== 0 ? gl.TEXTURE_3D : gl.TEXTURE_2D;
+        const target = layers !== 0 ? gl.TEXTURE_2D_ARRAY : depth !== 0 ? gl.TEXTURE_3D : isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D;
         const sizedFormat = isDepthTexture
             ? this._getInternalFormatFromDepthTextureFormat(format, true, hasStencil)
             : this._getRGBABufferInternalSizedFormat(type, format, useSRGBBuffer);
@@ -2974,6 +3007,11 @@ export class ThinEngine extends AbstractEngine {
         } else if (depth !== 0) {
             texture.is3D = true;
             gl.texImage3D(target, 0, sizedFormat, width, height, depth, 0, internalFormat, textureType, null);
+        } else if (isCube) {
+            texture.isCube = true;
+            for (let face = 0; face < 6; face++) {
+                gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, sizedFormat, width, height, 0, internalFormat, textureType, null);
+            }
         } else {
             gl.texImage2D(target, 0, sizedFormat, width, height, 0, internalFormat, textureType, null);
         }
@@ -3018,7 +3056,7 @@ export class ThinEngine extends AbstractEngine {
         this._internalTexturesCache.push(texture);
 
         if (createMSAATexture) {
-            let renderBuffer: Nullable<WebGLRenderbuffer> = null;
+            let renderBuffer: Nullable<WebGLRenderbuffer>;
 
             if (IsDepthTexture(texture.format)) {
                 renderBuffer = this._setupFramebufferDepthAttachments(
@@ -3382,7 +3420,22 @@ export class ThinEngine extends AbstractEngine {
             }
         }
 
-        this._gl.compressedTexImage2D(target, lod, internalFormat, width, height, 0, <DataView>data);
+        if (texture.generateMipMaps) {
+            const webGLHardwareTexture = texture._hardwareTexture as WebGLHardwareTexture;
+            if (!webGLHardwareTexture.memoryAllocated) {
+                gl.texStorage2D(
+                    texture.isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D,
+                    Math.floor(Math.log2(Math.max(width, height))) + 1,
+                    internalFormat,
+                    texture.width,
+                    texture.height
+                );
+                webGLHardwareTexture.memoryAllocated = true;
+            }
+            this._gl.compressedTexSubImage2D(target, lod, 0, 0, width, height, internalFormat, data);
+        } else {
+            this._gl.compressedTexImage2D(target, lod, internalFormat, width, height, 0, <DataView>data);
+        }
     }
 
     /**
@@ -4573,7 +4626,7 @@ export class ThinEngine extends AbstractEngine {
                 const tempcanvas = AbstractEngine._CreateCanvas(1, 1);
                 const gl = tempcanvas.getContext("webgl") || (tempcanvas as any).getContext("experimental-webgl");
 
-                this._IsSupported = gl != null && !!window.WebGLRenderingContext;
+                this._IsSupported = gl != null && !!globalThis.WebGLRenderingContext;
             } catch (e) {
                 this._IsSupported = false;
             }

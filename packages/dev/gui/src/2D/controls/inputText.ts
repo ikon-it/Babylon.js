@@ -1,20 +1,17 @@
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
-import { Observable } from "core/Misc/observable";
-import type { Vector2 } from "core/Maths/math.vector";
-import type { ClipboardInfo } from "core/Events/clipboardEvents";
-import { ClipboardEventTypes } from "core/Events/clipboardEvents";
-import type { PointerInfo, PointerInfoBase } from "core/Events/pointerEvents";
-import { PointerEventTypes } from "core/Events/pointerEvents";
+import { type Nullable } from "core/types";
+import { type Observer, Observable } from "core/Misc/observable";
+import { type Vector2 } from "core/Maths/math.vector";
+import { type ClipboardInfo, ClipboardEventTypes } from "core/Events/clipboardEvents";
+import { type PointerInfo, type PointerInfoBase, PointerEventTypes } from "core/Events/pointerEvents";
 
 import { Control } from "./control";
 import { ValueAndUnit } from "../valueAndUnit";
-import type { VirtualKeyboard } from "./virtualKeyboard";
+import { type VirtualKeyboard } from "./virtualKeyboard";
 import { RegisterClass } from "core/Misc/typeStore";
 import { TextWrapper } from "./textWrapper";
 import { serialize } from "core/Misc/decorators";
-import type { IKeyboardEvent, IPointerEvent } from "core/Events/deviceInputEvents";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type IKeyboardEvent, type IPointerEvent } from "core/Events/deviceInputEvents";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
 
 /**
  * Class used to create input text control
@@ -42,7 +39,7 @@ export class InputText extends Control {
     protected _currentKey = "";
     protected _isTextHighlightOn = false;
     protected _textHighlightColor = "#d5e0ff";
-    protected _highligherOpacity = 0.4;
+    protected _highlighterOpacity = 0.4;
     protected _highlightedText = "";
     private _startHighlightIndex = 0;
     private _endHighlightIndex = 0;
@@ -128,19 +125,35 @@ export class InputText extends Control {
         }
     }
 
-    /** Gets or sets the text highlighter transparency; default: 0.4 */
+    /**
+     * Gets or sets the text highlighter transparency; default: 0.4
+     * @deprecated Please use highlighterOpacity instead
+     */
     @serialize()
     public get highligherOpacity(): number {
-        return this._highligherOpacity;
+        return this.highlighterOpacity;
     }
 
     public set highligherOpacity(value: number) {
-        if (this._highligherOpacity === value) {
+        this.highlighterOpacity = value;
+    }
+
+    /**
+     * Gets or sets the text highlighter transparency; default: 0.4
+     */
+    @serialize()
+    public get highlighterOpacity(): number {
+        return this._highlighterOpacity;
+    }
+
+    public set highlighterOpacity(value: number) {
+        if (this._highlighterOpacity === value) {
             return;
         }
-        this._highligherOpacity = value;
+        this._highlighterOpacity = value;
         this._markAsDirty();
     }
+
     /** Gets or sets a boolean indicating whether to select complete text by default on input focus */
     @serialize()
     public get onFocusSelectAll(): boolean {
@@ -860,7 +873,7 @@ export class InputText extends Control {
      * @internal
      */
     protected _onPasteText(ev: ClipboardEvent): void {
-        let data: string = "";
+        let data: string;
         if (ev.clipboardData && ev.clipboardData.types.indexOf("text/plain") !== -1) {
             data = ev.clipboardData.getData("text/plain");
         } else {
@@ -879,8 +892,8 @@ export class InputText extends Control {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         // Background
@@ -1022,7 +1035,7 @@ export class InputText extends Control {
                     highlightCursorLeft = clipTextLeft;
                 }
                 //for transparancy
-                context.globalAlpha = this._highligherOpacity;
+                context.globalAlpha = this._highlighterOpacity;
                 context.fillStyle = this._textHighlightColor;
                 context.fillRect(highlightCursorLeft, this._currentMeasure.top + (this._currentMeasure.height - this._fontOffset.height) / 2, width, this._fontOffset.height);
                 context.globalAlpha = 1.0;

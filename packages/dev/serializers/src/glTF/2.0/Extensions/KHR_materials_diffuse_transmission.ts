@@ -1,11 +1,11 @@
-import type { IMaterial, IKHRMaterialsDiffuseTransmission } from "babylonjs-gltf2interface";
-import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
+import { type IMaterial, type IKHRMaterialsDiffuseTransmission } from "babylonjs-gltf2interface";
+import { type IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
 import { GLTFExporter } from "../glTFExporter";
-import type { Material } from "core/Materials/material";
+import { type Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Logger } from "core/Misc/logger";
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 
 const NAME = "KHR_materials_diffuse_transmission";
 
@@ -69,7 +69,7 @@ export class KHR_materials_diffuse_transmission implements IGLTFExporterExtensio
      * @param babylonMaterial corresponding babylon material
      * @returns array of additional textures to export
      */
-    public postExportMaterialAdditionalTextures?(context: string, node: IMaterial, babylonMaterial: Material): BaseTexture[] {
+    public async postExportMaterialAdditionalTexturesAsync?(context: string, node: IMaterial, babylonMaterial: Material): Promise<BaseTexture[]> {
         const additionalTextures: BaseTexture[] = [];
 
         if (babylonMaterial instanceof PBRMaterial && this._isExtensionEnabled(babylonMaterial)) {

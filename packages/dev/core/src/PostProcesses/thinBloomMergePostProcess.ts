@@ -1,7 +1,6 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Nullable, AbstractEngine, EffectWrapperCreationOptions } from "core/index";
+import { type Nullable, type AbstractEngine, type EffectWrapperCreationOptions } from "core/index";
 import { EffectWrapper } from "../Materials/effectRenderer";
-import { Engine } from "../Engines/engine";
+import { EngineStore } from "../Engines/engineStore";
 
 /**
  * @internal
@@ -26,7 +25,7 @@ export class ThinBloomMergePostProcess extends EffectWrapper {
         super({
             ...options,
             name,
-            engine: engine || Engine.LastCreatedEngine!,
+            engine: engine || EngineStore.LastCreatedEngine!,
             useShaderStore: true,
             useAsPostProcess: true,
             fragmentShader: ThinBloomMergePostProcess.FragmentUrl,

@@ -1,21 +1,19 @@
-import type { Nullable } from "../types";
-import type { Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Scene } from "../scene";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
-import type { IOfflineProvider } from "../Offline/IOfflineProvider";
-import type { ILoadingScreen } from "../Loading/loadingScreen";
+import { type ILoadingScreen } from "../Loading/loadingScreen";
 import { EngineStore } from "./engineStore";
-import type { WebGLPipelineContext } from "./WebGL/webGLPipelineContext";
-import type { IPipelineContext } from "./IPipelineContext";
-import type { ICustomAnimationFrameRequester } from "../Misc/customAnimationFrameRequester";
-import type { EngineOptions } from "./thinEngine";
-import { ThinEngine } from "./thinEngine";
+import { type WebGLPipelineContext } from "./WebGL/webGLPipelineContext";
+import { type IPipelineContext } from "./IPipelineContext";
+import { type ICustomAnimationFrameRequester } from "../Misc/customAnimationFrameRequester";
+import { type EngineOptions, ThinEngine } from "./thinEngine";
 import { Constants } from "./constants";
-import type { IViewportLike, IColor4Like } from "../Maths/math.like";
+import { type IViewportLike, type IColor4Like } from "../Maths/math.like";
 import { PerformanceMonitor } from "../Misc/performanceMonitor";
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { WebGLDataBuffer } from "../Meshes/WebGL/webGLDataBuffer";
 import { Logger } from "../Misc/logger";
-import type { RenderTargetWrapper } from "./renderTargetWrapper";
+import { type RenderTargetWrapper } from "./renderTargetWrapper";
 import { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
 
 import "./Extensions/engine.alpha";
@@ -31,10 +29,13 @@ import "./Extensions/engine.uniformBuffer";
 import "./AbstractEngine/abstractEngine.loadingScreen";
 import "./AbstractEngine/abstractEngine.dom";
 import "./AbstractEngine/abstractEngine.states";
+import "./AbstractEngine/abstractEngine.stencil";
 import "./AbstractEngine/abstractEngine.renderPass";
 import "./AbstractEngine/abstractEngine.texture";
+import "./AbstractEngine/abstractEngine.loadFile";
+import "./AbstractEngine/abstractEngine.textureLoaders";
 
-import type { PostProcess } from "../PostProcesses/postProcess";
+import { type PostProcess } from "../PostProcesses/postProcess";
 import { AbstractEngine } from "./abstractEngine";
 import {
     CreateImageBitmapFromSource,
@@ -384,8 +385,6 @@ export class Engine extends ThinEngine {
         }
 
         this._features.supportRenderPasses = true;
-
-        options = this._creationOptions;
     }
 
     protected override _initGLContext(): void {
@@ -539,33 +538,6 @@ export class Engine extends ThinEngine {
         const gl = this._gl;
 
         gl.disable(gl.SCISSOR_TEST);
-    }
-
-    /**
-     * @internal
-     */
-    public async _loadFileAsync(url: string, offlineProvider?: IOfflineProvider, useArrayBuffer?: false): Promise<string>;
-    public async _loadFileAsync(url: string, offlineProvider?: IOfflineProvider, useArrayBuffer?: true): Promise<ArrayBuffer>;
-
-    /**
-     * @internal
-     */
-    public async _loadFileAsync(url: string, offlineProvider?: IOfflineProvider, useArrayBuffer?: boolean): Promise<string | ArrayBuffer> {
-        return await new Promise((resolve, reject) => {
-            this._loadFile(
-                url,
-                (data) => {
-                    resolve(data);
-                },
-                undefined,
-                offlineProvider,
-                useArrayBuffer,
-                (request, exception) => {
-                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-                    reject(exception);
-                }
-            );
-        });
     }
 
     /**

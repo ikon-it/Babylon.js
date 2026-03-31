@@ -1,12 +1,12 @@
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { AbstractMesh } from "core/Meshes/abstractMesh";
 
 import { Control } from "./control";
 import { MultiLinePoint } from "../multiLinePoint";
 import { RegisterClass } from "core/Misc/typeStore";
-import type { Vector3 } from "core/Maths/math.vector";
+import { type Vector3 } from "core/Maths/math.vector";
 import { serialize } from "core/Misc/decorators";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
 
 /**
  * Class used to create multi line control
@@ -183,8 +183,8 @@ export class MultiLine extends Control {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         this._applyStates(context);

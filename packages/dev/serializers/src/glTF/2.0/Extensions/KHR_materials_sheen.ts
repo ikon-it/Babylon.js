@@ -1,9 +1,9 @@
-import type { IMaterial, IKHRMaterialsSheen } from "babylonjs-gltf2interface";
-import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
+import { type IMaterial, type IKHRMaterialsSheen } from "babylonjs-gltf2interface";
+import { type IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
 import { GLTFExporter } from "../glTFExporter";
-import type { Material } from "core/Materials/material";
+import { type Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
 
 const NAME = "KHR_materials_sheen";
 
@@ -36,7 +36,7 @@ export class KHR_materials_sheen implements IGLTFExporterExtensionV2 {
         return this._wasUsed;
     }
 
-    public postExportMaterialAdditionalTextures(context: string, node: IMaterial, babylonMaterial: Material): BaseTexture[] {
+    public async postExportMaterialAdditionalTexturesAsync(context: string, node: IMaterial, babylonMaterial: Material): Promise<BaseTexture[]> {
         if (babylonMaterial instanceof PBRMaterial) {
             if (babylonMaterial.sheen.isEnabled && babylonMaterial.sheen.texture) {
                 return [babylonMaterial.sheen.texture];

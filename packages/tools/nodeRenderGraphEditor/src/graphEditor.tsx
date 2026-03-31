@@ -1,37 +1,37 @@
 import * as React from "react";
-import type { GlobalState } from "./globalState";
+import { type GlobalState } from "./globalState";
 import { createRoot } from "react-dom/client";
 import { NodeListComponent } from "./components/nodeList/nodeListComponent";
 import { PropertyTabComponent } from "./components/propertyTab/propertyTabComponent";
 import { Portal } from "./portal";
 import { LogComponent, LogEntry } from "./components/log/logComponent";
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { MessageDialog } from "shared-ui-components/components/MessageDialog";
 import { BlockTools } from "./blockTools";
 import { PreviewManager } from "./components/preview/previewManager";
 import { PreviewMeshControlComponent } from "./components/preview/previewMeshControlComponent";
 import { PreviewAreaComponent } from "./components/preview/previewAreaComponent";
 import { SerializationTools } from "./serializationTools";
-import type { IInspectorOptions } from "core/Debug/debugLayer";
+import { type IInspectorOptions } from "core/Debug/debugLayer";
 import { CreatePopup } from "shared-ui-components/popupHelper";
 
 import "./main.scss";
 import { GraphCanvasComponent } from "shared-ui-components/nodeGraphSystem/graphCanvas";
-import type { GraphNode } from "shared-ui-components/nodeGraphSystem/graphNode";
+import { type GraphNode } from "shared-ui-components/nodeGraphSystem/graphNode";
 import { TypeLedger } from "shared-ui-components/nodeGraphSystem/typeLedger";
-import type { IEditorData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeLocationInfo";
-import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
+import { type IEditorData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeLocationInfo";
+import { type INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
 import { NodeRenderGraphBlock } from "core/FrameGraph/Node/nodeRenderGraphBlock";
 import { NodeRenderGraphOutputBlock } from "core/FrameGraph/Node/Blocks/outputBlock";
-import type { NodeRenderGraphBlockConnectionPointTypes } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
-import { NodeRenderGraphInputBlock } from "core/FrameGraph/Node/Blocks/inputBlock";
+import { type NodeRenderGraphBlockConnectionPointTypes } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
+import { type NodeRenderGraphValueType, NodeRenderGraphInputBlock } from "core/FrameGraph/Node/Blocks/inputBlock";
 import { Constants } from "core/Engines/constants";
-import type { InternalTexture } from "core/Materials/Textures/internalTexture";
+import { type InternalTexture } from "core/Materials/Textures/internalTexture";
 import { SplitContainer } from "shared-ui-components/split/splitContainer";
 import { Splitter } from "shared-ui-components/split/splitter";
 import { ControlledSize, SplitDirection } from "shared-ui-components/split/splitContext";
-import type { IShadowLight } from "core/Lights";
-import type { NodeRenderGraphExecuteBlock } from "core/FrameGraph/Node/Blocks/executeBlock";
+import { type IShadowLight } from "core/Lights";
+import { type NodeRenderGraphExecuteBlock } from "core/FrameGraph/Node/Blocks/executeBlock";
 import { HistoryStack } from "shared-ui-components/historyStack";
 
 interface IGraphEditorProps {
@@ -103,8 +103,23 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
         };
 
         const applyUpdate = (data: any) => {
+            // Preserve external input values set by the host app (they aren't in the serialized data)
+            const savedExternalValues = new Map<string, Nullable<NodeRenderGraphValueType>>();
+            for (const input of renderGraph.getInputBlocks()) {
+                if (input.isExternal) {
+                    savedExternalValues.set(input.name, input.value);
+                }
+            }
+
             globalState.stateManager.onSelectionChangedObservable.notifyObservers(null);
             renderGraph.parseSerializedObject(data);
+
+            // Restore external input values after the new blocks are created
+            for (const input of renderGraph.getInputBlocks()) {
+                if (input.isExternal && savedExternalValues.has(input.name)) {
+                    input.value = savedExternalValues.get(input.name)!;
+                }
+            }
 
             globalState.onResetRequiredObservable.notifyObservers(false);
         };
@@ -115,16 +130,16 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
 
         // Connect to relevant events
         globalState.stateManager.onUpdateRequiredObservable.add(() => {
-            this._historyStack.store();
+            void this._historyStack.storeAsync();
         });
         globalState.stateManager.onRebuildRequiredObservable.add(() => {
-            this._historyStack.store();
+            void this._historyStack.storeAsync();
         });
         globalState.stateManager.onNodeMovedObservable.add(() => {
-            this._historyStack.store();
+            void this._historyStack.storeAsync();
         });
         globalState.stateManager.onNewNodeCreatedObservable.add(() => {
-            this._historyStack.store();
+            void this._historyStack.storeAsync();
         });
         globalState.onClearUndoStack.add(() => {
             this._historyStack.reset();
@@ -222,22 +237,22 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
             }
         });
 
-        this.props.globalState.stateManager.onRebuildRequiredObservable.add(() => {
+        this.props.globalState.stateManager.onRebuildRequiredObservable.add(async () => {
             if (this.props.globalState.nodeRenderGraph) {
-                this.buildRenderGraph();
+                await this.buildRenderGraphAsync();
             }
         });
 
-        this.props.globalState.onResetRequiredObservable.add((isDefault) => {
+        this.props.globalState.onResetRequiredObservable.add(async (isDefault) => {
             if (isDefault) {
                 if (this.props.globalState.nodeRenderGraph) {
-                    this.buildRenderGraph();
+                    await this.buildRenderGraphAsync();
                 }
                 this.build(true);
             } else {
                 this.build();
                 if (this.props.globalState.nodeRenderGraph) {
-                    this.buildRenderGraph();
+                    await this.buildRenderGraphAsync();
                 }
             }
         });
@@ -271,14 +286,14 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
                 return;
             }
 
-            this._graphCanvas.handleKeyDown(
+            void this._graphCanvas.handleKeyDownAsync(
                 evt,
                 (nodeData) => {
                     this.props.globalState.nodeRenderGraph.removeBlock(nodeData.data as NodeRenderGraphBlock);
                 },
                 this._mouseLocationX,
                 this._mouseLocationY,
-                (nodeData) => {
+                async (nodeData) => {
                     const block = nodeData.data as NodeRenderGraphBlock;
                     const clone = block.clone();
 
@@ -333,14 +348,14 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
             } else if (input.isCamera()) {
                 input.value = this.props.globalState.scene.activeCamera;
             } else if (input.isObjectList()) {
-                input.value = { meshes: [], particleSystems: [] };
+                input.value = { meshes: this.props.globalState.scene.meshes.slice(), particleSystems: this.props.globalState.scene.particleSystems.slice() };
             } else if (input.isShadowLight()) {
                 input.value = this.props.globalState.scene.lights[1] as IShadowLight;
             }
         }
     }
 
-    buildRenderGraph() {
+    async buildRenderGraphAsync() {
         if (!this.props.globalState.nodeRenderGraph) {
             return;
         }
@@ -361,12 +376,21 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
         const nodeRenderGraph = this.props.globalState.nodeRenderGraph;
 
         try {
-            nodeRenderGraph.build();
-        } catch (err) {
-            if (LogErrorTrace) {
-                (console as any).log(err);
+            if (this.props.globalState.hostScene) {
+                // We wait for the graph to be ready only if the editor is linked to a host scene (most probabaly a playground).
+                // Else, the node render graph is a dummy one for editing purpose only.
+                await nodeRenderGraph.buildAsync(false, true, false);
+            } else {
+                await nodeRenderGraph.buildAsync(false, false);
             }
-            this.props.globalState.onLogRequiredObservable.notifyObservers(new LogEntry(err, true));
+        } catch (err) {
+            // We care about errors only if there is a host scene (the editor isprobably linked to a playground).
+            if (this.props.globalState.hostScene) {
+                if (LogErrorTrace) {
+                    (console as any).log(err);
+                }
+                this.props.globalState.onLogRequiredObservable.notifyObservers(new LogEntry(err, true));
+            }
         }
     }
 
@@ -455,6 +479,8 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
 
         let customBlockData: any;
 
+        blockType = blockType.replace(/ /g, "_");
+
         // Dropped something that is not a node
         if (blockType === "") {
             return;
@@ -498,7 +524,16 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
         if (blockType.indexOf("Block") === -1) {
             newNode = this.addValueNode(blockType);
         } else {
-            const block = BlockTools.GetBlockFromString(blockType, this.props.globalState.nodeRenderGraph.frameGraph, this.props.globalState.scene)!;
+            let block: NodeRenderGraphBlock = BlockTools.GetBlockFromString(blockType, this.props.globalState.nodeRenderGraph.frameGraph, this.props.globalState.scene)!;
+            if (block === null) {
+                const customBlock = this.props.globalState.customBlockDescriptions?.find((d) => {
+                    const name = d.name.endsWith("Block") ? d.name : d.name + "Block";
+                    return name === blockType;
+                });
+                if (customBlock) {
+                    block = customBlock.factory(this.props.globalState.nodeRenderGraph.frameGraph, this.props.globalState.scene);
+                }
+            }
 
             if (block.isUnique) {
                 const className = block.getClassName();

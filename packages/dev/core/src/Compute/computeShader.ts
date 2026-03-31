@@ -1,26 +1,26 @@
-import type { UniformBuffer } from "../Materials/uniformBuffer";
-import type { WebGPUEngine } from "../Engines/webgpuEngine";
-import type { Scene } from "../scene";
-import type { Nullable } from "../types";
+import { type UniformBuffer } from "../Materials/uniformBuffer";
+import { type WebGPUEngine } from "../Engines/webgpuEngine";
+import { type Scene } from "../scene";
+import { type Nullable } from "../types";
 import { serialize } from "../Misc/decorators";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { RegisterClass } from "../Misc/typeStore";
-import type { ComputeEffect, IComputeEffectCreationOptions, IComputeShaderPath } from "./computeEffect";
-import type { ComputeBindingMapping } from "../Engines/Extensions/engine.computeShader";
-import { ComputeBindingType } from "../Engines/Extensions/engine.computeShader";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { type ComputeEffect, type IComputeEffectCreationOptions, type IComputeShaderPath } from "./computeEffect";
+import { type ComputeBindingMapping, ComputeBindingType } from "../Engines/Extensions/engine.computeShader";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Texture } from "../Materials/Textures/texture";
 import { UniqueIdGenerator } from "../Misc/uniqueIdGenerator";
-import type { IComputeContext } from "./IComputeContext";
-import type { StorageBuffer } from "../Buffers/storageBuffer";
+import { type IComputeContext } from "./IComputeContext";
+import { type StorageBuffer } from "../Buffers/storageBuffer";
 import { Logger } from "../Misc/logger";
 import { TextureSampler } from "../Materials/Textures/textureSampler";
-import type { DataBuffer } from "core/Buffers/dataBuffer";
-import type { ExternalTexture } from "core/Materials/Textures/externalTexture";
-import type { VideoTexture } from "core/Materials/Textures/videoTexture";
+import { type DataBuffer } from "core/Buffers/dataBuffer";
+import { type ExternalTexture } from "core/Materials/Textures/externalTexture";
+import { type VideoTexture } from "core/Materials/Textures/videoTexture";
 import { WebGPUPerfCounter } from "core/Engines/WebGPU/webgpuPerfCounter";
-import type { AbstractEngine } from "core/Engines/abstractEngine";
+import { type AbstractEngine } from "core/Engines/abstractEngine";
 import { _RetryWithInterval } from "core/Misc/timingTools";
+import { type InternalTexture } from "core/Materials/Textures/internalTexture";
 
 /**
  * Defines the options associated with the creation of a compute shader.
@@ -114,6 +114,11 @@ export class ComputeShader {
     public readonly gpuTimeInFrame?: WebGPUPerfCounter;
 
     /**
+     * If set to true, the compute context will be rebuilt at the next dispatch even if in fast mode
+     */
+    public triggerContextRebuild = false;
+
+    /**
      * Instantiates a new compute shader.
      * @param name Defines the name of the compute shader in the scene
      * @param engine Defines the engine the compute shader belongs to
@@ -146,6 +151,7 @@ export class ComputeShader {
         this._options = {
             bindingsMapping: {},
             defines: [],
+            entryPoint: "main",
             ...options,
         };
     }
@@ -170,6 +176,23 @@ export class ComputeShader {
 
         this._bindings[name] = {
             type: bindSampler ? ComputeBindingType.Texture : ComputeBindingType.TextureWithoutSampler,
+            object: texture,
+            indexInGroupEntries: current?.indexInGroupEntries,
+        };
+
+        this._contextIsDirty ||= !current || current.object !== texture || current.type !== this._bindings[name].type;
+    }
+
+    /**
+     * Binds an internal texture to the shader
+     * @param name Binding name of the texture
+     * @param texture Texture to bind
+     */
+    public setInternalTexture(name: string, texture: InternalTexture): void {
+        const current = this._bindings[name];
+
+        this._bindings[name] = {
+            type: ComputeBindingType.InternalTexture,
             object: texture,
             indexInGroupEntries: current?.indexInGroupEntries,
         };
@@ -309,7 +332,7 @@ export class ComputeShader {
             }
         }
 
-        const defines = [];
+        const defines = ["#define " + this._options.entryPoint];
 
         const shaderName = this._shaderPath;
 
@@ -349,7 +372,7 @@ export class ComputeShader {
      * @returns True if the dispatch could be done, else false (meaning either the compute effect or at least one of the bound resources was not ready)
      */
     public dispatch(x: number, y?: number, z?: number): boolean {
-        if (!this.fastMode && !this._checkContext()) {
+        if ((!this.fastMode || this.triggerContextRebuild) && !this._checkContext()) {
             return false;
         }
         this._engine.computeDispatch(this._effect, this._context, this._bindings, x, y, z, this._options.bindingsMapping, this.gpuTimeInFrame);
@@ -364,7 +387,7 @@ export class ComputeShader {
      * @returns True if the dispatch could be done, else false (meaning either the compute effect or at least one of the bound resources was not ready)
      */
     public dispatchIndirect(buffer: StorageBuffer | DataBuffer, offset: number = 0): boolean {
-        if (!this.fastMode && !this._checkContext()) {
+        if ((!this.fastMode || this.triggerContextRebuild) && !this._checkContext()) {
             return false;
         }
         const dataBuffer = ComputeShader._BufferIsDataBuffer(buffer) ? buffer : buffer.getBuffer();
@@ -421,6 +444,7 @@ export class ComputeShader {
         }
 
         if (this._contextIsDirty) {
+            this.triggerContextRebuild = false;
             this._contextIsDirty = false;
             this._context.clear();
         }
@@ -472,6 +496,7 @@ export class ComputeShader {
                     break;
                 }
 
+                case ComputeBindingType.InternalTexture:
                 case ComputeBindingType.UniformBuffer: {
                     break;
                 }

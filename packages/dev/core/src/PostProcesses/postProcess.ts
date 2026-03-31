@@ -1,32 +1,30 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { SmartArray } from "../Misc/smartArray";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
+import { type Observer, Observable } from "../Misc/observable";
 import { Vector2 } from "../Maths/math.vector";
-import type { Camera } from "../Cameras/camera";
+import { type Camera } from "../Cameras/camera";
 import { Effect } from "../Materials/effect";
 import { Constants } from "../Engines/constants";
-import type { RenderTargetCreationOptions } from "../Materials/Textures/textureCreationOptions";
-import type { IInspectable } from "../Misc/iInspectable";
-import type { Color4 } from "../Maths/math.color";
+import { type RenderTargetCreationOptions } from "../Materials/Textures/textureCreationOptions";
+import { type IInspectable } from "../Misc/iInspectable";
+import { type Color4 } from "../Maths/math.color";
 
-import type { NodeMaterial } from "../Materials/Node/nodeMaterial";
+import { type NodeMaterial } from "../Materials/Node/nodeMaterial";
 import { serialize, serializeAsColor4 } from "../Misc/decorators";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { GetClass, RegisterClass } from "../Misc/typeStore";
-import type { RenderTargetWrapper } from "../Engines/renderTargetWrapper";
+import { type RenderTargetWrapper } from "../Engines/renderTargetWrapper";
 import { ShaderLanguage } from "../Materials/shaderLanguage";
 
-import type { Scene } from "../scene";
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import type { Animation } from "../Animations/animation";
-import type { PrePassRenderer } from "../Rendering/prePassRenderer";
-import type { PrePassEffectConfiguration } from "../Rendering/prePassEffectConfiguration";
+import { type Scene } from "../scene";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
+import { type Animation } from "../Animations/animation";
+import { type PrePassRenderer } from "../Rendering/prePassRenderer";
+import { type PrePassEffectConfiguration } from "../Rendering/prePassEffectConfiguration";
 import { AbstractEngine } from "../Engines/abstractEngine";
 import { GetExponentOfTwo } from "../Misc/tools.functions";
-import type { IAssetContainer } from "core/IAssetContainer";
-import type { EffectWrapperCustomShaderCodeProcessing, EffectWrapperCreationOptions } from "../Materials/effectRenderer";
-import { EffectWrapper } from "../Materials/effectRenderer";
+import { type IAssetContainer } from "core/IAssetContainer";
+import { type EffectWrapperCustomShaderCodeProcessing, type EffectWrapperCreationOptions, EffectWrapper } from "../Materials/effectRenderer";
 
 declare module "../Engines/abstractEngine" {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -333,6 +331,11 @@ export class PostProcess {
      */
     @serialize()
     public adaptScaleToCurrentViewport = false;
+
+    /**
+     * Specifies if the post process should be serialized
+     */
+    public doNotSerialize = false;
 
     private _camera: Camera;
     protected _scene: Scene;
@@ -678,7 +681,7 @@ export class PostProcess {
             camera.attachPostProcess(this);
             this._engine = this._scene.getEngine();
 
-            this._scene.postProcesses.push(this);
+            this._scene.addPostProcess(this);
             this.uniqueId = this._scene.getUniqueId();
         } else if (engine) {
             this._engine = engine;
@@ -1145,16 +1148,13 @@ export class PostProcess {
 
         this._disposeTextures();
 
-        let index;
         if (this._scene) {
-            index = this._scene.postProcesses.indexOf(this);
-            if (index !== -1) {
-                this._scene.postProcesses.splice(index, 1);
-            }
+            this._scene.removePostProcess(this);
         }
 
+        let index: number;
         if (this._parentContainer) {
-            const index = this._parentContainer.postProcesses.indexOf(this);
+            index = this._parentContainer.postProcesses.indexOf(this);
             if (index > -1) {
                 this._parentContainer.postProcesses.splice(index, 1);
             }

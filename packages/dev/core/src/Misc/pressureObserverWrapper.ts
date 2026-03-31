@@ -1,4 +1,4 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Observable } from "./observable";
 
 /**
@@ -40,7 +40,10 @@ export class PressureObserverWrapper {
      */
     observe(source: PressureSource): void {
         try {
-            this._observer?.observe(source);
+            // eslint-disable-next-line github/no-then
+            this._observer?.observe(source).catch(() => {
+                // Ignore any error
+            });
             this.onPressureChanged.notifyObservers(this._currentState);
         } catch {
             // Ignore error

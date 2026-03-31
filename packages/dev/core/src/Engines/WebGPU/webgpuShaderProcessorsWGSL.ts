@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable babylonjs/available */
 /* eslint-disable jsdoc/require-jsdoc */
-import type { Nullable } from "../../types";
-import type { _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
-import type { WebGPUBufferDescription } from "./webgpuShaderProcessingContext";
-import { WebGPUShaderProcessingContext } from "./webgpuShaderProcessingContext";
+import { type Nullable } from "../../types";
+import { type _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
+import { type WebGPUBufferDescription, WebGPUShaderProcessingContext } from "./webgpuShaderProcessingContext";
 import * as WebGPUConstants from "./webgpuConstants";
 import { Logger } from "../../Misc/logger";
 import { WebGPUShaderProcessor } from "./webgpuShaderProcessor";
@@ -195,7 +194,25 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
             const textureFunc = match[4]; // texture_2d, texture_depth_2d, etc
             const isStorageTexture = textureFunc.indexOf("storage") > 0;
             const componentType = match[6]; // f32 or i32 or u32 or undefined
-            const storageTextureFormat = isStorageTexture ? (componentType.substring(0, componentType.indexOf(",")).trim() as GPUTextureFormat) : null;
+            let storageTextureFormat: GPUTextureFormat | null = null;
+            let storageTextureAccess = WebGPUConstants.StorageTextureAccess.WriteOnly as GPUStorageTextureAccess;
+
+            if (isStorageTexture) {
+                const commaIndex = componentType.indexOf(",");
+                storageTextureFormat = componentType.substring(0, commaIndex).trim() as GPUTextureFormat;
+                const accessMode = componentType.substring(commaIndex + 1).trim();
+                switch (accessMode) {
+                    case "read":
+                        storageTextureAccess = WebGPUConstants.StorageTextureAccess.ReadOnly;
+                        break;
+                    case "read_write":
+                        storageTextureAccess = WebGPUConstants.StorageTextureAccess.ReadWrite;
+                        break;
+                    default:
+                        storageTextureAccess = WebGPUConstants.StorageTextureAccess.WriteOnly;
+                        break;
+                }
+            }
 
             let arraySize = isArrayOfTexture ? this._getArraySize(name, type, preProcessors)[2] : 0;
             let textureInfo = this._webgpuProcessingContext.availableTextures[name];
@@ -203,6 +220,7 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
                 textureInfo = {
                     isTextureArray: arraySize > 0,
                     isStorageTexture,
+                    storageTextureAccess: isStorageTexture ? storageTextureAccess : undefined,
                     textures: [],
                     sampleType: WebGPUConstants.TextureSampleType.Float,
                 };
@@ -240,7 +258,7 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
                     texture = `@group(${groupIndex}) @binding(${bindingIndex}) ${texture}`;
                 }
 
-                this._addTextureBindingDescription(name, textureInfo, i, textureDimension, storageTextureFormat, !isFragment);
+                this._addTextureBindingDescription(name, textureInfo, i, textureDimension, storageTextureFormat, !isFragment, storageTextureAccess);
             }
         }
 
@@ -331,10 +349,16 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
 
         code = this._convertDefinesToConst(preProcessors) + code;
 
+        if ("VERTEXOUTPUT_INVARIANT" in preProcessors) {
+            code = "#define VERTEXOUTPUT_INVARIANT\n" + code;
+        }
+
         return code;
     }
 
     public finalizeShaders(vertexCode: string, fragmentCode: string): { vertexCode: string; fragmentCode: string } {
+        const enabledExtensions: string[] = [];
+
         const fragCoordCode =
             fragmentCode.indexOf("fragmentInputs.position") >= 0 && !this.pureMode
                 ? `
@@ -373,7 +397,8 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
             vertexInputs += "\n};\nvar<private> vertexInputs : VertexInputs_;\n";
         }
 
-        let vertexOutputs = "struct FragmentInputs {\n  @builtin(position) position : vec4<f32>,\n";
+        let vertexOutputs =
+            "struct FragmentInputs {\n  @builtin(position)" + (vertexCode.indexOf("#define VERTEXOUTPUT_INVARIANT") >= 0 ? " @invariant" : "") + " position : vec4<f32>,\n";
         if (this._varyingsWGSL.length > 0) {
             vertexOutputs += this._varyingsWGSL.join("\n");
         }
@@ -444,8 +469,17 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
         }
 
         if (indexLocation === 0) {
-            fragmentOutputs += "  @location(0) color : vec4<f32>,\n";
-            indexLocation++;
+            const useDualSourceBlending = fragmentCode.indexOf("DUAL_SOURCE_BLENDING") !== -1;
+
+            if (useDualSourceBlending) {
+                enabledExtensions.push("dual_source_blending");
+
+                fragmentOutputs += "  @location(0) @blend_src(0) color : vec4<f32>,\n";
+                fragmentOutputs += "  @location(0) @blend_src(1) color2 : vec4<f32>,\n";
+            } else {
+                fragmentOutputs += "  @location(0) color : vec4<f32>,\n";
+            }
+            // indexLocation++; // if you need this variable after this block, uncomment this
         }
 
         // FragDepth
@@ -479,6 +513,10 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
         const fragmentStartingCode = "  fragmentInputs = input;\n  " + fragCoordCode;
         const fragmentEndingCode = "  return fragmentOutputs;";
         needDiagnosticOff = fragmentCode.indexOf(Constants.DISABLEUA) !== -1;
+
+        if (enabledExtensions.length > 0) {
+            fragmentCode = "enable " + enabledExtensions.join(";\nenable ") + ";\n" + fragmentCode;
+        }
 
         fragmentCode =
             (needDiagnosticOff ? "diagnostic(off, derivative_uniformity);\n" : "") +

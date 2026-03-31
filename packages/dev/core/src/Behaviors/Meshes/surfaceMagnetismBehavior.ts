@@ -1,13 +1,12 @@
-import type { PickingInfo } from "../../Collisions/pickingInfo";
-import type { PointerInfo } from "../../Events/pointerEvents";
-import { PointerEventTypes } from "../../Events/pointerEvents";
+import { type PickingInfo } from "../../Collisions/pickingInfo";
+import { type PointerInfo, PointerEventTypes } from "../../Events/pointerEvents";
 import { Quaternion, TmpVectors, Vector3 } from "../../Maths/math.vector";
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
-import type { Mesh } from "../../Meshes/mesh";
-import type { Observer } from "../../Misc/observable";
-import type { Scene } from "../../scene";
-import type { Nullable } from "../../types";
-import type { Behavior } from "../behavior";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
+import { type Mesh } from "../../Meshes/mesh";
+import { type Observer } from "../../Misc/observable";
+import { type Scene } from "../../scene";
+import { type Nullable } from "../../types";
+import { type Behavior } from "../behavior";
 
 /**
  * A behavior that allows a transform node to stick to a surface position/orientation
@@ -15,7 +14,7 @@ import type { Behavior } from "../behavior";
  */
 export class SurfaceMagnetismBehavior implements Behavior<Mesh> {
     private _scene: Scene;
-    private _attachedMesh: Nullable<Mesh>;
+    private _attachedMesh: Nullable<Mesh> = null;
     private _attachPointLocalOffset: Vector3 = new Vector3();
     private _pointerObserver: Nullable<Observer<PointerInfo>>;
     private _workingPosition: Vector3 = new Vector3();
@@ -71,6 +70,13 @@ export class SurfaceMagnetismBehavior implements Behavior<Mesh> {
      * Maximum distance for the node to stick to the surface
      */
     public maxStickingDistance = 0.8;
+
+    /**
+     * Attached node of this behavior
+     */
+    public get attachedNode(): Nullable<Mesh> {
+        return this._attachedMesh;
+    }
 
     /**
      * Attaches the behavior to a transform node

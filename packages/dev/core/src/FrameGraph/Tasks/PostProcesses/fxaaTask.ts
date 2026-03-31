@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraph, FrameGraphRenderContext, FrameGraphRenderPass } from "core/index";
+import { type FrameGraph, type FrameGraphRenderContext, type FrameGraphRenderPass } from "core/index";
 import { ThinFXAAPostProcess } from "core/PostProcesses/thinFXAAPostProcess";
 import { FrameGraphPostProcessTask } from "./postProcessTask";
 
@@ -17,6 +16,10 @@ export class FrameGraphFXAATask extends FrameGraphPostProcessTask {
      */
     constructor(name: string, frameGraph: FrameGraph, thinPostProcess?: ThinFXAAPostProcess) {
         super(name, frameGraph, thinPostProcess || new ThinFXAAPostProcess(name, frameGraph.engine));
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphFXAATask";
     }
 
     public override record(

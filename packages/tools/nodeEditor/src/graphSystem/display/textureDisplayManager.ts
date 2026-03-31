@@ -1,4 +1,4 @@
-import type { NodeMaterialBlock } from "core/Materials/Node/nodeMaterialBlock";
+import { type NodeMaterialBlock } from "core/Materials/Node/nodeMaterialBlock";
 import { TextureBlock } from "core/Materials/Node/Blocks/Dual/textureBlock";
 import { RefractionBlock } from "core/Materials/Node/Blocks/PBR/refractionBlock";
 import { ReflectionTextureBlock } from "core/Materials/Node/Blocks/Dual/reflectionTextureBlock";
@@ -7,10 +7,11 @@ import { CurrentScreenBlock } from "core/Materials/Node/Blocks/Dual/currentScree
 import { ParticleTextureBlock } from "core/Materials/Node/Blocks/Particle/particleTextureBlock";
 import { ReflectionBlock } from "core/Materials/Node/Blocks/PBR/reflectionBlock";
 import { TriPlanarBlock } from "core/Materials/Node/Blocks/triPlanarBlock";
-import type { IDisplayManager } from "shared-ui-components/nodeGraphSystem/interfaces/displayManager";
-import type { INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
+import { type IDisplayManager } from "shared-ui-components/nodeGraphSystem/interfaces/displayManager";
+import { type INodeData } from "shared-ui-components/nodeGraphSystem/interfaces/nodeData";
 import * as localStyles from "./textureDisplayManager.module.scss";
 import * as commonStyles from "./common.module.scss";
+import { SmartFilterTextureBlock } from "core/Materials";
 
 export class TextureDisplayManager implements IDisplayManager {
     private _previewCanvas: HTMLCanvasElement;
@@ -30,7 +31,14 @@ export class TextureDisplayManager implements IDisplayManager {
 
     public getBackgroundColor(nodeData: INodeData): string {
         const block = nodeData.data as NodeMaterialBlock;
-        return block.getClassName() === "RefractionBlock" || block.getClassName() === "ReflectionBlock" ? "#6174FA" : "#323232";
+
+        switch (block.getClassName()) {
+            case "RefractionBlock":
+            case "ReflectionBlock":
+                return "#6174FA";
+            default:
+                return "#323232";
+        }
     }
 
     public updatePreviewContent(nodeData: INodeData, contentArea: HTMLDivElement): void {
@@ -39,19 +47,18 @@ export class TextureDisplayManager implements IDisplayManager {
 
         if (!this._previewCanvas) {
             contentArea.classList.add(commonStyles["texture-block"]);
+
             if (block instanceof TextureBlock) {
                 contentArea.classList.add(localStyles["regular-texture-block"]);
-            }
-            if (block instanceof ReflectionTextureBlock || block instanceof ReflectionBlock) {
+            } else if (block instanceof ReflectionTextureBlock || block instanceof ReflectionBlock) {
                 contentArea.classList.add(localStyles["reflection-block"]);
-            }
-            if (block instanceof CurrentScreenBlock || block instanceof ParticleTextureBlock) {
+            } else if (block instanceof SmartFilterTextureBlock) {
+                contentArea.classList.add(localStyles["smart-filter-texture-block"]);
+            } else if (block instanceof CurrentScreenBlock || block instanceof ParticleTextureBlock) {
                 contentArea.classList.add(localStyles["reduced-texture-block"]);
-            }
-            if (block instanceof TriPlanarBlock) {
+            } else if (block instanceof TriPlanarBlock) {
                 contentArea.classList.add(localStyles["triplanar-texture-block"]);
-            }
-            if (block instanceof RefractionBlock) {
+            } else if (block instanceof RefractionBlock) {
                 contentArea.classList.add(localStyles["refraction-texture-block"]);
             }
 
@@ -62,6 +69,7 @@ export class TextureDisplayManager implements IDisplayManager {
         }
 
         if (textureBlock.texture) {
+            contentArea.classList.remove(localStyles["hidden"]);
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             TextureLineComponent.UpdatePreview(
                 this._previewCanvas,
@@ -80,7 +88,7 @@ export class TextureDisplayManager implements IDisplayManager {
                 }
             );
         } else {
-            this._previewImage.classList.add(commonStyles.empty);
+            contentArea.classList.add(localStyles["hidden"]);
         }
     }
 }

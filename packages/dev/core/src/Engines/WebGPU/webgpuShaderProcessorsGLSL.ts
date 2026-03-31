@@ -1,9 +1,8 @@
 /* eslint-disable babylonjs/available */
 /* eslint-disable jsdoc/require-jsdoc */
-import type { Nullable } from "../../types";
-import type { _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
-import type { WebGPUBufferDescription } from "./webgpuShaderProcessingContext";
-import { WebGPUShaderProcessingContext } from "./webgpuShaderProcessingContext";
+import { type Nullable } from "../../types";
+import { type _IShaderProcessingContext } from "../Processors/shaderProcessingOptions";
+import { type WebGPUBufferDescription, WebGPUShaderProcessingContext } from "./webgpuShaderProcessingContext";
 import * as WebGPUConstants from "./webgpuConstants";
 import { Logger } from "../../Misc/logger";
 import { WebGPUShaderProcessor } from "./webgpuShaderProcessor";
@@ -155,7 +154,7 @@ export class WebGPUShaderProcessorGLSL extends WebGPUShaderProcessor {
             let name = match[2];
 
             if (uniformType.indexOf("sampler") === 0 || uniformType.indexOf("sampler") === 1) {
-                let arraySize = 0; // 0 means the texture is not declared as an array
+                let arraySize: number; // 0 means the texture is not declared as an array
 
                 [name, uniformType, arraySize] = this._getArraySize(name, uniformType, preProcessors);
 
@@ -281,7 +280,8 @@ export class WebGPUShaderProcessorGLSL extends WebGPUShaderProcessor {
         defines: string[],
         isFragment: boolean,
         _processingContext: Nullable<_IShaderProcessingContext>,
-        _parameters?: { [key: string]: number | string | boolean | undefined }
+        _parameters: { [key: string]: number | string | boolean | undefined },
+        preProcessors: { [key: string]: string }
     ): string {
         const hasDrawBuffersExtension = code.search(/#extension.+GL_EXT_draw_buffers.+require/) !== -1;
 
@@ -325,6 +325,9 @@ export class WebGPUShaderProcessorGLSL extends WebGPUShaderProcessor {
                 code = InjectStartingAndEndingCode(code, "void main", fragCoordCode);
             }
         } else {
+            if ("VERTEXOUTPUT_INVARIANT" in preProcessors) {
+                code = "invariant gl_Position;\n" + code;
+            }
             code = code.replace(/gl_InstanceID/g, "gl_InstanceIndex");
             code = code.replace(/gl_VertexID/g, "gl_VertexIndex");
             const hasMultiviewExtension = defines.indexOf("#define MULTIVIEW") !== -1;

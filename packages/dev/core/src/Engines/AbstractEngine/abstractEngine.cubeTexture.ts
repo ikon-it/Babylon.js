@@ -1,10 +1,10 @@
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
 import { Logger } from "../../Misc/logger";
-import type { Nullable } from "../../types";
-import type { Scene } from "../../scene";
+import { type Nullable } from "../../types";
+import { type Scene } from "../../scene";
 import { LoadImage } from "../../Misc/fileTools";
 import { RandomGUID } from "../../Misc/guid";
-import type { IWebRequest } from "../../Misc/interfaces/iWebRequest";
+import { type IWebRequest } from "../../Misc/interfaces/iWebRequest";
 import { AbstractEngine } from "../abstractEngine";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
 import { GetExtensionFromUrl } from "core/Misc/urlTools";
@@ -267,7 +267,14 @@ AbstractEngine.prototype.createCubeTextureBase = function (
                     localOnError("Textures type does not support cascades.");
                 }
             } else {
-                this._loadFile(rootUrl, (data) => onLoadData(new Uint8Array(data as ArrayBuffer)), undefined, undefined, true, onInternalError);
+                this._loadFile(
+                    rootUrl,
+                    (data) => onLoadData(new Uint8Array(data as ArrayBuffer)),
+                    undefined,
+                    scene ? scene.offlineProvider || null : undefined,
+                    true,
+                    onInternalError
+                );
             }
         });
     } else {

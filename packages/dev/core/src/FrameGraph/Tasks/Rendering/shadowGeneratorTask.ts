@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Scene, FrameGraph, FrameGraphObjectList, IShadowLight, WritableObject, AbstractEngine, FrameGraphTextureHandle, Camera } from "core/index";
+import { type FrameGraph, type FrameGraphObjectList, type IShadowLight, type WritableObject, type FrameGraphTextureHandle, type Camera } from "core/index";
 import { FrameGraphTask } from "../../frameGraphTask";
 import { ShadowGenerator } from "../../../Lights/Shadows/shadowGenerator";
 
@@ -26,7 +25,11 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
         }
 
         this._light = value;
-        this._setupShadowGenerator();
+        this._createShadowGenerator(); // make sure the shadow generator is created
+        if (this._shadowGenerator) {
+            this._shadowGenerator.light = value;
+            this._updateShadowMap();
+        }
     }
 
     private _camera: Camera;
@@ -39,7 +42,12 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
 
     public set camera(camera: Camera) {
         this._camera = camera;
-        this._setupShadowGenerator();
+
+        if (this._shadowGenerator) {
+            this._shadowGenerator.camera = camera;
+            this._shadowGenerator.getShadowMap()!.cameraForLOD = camera;
+            this._updateShadowMap();
+        }
     }
 
     private _mapSize = 1024;
@@ -56,7 +64,10 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
         }
 
         this._mapSize = value;
-        this._setupShadowGenerator();
+        if (this._shadowGenerator) {
+            this._shadowGenerator.mapSize = value;
+            this._updateShadowMap();
+        }
     }
 
     private _useFloat32TextureType = false;
@@ -73,7 +84,10 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
         }
 
         this._useFloat32TextureType = value;
-        this._setupShadowGenerator();
+        if (this._shadowGenerator) {
+            this._shadowGenerator.useFloat32TextureType = value;
+            this._updateShadowMap();
+        }
     }
 
     private _useRedTextureFormat = true;
@@ -90,7 +104,10 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
         }
 
         this._useRedTextureFormat = value;
-        this._setupShadowGenerator();
+        if (this._shadowGenerator) {
+            this._shadowGenerator.useRedTextureFormat = value;
+            this._updateShadowMap();
+        }
     }
 
     private _bias = 0.01;
@@ -257,15 +274,25 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
 
     protected _shadowGenerator: ShadowGenerator | undefined;
 
-    protected _createShadowGenerator() {
+    protected _updateShadowMap() {
+        const shadowGenerator = this._shadowGenerator as ShadowGenerator | undefined;
+        if (shadowGenerator === undefined) {
+            return;
+        }
+
+        const shadowMap = shadowGenerator.getShadowMap()!;
+
+        shadowMap._disableEngineStages = true;
+        shadowMap.cameraForLOD = this._camera;
+    }
+
+    protected _createShadowGeneratorInstance() {
         this._shadowGenerator = new ShadowGenerator(this._mapSize, this._light, this._useFloat32TextureType, undefined, this._useRedTextureFormat);
     }
 
-    protected _setupShadowGenerator() {
-        this._shadowGenerator?.dispose();
-        this._shadowGenerator = undefined;
-        if (this._light !== undefined) {
-            this._createShadowGenerator();
+    protected _createShadowGenerator() {
+        if (!this._shadowGenerator && this._light) {
+            this._createShadowGeneratorInstance();
             const shadowGenerator = this._shadowGenerator as ShadowGenerator | undefined;
             if (shadowGenerator === undefined) {
                 return;
@@ -279,34 +306,33 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
             shadowGenerator.filter = this._filter;
             shadowGenerator.filteringQuality = this._filteringQuality;
 
-            const shadowMap = shadowGenerator.getShadowMap()!;
-            shadowMap._disableEngineStages = true;
-            shadowMap.cameraForLOD = this._camera;
+            this._updateShadowMap();
 
-            (this.shadowGenerator as WritableObject<ShadowGenerator | undefined>) = shadowGenerator;
+            (this.shadowGenerator as WritableObject<ShadowGenerator>) = shadowGenerator;
+
+            return true;
         }
+
+        return false;
     }
 
     public override isReady(): boolean {
         return !!this._shadowGenerator && !!this._shadowGenerator.getShadowMap()?.isReadyForRendering();
     }
 
-    private _engine: AbstractEngine;
-    private _scene: Scene;
-
     /**
      * Creates a new shadow generator task.
      * @param name The name of the task.
      * @param frameGraph The frame graph the task belongs to.
-     * @param scene The scene to create the shadow generator for.
      */
-    constructor(name: string, frameGraph: FrameGraph, scene: Scene) {
+    constructor(name: string, frameGraph: FrameGraph) {
         super(name, frameGraph);
 
-        this._engine = scene.getEngine();
-        this._scene = scene;
-
         this.outputTexture = this._frameGraph.textureManager.createDanglingHandle();
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphShadowGeneratorTask";
     }
 
     public record() {
@@ -326,7 +352,7 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
 
         const pass = this._frameGraph.addPass(this.name);
 
-        pass.setExecuteFunc((_context) => {
+        pass.setExecuteFunc((context) => {
             if (!this.light.isEnabled() || !this.light.shadowEnabled) {
                 return;
             }
@@ -336,20 +362,12 @@ export class FrameGraphShadowGeneratorTask extends FrameGraphTask {
             shadowMap.renderList = this.objectList.meshes;
             shadowMap.particleSystemList = this.objectList.particleSystems;
 
-            const currentRenderTarget = this._engine._currentRenderTarget;
+            context.saveDepthStates();
+            context.setDepthStates(true, true);
 
-            this._scene.incrementRenderId();
-            this._scene.resetCachedMaterial();
+            context.renderUnmanaged(shadowMap);
 
-            shadowMap.render();
-
-            if (this._engine._currentRenderTarget !== currentRenderTarget) {
-                if (!currentRenderTarget) {
-                    this._engine.restoreDefaultFramebuffer();
-                } else {
-                    this._engine.bindFramebuffer(currentRenderTarget);
-                }
-            }
+            context.restoreDepthStates();
         });
 
         const passDisabled = this._frameGraph.addPass(this.name + "_disabled", true);

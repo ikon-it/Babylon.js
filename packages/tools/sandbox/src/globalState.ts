@@ -1,10 +1,11 @@
-import "@dev/inspector";
-import type { Vector3 } from "core/Maths/math.vector";
-import type { FilesInput } from "core/Misc/filesInput";
+import { type FilesInput, type IDisposable, type Nullable, type Scene, type Vector3 } from "core/index";
 import { Observable } from "core/Misc/observable";
-import type { Scene } from "core/scene";
+
+type InspectorV2Module = typeof import("inspector/legacy/legacy") & typeof import("inspector/index");
 
 export class GlobalState {
+    private _inspectorToken: Nullable<IDisposable> = null;
+
     public currentScene: Scene;
     public onSceneLoaded = new Observable<{ scene: Scene; filename: string }>();
     public onError = new Observable<{ scene?: Scene; message?: string }>();
@@ -12,6 +13,7 @@ export class GlobalState {
     public onRequestClickInterceptor = new Observable<void>();
     public onClickInterceptorClicked = new Observable<void>();
     public glTFLoaderExtensions: { [key: string]: import("loaders/glTF/index").IGLTFLoaderExtension } = {};
+    public onFilesInputReady = new Observable<void>();
 
     public filesInput: FilesInput;
     public isDebugLayerEnabled = false;
@@ -29,18 +31,38 @@ export class GlobalState {
         port: number;
     };
 
+    public get version(): string {
+        return this._versionInfo.version;
+    }
+
+    constructor(private readonly _versionInfo: { version: string; bundles: string[] }) {}
+
     public showDebugLayer() {
-        this.isDebugLayerEnabled = true;
-        if (this.currentScene) {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            this.currentScene.debugLayer.show();
+        if (!this.isDebugLayerEnabled) {
+            this.isDebugLayerEnabled = true;
+            if (this.currentScene) {
+                const inspectorV2Module: InspectorV2Module | undefined = (<any>globalThis).INSPECTOR;
+                if (inspectorV2Module?.ShowInspector) {
+                    this._inspectorToken = inspectorV2Module.ShowInspector(this.currentScene);
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                    this.currentScene.debugLayer.show();
+                }
+            }
         }
     }
 
     public hideDebugLayer() {
-        this.isDebugLayerEnabled = false;
-        if (this.currentScene) {
-            this.currentScene.debugLayer.hide();
+        if (this.isDebugLayerEnabled) {
+            this.isDebugLayerEnabled = false;
+            if (this.currentScene) {
+                if (this._inspectorToken) {
+                    this._inspectorToken.dispose();
+                    this._inspectorToken = null;
+                } else {
+                    this.currentScene.debugLayer.hide();
+                }
+            }
         }
     }
 }

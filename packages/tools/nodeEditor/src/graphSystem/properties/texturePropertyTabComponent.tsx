@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
 import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { Tools } from "core/Misc/tools";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
@@ -9,20 +9,22 @@ import { CubeTexture } from "core/Materials/Textures/cubeTexture";
 import { ReflectionTextureBlock } from "core/Materials/Node/Blocks/Dual/reflectionTextureBlock";
 import { ReflectionBlock } from "core/Materials/Node/Blocks/PBR/reflectionBlock";
 import { RefractionBlock } from "core/Materials/Node/Blocks/PBR/refractionBlock";
-import type { TextureBlock } from "core/Materials/Node/Blocks/Dual/textureBlock";
+import { type TextureBlock } from "core/Materials/Node/Blocks/Dual/textureBlock";
 import { CurrentScreenBlock } from "core/Materials/Node/Blocks/Dual/currentScreenBlock";
 import { ParticleTextureBlock } from "core/Materials/Node/Blocks/Particle/particleTextureBlock";
-import { GeneralPropertyTabComponent, GenericPropertyTabComponent } from "./genericNodePropertyComponent";
+import { GetGeneralProperties, GetGenericProperties } from "./genericNodePropertyComponent";
 import { NodeMaterialModes } from "core/Materials/Node/Enums/nodeMaterialModes";
-import type { NodeMaterialBlock } from "core/Materials/Node/nodeMaterialBlock";
-import type { GlobalState } from "../../globalState";
+import { type NodeMaterialBlock } from "core/Materials/Node/nodeMaterialBlock";
+import { type GlobalState } from "../../globalState";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
-import type { IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
+import { type IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
-import type { TriPlanarBlock } from "core/Materials/Node/Blocks/triPlanarBlock";
+import { type TriPlanarBlock } from "core/Materials/Node/Blocks/triPlanarBlock";
+import { PropertyTabComponentBase } from "shared-ui-components/components/propertyTabComponentBase";
+import { SmartFilterTextureBlock } from "core/Materials";
 
 type ReflectionTexture = ReflectionTextureBlock | ReflectionBlock | RefractionBlock;
 
@@ -179,6 +181,9 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
             this.textureBlock instanceof ReflectionTextureBlock || this.textureBlock instanceof ReflectionBlock || this.textureBlock instanceof RefractionBlock;
         const isFrozenTexture = this.textureBlock instanceof CurrentScreenBlock || this.textureBlock instanceof ParticleTextureBlock;
         const showIsInGammaSpace = this.textureBlock instanceof ReflectionBlock;
+        const showIsMainInput = this.textureBlock instanceof SmartFilterTextureBlock;
+        const showSamplingMode = texture && texture.updateSamplingMode !== undefined && !(this.textureBlock instanceof SmartFilterTextureBlock);
+        const showDisableLevelMultiplication = (this.textureBlock as TextureBlock).disableLevelMultiplication !== undefined;
 
         const reflectionModeOptions: { label: string; value: number }[] = [
             {
@@ -239,9 +244,18 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
         ];
 
         return (
-            <div>
-                <GeneralPropertyTabComponent stateManager={this.props.stateManager} nodeData={this.props.nodeData} />
+            <PropertyTabComponentBase>
+                {GetGeneralProperties({ stateManager: this.props.stateManager, nodeData: this.props.nodeData })}
                 <LineContainerComponent title="PROPERTIES">
+                    <CheckBoxLineComponent
+                        label="Fragment only"
+                        propertyName="fragmentOnly"
+                        target={block}
+                        onValueChanged={() => {
+                            this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
+                            this.props.stateManager.onRebuildRequiredObservable.notifyObservers();
+                        }}
+                    />
                     <CheckBoxLineComponent
                         label="Auto select UV"
                         propertyName="autoSelectUV"
@@ -280,7 +294,7 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                             }}
                         />
                     )}
-                    {
+                    {showDisableLevelMultiplication && (
                         <CheckBoxLineComponent
                             label="Disable multiplying by level"
                             propertyName="disableLevelMultiplication"
@@ -290,8 +304,18 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                                 this.props.stateManager.onRebuildRequiredObservable.notifyObservers();
                             }}
                         />
-                    }
-                    {texture && texture.updateSamplingMode && (
+                    )}
+                    {showIsMainInput && (
+                        <CheckBoxLineComponent
+                            label="Is Main Input"
+                            propertyName="isMainInput"
+                            target={block}
+                            onValueChanged={() => {
+                                this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block);
+                            }}
+                        />
+                    )}
+                    {showSamplingMode && (
                         <OptionsLine
                             label="Sampling"
                             options={samplingMode}
@@ -469,8 +493,8 @@ export class TexturePropertyTabComponent extends React.Component<IPropertyCompon
                         {texture && <ButtonLineComponent label="Remove" onClick={() => this.removeTexture()} />}
                     </LineContainerComponent>
                 )}
-                <GenericPropertyTabComponent stateManager={this.props.stateManager} nodeData={this.props.nodeData} />
-            </div>
+                {GetGenericProperties({ stateManager: this.props.stateManager, nodeData: this.props.nodeData })}
+            </PropertyTabComponentBase>
         );
     }
 }

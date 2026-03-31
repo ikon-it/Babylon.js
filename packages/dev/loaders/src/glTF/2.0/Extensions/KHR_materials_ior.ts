@@ -1,11 +1,10 @@
-import type { Nullable } from "core/types";
-import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import type { Material } from "core/Materials/material";
+import { type Nullable } from "core/types";
+import { type Material } from "core/Materials/material";
 
-import type { IMaterial } from "../glTFLoaderInterfaces";
-import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
+import { type IMaterial } from "../glTFLoaderInterfaces";
+import { type IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
-import type { IKHRMaterialsIor } from "babylonjs-gltf2interface";
+import { type IKHRMaterialsIor } from "babylonjs-gltf2interface";
 import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "KHR_materials_ior";
@@ -77,15 +76,9 @@ export class KHR_materials_ior implements IGLTFLoaderExtension {
 
     // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     private _loadIorPropertiesAsync(context: string, properties: IKHRMaterialsIor, babylonMaterial: Material): Promise<void> {
-        if (!(babylonMaterial instanceof PBRMaterial)) {
-            throw new Error(`${context}: Material type not supported`);
-        }
-
-        if (properties.ior !== undefined) {
-            babylonMaterial.indexOfRefraction = properties.ior;
-        } else {
-            babylonMaterial.indexOfRefraction = KHR_materials_ior._DEFAULT_IOR;
-        }
+        const adapter = this._loader._getOrCreateMaterialAdapter(babylonMaterial);
+        const indexOfRefraction = properties.ior !== undefined ? properties.ior : KHR_materials_ior._DEFAULT_IOR;
+        adapter.specularIor = indexOfRefraction;
 
         return Promise.resolve();
     }

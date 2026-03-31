@@ -12,7 +12,7 @@ vec2 getDataUV(float index, vec2 textureSize) {
     return vec2((x + 0.5) / textureSize.x, (y + 0.5) / textureSize.y);
 }
 
-#if SH_DEGREE > 0
+#if SH_DEGREE > 0 || IS_COMPOUND
 ivec2 getDataUVint(float index, vec2 textureSize) {
     float y = floor(index / textureSize.x);
     float x = index - y * textureSize.x;
@@ -34,7 +34,38 @@ struct Splat {
 #if SH_DEGREE > 2
     uvec4 sh2;
 #endif
+#if IS_COMPOUND
+    uint partIndex;
+#endif
 };
+
+float getSplatIndex(int localIndex)
+{
+    float splatIndex;
+    switch (localIndex)
+    {
+        case 0: splatIndex = splatIndex0.x; break;
+        case 1: splatIndex = splatIndex0.y; break;
+        case 2: splatIndex = splatIndex0.z; break;
+        case 3: splatIndex = splatIndex0.w; break;
+
+        case 4: splatIndex = splatIndex1.x; break;
+        case 5: splatIndex = splatIndex1.y; break;
+        case 6: splatIndex = splatIndex1.z; break;
+        case 7: splatIndex = splatIndex1.w; break;
+
+        case 8: splatIndex = splatIndex2.x; break;
+        case 9: splatIndex = splatIndex2.y; break;
+        case 10: splatIndex = splatIndex2.z; break;
+        case 11: splatIndex = splatIndex2.w; break;
+
+        case 12: splatIndex = splatIndex3.x; break;
+        case 13: splatIndex = splatIndex3.y; break;
+        case 14: splatIndex = splatIndex3.z; break;
+        case 15: splatIndex = splatIndex3.w; break;
+    }
+    return splatIndex;
+}
 
 Splat readSplat(float splatIndex)
 {
@@ -44,8 +75,10 @@ Splat readSplat(float splatIndex)
     splat.color = texture2D(colorsTexture, splatUV);
     splat.covA = texture2D(covariancesATexture, splatUV) * splat.center.w;
     splat.covB = texture2D(covariancesBTexture, splatUV) * splat.center.w;
-#if SH_DEGREE > 0
+#if SH_DEGREE > 0 || IS_COMPOUND
     ivec2 splatUVint = getDataUVint(splatIndex, dataTextureSize);
+#endif
+#if SH_DEGREE > 0
     splat.sh0 = texelFetch(shTexture0, splatUVint, 0);
 #endif
 #if SH_DEGREE > 1
@@ -54,7 +87,9 @@ Splat readSplat(float splatIndex)
 #if SH_DEGREE > 2
     splat.sh2 = texelFetch(shTexture2, splatUVint, 0);
 #endif
-
+#if IS_COMPOUND
+    splat.partIndex = uint(texture2D(partIndicesTexture, splatUV).r * 255.0 + 0.5);
+#endif
     return splat;
 }
     
@@ -180,7 +215,7 @@ vec3 computeSH(Splat splat, vec3 dir)
 vec4 gaussianSplatting(vec2 meshPos, vec3 worldPos, vec2 scale, vec3 covA, vec3 covB, mat4 worldMatrix, mat4 viewMatrix, mat4 projectionMatrix)
 {
     mat4 modelView = viewMatrix * worldMatrix;
-    vec4 camspace = viewMatrix * vec4(worldPos,1.);
+    vec4 camspace = viewMatrix * vec4(worldPos, 1.);
     vec4 pos2d = projectionMatrix * camspace;
 
     float bounds = 1.2 * pos2d.w;
@@ -195,15 +230,28 @@ vec4 gaussianSplatting(vec2 meshPos, vec3 worldPos, vec2 scale, vec3 covA, vec3 
         covA.z, covB.y, covB.z
     );
 
-    mat3 J = mat3(
-        focal.x / camspace.z, 0., -(focal.x * camspace.x) / (camspace.z * camspace.z), 
-        0., focal.y / camspace.z, -(focal.y * camspace.y) / (camspace.z * camspace.z), 
-        0., 0., 0.
-    );
+    // Detect if projection is orthographic (projectionMatrix[3][3] == 1.0)
+    bool isOrtho = abs(projectionMatrix[3][3] - 1.0) < 0.001;
+    
+    mat3 J;
+    if (isOrtho) {
+        // Orthographic projection: no perspective division needed
+        // Just the focal/scale terms without z-dependence
+        J = mat3(
+            focal.x, 0., 0., 
+            0., focal.y, 0., 
+            0., 0., 0.
+        );
+    } else {
+        // Perspective projection: original Jacobian with z-dependence
+        J = mat3(
+            focal.x / camspace.z, 0., -(focal.x * camspace.x) / (camspace.z * camspace.z), 
+            0., focal.y / camspace.z, -(focal.y * camspace.y) / (camspace.z * camspace.z), 
+            0., 0., 0.
+        );
+    }
 
-    mat3 invy = mat3(1,0,0, 0,-1,0,0,0,1);
-
-    mat3 T = invy * transpose(mat3(modelView)) * J;
+    mat3 T = transpose(mat3(modelView)) * J;
     mat3 cov2d = transpose(T) * Vrk * T;
 
 #if COMPENSATION
@@ -213,8 +261,8 @@ vec4 gaussianSplatting(vec2 meshPos, vec3 worldPos, vec2 scale, vec3 covA, vec3 
     float detOrig = c00 * c11 - c01 * c01;
 #endif
 
-	cov2d[0][0] += kernelSize;
-	cov2d[1][1] += kernelSize;
+    cov2d[0][0] += kernelSize;
+    cov2d[1][1] += kernelSize;
 
 #if COMPENSATION
     vec3 c2d = vec3(cov2d[0][0], c01, cov2d[1][1]);
@@ -238,8 +286,18 @@ vec4 gaussianSplatting(vec2 meshPos, vec3 worldPos, vec2 scale, vec3 covA, vec3 
     vec2 minorAxis = min(sqrt(2.0 * lambda2), 1024.0) * vec2(diagonalVector.y, -diagonalVector.x);
 
     vec2 vCenter = vec2(pos2d);
+    
+    // For ortho projection, pos2d.w is 1.0
+    float scaleFactor = isOrtho ? 1.0 : pos2d.w;
+    
     return vec4(
         vCenter 
         + ((meshPos.x * majorAxis
-        + meshPos.y * minorAxis) * invViewport * pos2d.w) * scale, pos2d.zw);
+        + meshPos.y * minorAxis) * invViewport * scaleFactor) * scale, pos2d.zw);
 }
+
+#if IS_COMPOUND
+mat4 getPartWorld(uint partIndex) {
+    return partWorld[partIndex];
+}
+#endif

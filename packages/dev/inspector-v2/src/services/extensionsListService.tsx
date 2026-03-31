@@ -1,17 +1,20 @@
-import type { SelectTabData, SelectTabEvent } from "@fluentui/react-components";
-import type { FunctionComponent } from "react";
-import type { IExtension } from "../extensibility/extensionManager";
-import type { ServiceDefinition } from "../modularity/serviceDefinition";
-import type { IShellService } from "./shellService";
-
 import {
+    type SelectTabData,
+    type SelectTabEvent,
     Accordion,
     AccordionHeader,
     AccordionItem,
     AccordionPanel,
+    AvatarGroup,
+    AvatarGroupItem,
     Body1,
     Body1Strong,
     Button,
+    Caption1,
+    Card,
+    CardFooter,
+    CardHeader,
+    CardPreview,
     Dialog,
     DialogBody,
     DialogContent,
@@ -19,23 +22,42 @@ import {
     DialogTitle,
     DialogTrigger,
     makeStyles,
+    Persona,
+    Popover,
+    PopoverSurface,
+    PopoverTrigger,
+    PresenceBadge,
     Spinner,
     Tab,
     TabList,
     tokens,
     Tooltip,
 } from "@fluentui/react-components";
-import { AppsAddInRegular, DismissRegular } from "@fluentui/react-icons";
-import { memo, useCallback, useEffect, useState } from "react";
+import { type TriggerProps } from "@fluentui/react-utilities";
+import { type FunctionComponent, memo, useCallback, useEffect, useMemo, useState } from "react";
+import { type PersonMetadata } from "../extensibility/extensionFeed";
+import { type IExtension } from "../extensibility/extensionManager";
+import { type ServiceDefinition } from "../modularity/serviceDefinition";
+import { type IShellService, ShellServiceIdentity } from "./shellService";
 
-import { Logger } from "core/Misc";
+import {
+    AppsAddInRegular,
+    ArrowDownloadRegular,
+    BranchForkRegular,
+    BugRegular,
+    DeleteRegular,
+    DismissRegular,
+    LinkRegular,
+    MailRegular,
+    PeopleCommunityRegular,
+} from "@fluentui/react-icons";
+import { Fade } from "@fluentui/react-motion-components-preview";
 
-import { TeachingMoment } from "../components/teachingMoment";
+import { Logger } from "core/Misc/logger";
+
+import { Link } from "shared-ui-components/fluent/primitives/link";
 import { useExtensionManager } from "../contexts/extensionManagerContext";
-import { MakePopoverTeachingMoment } from "../hooks/teachingMomentHooks";
-import { ShellServiceIdentity } from "./shellService";
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const useStyles = makeStyles({
     extensionButton: {},
     extensionsDialogSurface: {
@@ -43,6 +65,7 @@ const useStyles = makeStyles({
         width: "70vw",
         maxWidth: "600px",
         maxHeight: "70vh",
+        backgroundColor: tokens.colorNeutralBackground2,
     },
     extensionDialogBody: {
         maxWidth: "100%",
@@ -54,9 +77,11 @@ const useStyles = makeStyles({
     },
     extensionHeader: {},
     extensionItem: {},
-    extensionPanel: {
-        padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-        backgroundColor: tokens.colorNeutralBackground2,
+    extensionCardPreview: {
+        padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM}`,
+        display: "flex",
+        flexDirection: "column",
+        rowGap: tokens.spacingVerticalL,
     },
     extensionIntro: {
         display: "flex",
@@ -64,11 +89,13 @@ const useStyles = makeStyles({
         columnGap: tokens.spacingHorizontalM,
     },
     extensionDescription: {
-        padding: `${tokens.spacingVerticalM} 0`,
+        display: "flex",
+        flexDirection: "row",
+        columnGap: tokens.spacingHorizontalS,
     },
     extensionButtonContainer: {
-        display: "flex",
-        columnGap: tokens.spacingHorizontalS,
+        marginLeft: "auto",
+        alignSelf: "flex-start",
     },
     spinner: {
         animationDuration: "1s",
@@ -77,12 +104,108 @@ const useStyles = makeStyles({
             to: { opacity: 1 },
         },
     },
+    webResourceDiv: {
+        display: "flex",
+        flexDirection: "column",
+    },
+    webResourceLink: {
+        display: "flex",
+        flexDirection: "row",
+        columnGap: tokens.spacingHorizontalS,
+        alignItems: "center",
+    },
+    personPopoverSurfaceDiv: {
+        display: "flex",
+        flexDirection: "column",
+        rowGap: tokens.spacingVerticalS,
+    },
+    accordionHeaderDiv: {
+        display: "flex",
+        flexDirection: "row",
+        columnGap: tokens.spacingHorizontalS,
+        alignItems: "center",
+    },
+    resourceDetailsDiv: {
+        display: "flex",
+        flexDirection: "column",
+        rowGap: tokens.spacingVerticalS,
+    },
+    peopleDetailsDiv: {
+        display: "flex",
+        flexDirection: "row",
+        columnGap: tokens.spacingHorizontalXL,
+    },
+    avatarGroupItem: {
+        cursor: "pointer",
+    },
 });
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const useTeachingMoment = MakePopoverTeachingMoment("Extensions");
+function AsPersonMetadata(person: string | PersonMetadata): PersonMetadata {
+    if (typeof person === "string") {
+        return { name: person } satisfies PersonMetadata;
+    }
+    return person;
+}
+
+function GetAvatarImage(person: PersonMetadata): { src: string } | undefined {
+    return person.avatar ? { src: `data:image/png;base64,${person.avatar}` } : undefined;
+}
+
+function usePeopleMetadata(people?: readonly (string | PersonMetadata | undefined)[]): PersonMetadata[] {
+    const definedPeople = useMemo(() => (people ? people.filter((person): person is string | PersonMetadata => !!person) : []), [people]);
+    return useMemo(() => definedPeople.map(AsPersonMetadata), [definedPeople]);
+}
+
+const WebResource: FunctionComponent<{ url: string; urlDisplay?: string; icon: JSX.Element; label: string }> = (props) => {
+    const { url, urlDisplay, icon, label } = props;
+    const classes = useStyles();
+
+    return (
+        <div className={classes.webResourceDiv}>
+            <Tooltip content={label} relationship="label" positioning="before" withArrow>
+                <div className={classes.webResourceLink}>
+                    {icon}
+                    <Link url={url} value={urlDisplay || url} />
+                </div>
+            </Tooltip>
+        </div>
+    );
+};
+
+const PersonDetailsPopover: FunctionComponent<TriggerProps & { person: PersonMetadata; title: string; disabled?: boolean }> = (props) => {
+    const { person, title, disabled, children } = props;
+    const classes = useStyles();
+
+    if (disabled) {
+        return <>{children}</>;
+    }
+
+    return (
+        <Popover withArrow>
+            <PopoverTrigger disableButtonEnhancement>{children}</PopoverTrigger>
+            <PopoverSurface>
+                <div className={classes.personPopoverSurfaceDiv}>
+                    <Persona name={person.name} secondaryText={title} avatar={{ image: GetAvatarImage(person) }} />
+                    {person.email && <WebResource url={`mailto:${person.email}`} urlDisplay={person.email} icon={<MailRegular />} label="Email" />}
+                    {person.url && <WebResource url={person.url} urlDisplay={person.url} icon={<LinkRegular />} label="Website" />}
+                    {person.forumUserName && (
+                        <WebResource
+                            url={`https://forum.babylonjs.com/u/${person.forumUserName}`}
+                            urlDisplay={person.forumUserName}
+                            icon={<PeopleCommunityRegular />}
+                            label="Forum"
+                        />
+                    )}
+                </div>
+            </PopoverSurface>
+        </Popover>
+    );
+};
 
 const ExtensionDetails: FunctionComponent<{ extension: IExtension }> = memo((props) => {
+    const { extension } = props;
+    const { metadata } = extension;
+
     const classes = useStyles();
 
     const [canInstall, setCanInstall] = useState(false);
@@ -90,7 +213,6 @@ const ExtensionDetails: FunctionComponent<{ extension: IExtension }> = memo((pro
     const [isStateChanging, setIsStateChanging] = useState(false);
 
     useEffect(() => {
-        const extension = props.extension;
         const updateState = () => {
             setCanInstall(!extension.isInstalled && !extension.isStateChanging);
             setCanUninstall(extension.isInstalled && !extension.isStateChanging);
@@ -101,31 +223,98 @@ const ExtensionDetails: FunctionComponent<{ extension: IExtension }> = memo((pro
         updateState();
 
         return stateChangedHandlerRegistration.dispose;
-    }, [props.extension]);
+    }, [extension]);
 
-    const install = useCallback(async () => await props.extension.installAsync(), [props.extension]);
-    const uninstall = useCallback(async () => await props.extension.uninstallAsync(), [props.extension]);
+    const [author] = usePeopleMetadata(useMemo(() => [metadata.author], [metadata.author]));
+    const contributors = usePeopleMetadata(metadata.contributors);
+
+    const hasResourceDetails = metadata.homepage || metadata.repository || metadata.bugs;
+    const hasPeopleDetails = author || contributors.length > 0;
+    const hasPreviewDetails = hasResourceDetails || hasPeopleDetails;
+    const hasAuthorDetails = author?.email || author?.url || author?.forumUserName;
+    const subHeader = [metadata.version ? `${metadata.version}` : null, metadata.license ? `${metadata.license}` : null].filter(Boolean).join(" | ");
+
+    const install = useCallback(async () => {
+        try {
+            await extension.installAsync();
+        } catch {
+            // Ignore errors. Other parts of the infrastructure handle them and communicate them to the user.
+        }
+    }, [extension]);
+
+    const uninstall = useCallback(async () => {
+        try {
+            await extension.uninstallAsync();
+        } catch {
+            // Ignore errors. Other parts of the infrastructure handle them and communicate them to the user.
+        }
+    }, [extension]);
 
     return (
-        <>
-            <div className={classes.extensionDescription}>
-                <Body1>{props.extension.metadata.description}</Body1>
-            </div>
-
-            <div className={classes.extensionButtonContainer}>
-                {canInstall && (
-                    <Button appearance="primary" size="small" onClick={install}>
-                        Install
-                    </Button>
-                )}
-                {canUninstall && (
-                    <Button appearance="primary" size="small" onClick={uninstall}>
-                        Uninstall
-                    </Button>
-                )}
-                {isStateChanging && <Spinner className={classes.spinner} size="extra-small" />}
-            </div>
-        </>
+        <AccordionItem className={classes.extensionItem} value={extension.metadata.name}>
+            <AccordionHeader className={classes.extensionHeader} expandIconPosition="end">
+                <div className={classes.accordionHeaderDiv}>
+                    <Body1Strong>{extension.metadata.name}</Body1Strong>
+                    <Fade visible={extension.isInstalled}>
+                        <PresenceBadge size="small" />
+                    </Fade>
+                </div>
+            </AccordionHeader>
+            <AccordionPanel>
+                <Card>
+                    <CardHeader header={<Body1>{metadata.description}</Body1>} description={<Caption1 italic>{subHeader}</Caption1>} />
+                    {hasPreviewDetails && (
+                        <CardPreview className={classes.extensionCardPreview}>
+                            {hasResourceDetails && (
+                                <div className={classes.resourceDetailsDiv} style={{ display: "flex" }}>
+                                    {metadata.homepage && <WebResource url={metadata.homepage} icon={<LinkRegular />} label="Website" />}
+                                    {metadata.repository && <WebResource url={metadata.repository} icon={<BranchForkRegular />} label="Repository" />}
+                                    {metadata.bugs && <WebResource url={metadata.bugs} icon={<BugRegular />} label="Report Issues" />}
+                                </div>
+                            )}
+                            {hasPeopleDetails && (
+                                <div className={classes.peopleDetailsDiv} style={{ display: "flex" }}>
+                                    {author && (
+                                        <PersonDetailsPopover person={author} title="Author" disabled={!hasAuthorDetails}>
+                                            <Persona
+                                                name={author.name}
+                                                secondaryText="Author"
+                                                avatar={{ image: GetAvatarImage(author) }}
+                                                style={{ cursor: hasAuthorDetails ? "pointer" : "default" }}
+                                            />
+                                        </PersonDetailsPopover>
+                                    )}
+                                    {contributors.length > 0 && (
+                                        <AvatarGroup layout="stack">
+                                            {contributors.map((contributor) => {
+                                                return (
+                                                    <PersonDetailsPopover key={contributor.name} person={contributor} title="Contributor">
+                                                        <AvatarGroupItem name={contributor.name} className={classes.avatarGroupItem} image={GetAvatarImage(contributor)} />
+                                                    </PersonDetailsPopover>
+                                                );
+                                            })}
+                                        </AvatarGroup>
+                                    )}
+                                </div>
+                            )}
+                        </CardPreview>
+                    )}
+                    <CardFooter>
+                        {canInstall && (
+                            <Button appearance="primary" size="small" icon={<ArrowDownloadRegular />} onClick={install}>
+                                Get
+                            </Button>
+                        )}
+                        {canUninstall && (
+                            <Button appearance="secondary" size="small" icon={<DeleteRegular />} onClick={uninstall}>
+                                Remove
+                            </Button>
+                        )}
+                        {isStateChanging && <Spinner className={classes.spinner} size="extra-small" />}
+                    </CardFooter>
+                </Card>
+            </AccordionPanel>
+        </AccordionItem>
     );
 });
 
@@ -139,7 +328,10 @@ export const ExtensionListServiceDefinition: ServiceDefinition<[], [IShellServic
             key: "ExtensionList",
             horizontalLocation: "right",
             verticalLocation: "top",
-            suppressTeachingMoment: true,
+            teachingMoment: {
+                title: "Extensions",
+                description: "Extensions provide new optional features that can be useful to your specific task or workflow. Click this button to manage extensions.",
+            },
             order: -200,
             component: () => {
                 const classes = useStyles();
@@ -163,63 +355,46 @@ export const ExtensionListServiceDefinition: ServiceDefinition<[], [IShellServic
                     }
                 }, [extensionManager, selectedTab]);
 
-                const teachingMoment = useTeachingMoment();
-
                 return (
-                    <>
-                        <TeachingMoment
-                            {...teachingMoment}
-                            title="Extensions"
-                            description="Extensions provide new optional features that can be useful to your specific task or workflow. Click this button to manage extensions."
-                        />
-                        <Dialog>
-                            <DialogTrigger disableButtonEnhancement>
-                                <Tooltip content="Manage Extensions" relationship="label">
-                                    <Button ref={teachingMoment.targetRef} className={classes.extensionButton} appearance="subtle" icon={<AppsAddInRegular />} />
-                                </Tooltip>
-                            </DialogTrigger>
-                            <DialogSurface className={classes.extensionsDialogSurface}>
-                                <DialogBody className={classes.extensionDialogBody}>
-                                    <DialogTitle
-                                        action={
-                                            <DialogTrigger action="close">
-                                                <Button appearance="subtle" aria-label="close" icon={<DismissRegular />} />
-                                            </DialogTrigger>
-                                        }
-                                    >
-                                        <>
-                                            Extensions
-                                            <TabList
-                                                className={classes.extensionDialogContent}
-                                                selectedValue={selectedTab}
-                                                onTabSelect={(event: SelectTabEvent, data: SelectTabData) => {
-                                                    setSelectedTab(data.value as TabValue);
-                                                }}
-                                            >
-                                                <Tab value={"available" satisfies TabValue}>Available</Tab>
-                                                <Tab value={"installed" satisfies TabValue}>Installed</Tab>
-                                            </TabList>
-                                        </>
-                                    </DialogTitle>
-                                    <DialogContent className={classes.extensionDialogContent}>
-                                        {/* <ProgressBar /> */}
-                                        <Accordion collapsible>
-                                            {extensions.map((extension) => (
-                                                <AccordionItem className={classes.extensionItem} key={extension.metadata.name} value={extension.metadata.name}>
-                                                    <AccordionHeader className={classes.extensionHeader} expandIconPosition="end">
-                                                        <Body1Strong>{extension.metadata.name}</Body1Strong>
-                                                    </AccordionHeader>
-                                                    <AccordionPanel className={classes.extensionPanel}>
-                                                        <ExtensionDetails extension={extension} />
-                                                    </AccordionPanel>
-                                                </AccordionItem>
-                                            ))}
-                                        </Accordion>
-                                    </DialogContent>
-                                </DialogBody>
-                            </DialogSurface>
-                        </Dialog>
-                    </>
+                    <Dialog>
+                        <DialogTrigger disableButtonEnhancement>
+                            <Tooltip content="Manage Extensions" relationship="label">
+                                <Button className={classes.extensionButton} appearance="subtle" icon={<AppsAddInRegular />} />
+                            </Tooltip>
+                        </DialogTrigger>
+                        <DialogSurface className={classes.extensionsDialogSurface}>
+                            <DialogBody className={classes.extensionDialogBody}>
+                                <DialogTitle
+                                    action={
+                                        <DialogTrigger action="close">
+                                            <Button appearance="subtle" aria-label="close" icon={<DismissRegular />} />
+                                        </DialogTrigger>
+                                    }
+                                >
+                                    <>
+                                        Extensions
+                                        <TabList
+                                            className={classes.extensionDialogContent}
+                                            selectedValue={selectedTab}
+                                            onTabSelect={(event: SelectTabEvent, data: SelectTabData) => {
+                                                setSelectedTab(data.value as TabValue);
+                                            }}
+                                        >
+                                            <Tab value={"available" satisfies TabValue}>Available</Tab>
+                                            <Tab value={"installed" satisfies TabValue}>Installed</Tab>
+                                        </TabList>
+                                    </>
+                                </DialogTitle>
+                                <DialogContent className={classes.extensionDialogContent}>
+                                    <Accordion collapsible>
+                                        {extensions.map((extension) => (
+                                            <ExtensionDetails key={extension.metadata.name} extension={extension} />
+                                        ))}
+                                    </Accordion>
+                                </DialogContent>
+                            </DialogBody>
+                        </DialogSurface>
+                    </Dialog>
                 );
             },
         });

@@ -1,5 +1,5 @@
-import type { IHardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
-import type { Nullable } from "../../types";
+import { type IHardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
+import { type Nullable } from "../../types";
 
 /** @internal */
 export class WebGLHardwareTexture implements IHardwareTextureWrapper {
@@ -10,6 +10,9 @@ export class WebGLHardwareTexture implements IHardwareTextureWrapper {
     // or different faces of a cube texture can be bound to different render targets at the same time.
     // eslint-disable-next-line @typescript-eslint/naming-convention
     private _MSAARenderBuffers: Nullable<WebGLRenderbuffer[]> = null;
+
+    // Set to true once GPU memory has been allocated for the texture (used only for compressed textures with mipmaps).
+    public memoryAllocated?: boolean;
 
     public get underlyingResource(): Nullable<WebGLTexture> {
         return this._webGLTexture;

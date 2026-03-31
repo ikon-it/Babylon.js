@@ -2,8 +2,8 @@ import { Tools } from "../Misc/tools";
 import { Observable } from "../Misc/observable";
 import { Scene } from "../scene";
 import { EngineStore } from "../Engines/engineStore";
-import type { IInspectable } from "../Misc/iInspectable";
-import type { Camera } from "../Cameras/camera";
+import { type IInspectable } from "../Misc/iInspectable";
+import { type Camera } from "../Cameras/camera";
 import { AbstractEngine } from "core/Engines/abstractEngine";
 
 // declare INSPECTOR namespace for compilation issue
@@ -174,7 +174,7 @@ declare module "../scene" {
          * @internal
          * Backing field
          */
-        _debugLayer: DebugLayer;
+        _debugLayer?: DebugLayer;
 
         /**
          * Gets the debug layer (aka Inspector) associated with the scene
@@ -248,7 +248,7 @@ export class DebugLayer {
     private _scene: Scene;
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    private BJSINSPECTOR = this._getGlobalInspector();
+    protected BJSINSPECTOR = this._getGlobalInspector();
 
     private _onPropertyChangedObservable?: Observable<{ object: any; property: string; value: any; initialValue: any }>;
     /**
@@ -352,9 +352,16 @@ export class DebugLayer {
                 }
             }
             if (!this.BJSINSPECTOR.Inspector.IsVisible) {
-                setTimeout(() => {
-                    this.select(entity, lineContainerTitles);
-                }, 100);
+                const waitAndCheck = () => {
+                    setTimeout(() => {
+                        if (this.BJSINSPECTOR.Inspector.IsVisible) {
+                            this.select(entity, lineContainerTitles);
+                        } else {
+                            waitAndCheck();
+                        }
+                    }, 100);
+                };
+                waitAndCheck();
             } else {
                 this.BJSINSPECTOR.Inspector.OnSelectionChangeObservable.notifyObservers(entity);
             }

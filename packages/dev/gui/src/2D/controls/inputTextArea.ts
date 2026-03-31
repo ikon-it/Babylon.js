@@ -1,16 +1,16 @@
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { Observable } from "core/Misc/observable";
-import type { Vector2 } from "core/Maths/math.vector";
+import { type Vector2 } from "core/Maths/math.vector";
 
 import { Control } from "./control";
 import { ValueAndUnit } from "../valueAndUnit";
-import type { VirtualKeyboard } from "./virtualKeyboard";
+import { type VirtualKeyboard } from "./virtualKeyboard";
 import { RegisterClass } from "core/Misc/typeStore";
-import type { Measure } from "../measure";
+import { type Measure } from "../measure";
 import { InputText } from "./inputText";
-import type { ICanvasRenderingContext } from "core/Engines/ICanvas";
-import type { PointerInfo, PointerInfoBase } from "core/Events/pointerEvents";
-import type { IKeyboardEvent } from "core/Events/deviceInputEvents";
+import { type ICanvasRenderingContext } from "core/Engines/ICanvas";
+import { type PointerInfo, type PointerInfoBase } from "core/Events/pointerEvents";
+import { type IKeyboardEvent } from "core/Events/deviceInputEvents";
 
 import { serialize } from "core/Misc/decorators";
 
@@ -348,8 +348,8 @@ export class InputTextArea extends InputText {
                     const currentLine = this._lines[this._cursorInfo.currentLineIndex];
                     const upperLine = this._lines[this._cursorInfo.currentLineIndex - 1];
 
-                    let tmpIndex = 0;
-                    let relativeIndex = 0;
+                    let tmpIndex: number;
+                    let relativeIndex: number;
                     if (!this._isTextHighlightOn || this._cursorInfo.currentLineIndex < this._highlightCursorInfo.initialLineIndex) {
                         tmpIndex = this._cursorInfo.globalStartIndex;
                         relativeIndex = this._cursorInfo.relativeStartIndex;
@@ -420,8 +420,8 @@ export class InputTextArea extends InputText {
                     const currentLine = this._lines[this._cursorInfo.currentLineIndex];
                     const underLine = this._lines[this._cursorInfo.currentLineIndex + 1];
 
-                    let tmpIndex = 0;
-                    let relativeIndex = 0;
+                    let tmpIndex: number;
+                    let relativeIndex: number;
                     if (!this._isTextHighlightOn || this._cursorInfo.currentLineIndex < this._highlightCursorInfo.initialLineIndex) {
                         tmpIndex = this._cursorInfo.globalStartIndex;
                         relativeIndex = this._cursorInfo.relativeStartIndex;
@@ -613,7 +613,8 @@ export class InputTextArea extends InputText {
             this._autoStretchHeight = true;
         }
 
-        this._availableHeight = this._height.getValueInPixel(this._host, parentMeasure.height) - marginWidth;
+        const marginHeight = this._margin.getValueInPixel(this._host, parentMeasure.height) * 2;
+        this._availableHeight = this._height.getValueInPixel(this._host, parentMeasure.height) - marginHeight;
 
         if (this._isFocused) {
             this._cursorInfo.currentLineIndex = 0;
@@ -699,8 +700,8 @@ export class InputTextArea extends InputText {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         if (this.outlineWidth) {
@@ -753,7 +754,7 @@ export class InputTextArea extends InputText {
      * @internal
      */
     protected override _onPasteText(ev: ClipboardEvent): void {
-        let data: string = "";
+        let data: string;
         if (ev.clipboardData && ev.clipboardData.types.indexOf("text/plain") !== -1) {
             data = ev.clipboardData.getData("text/plain");
         } else {
@@ -787,8 +788,8 @@ export class InputTextArea extends InputText {
         if (this.shadowBlur || this.shadowOffsetX || this.shadowOffsetY) {
             context.shadowColor = this.shadowColor;
             context.shadowBlur = this.shadowBlur;
-            context.shadowOffsetX = this.shadowOffsetX;
-            context.shadowOffsetY = this.shadowOffsetY;
+            context.shadowOffsetX = this.shadowOffsetX * this._host.idealRatio;
+            context.shadowOffsetY = this.shadowOffsetY * this._host.idealRatio;
         }
 
         // Background
@@ -903,7 +904,7 @@ export class InputTextArea extends InputText {
 
                 this._highlightedText = this.text.substring(this._cursorInfo.globalStartIndex, this._cursorInfo.globalEndIndex);
 
-                context.globalAlpha = this._highligherOpacity;
+                context.globalAlpha = this._highlighterOpacity;
                 context.fillStyle = this._textHighlightColor;
 
                 const startLineIndex = Math.min(this._cursorInfo.currentLineIndex, this._highlightCursorInfo.initialLineIndex);

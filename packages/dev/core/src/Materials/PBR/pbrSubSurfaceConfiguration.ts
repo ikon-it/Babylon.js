@@ -1,24 +1,24 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Nullable } from "../../types";
-import type { IAnimatable } from "../../Animations/animatable.interface";
+import { type Nullable } from "../../types";
+import { type IAnimatable } from "../../Animations/animatable.interface";
 import { serialize, serializeAsTexture, expandToProperty, serializeAsColor3 } from "../../Misc/decorators";
 import { Color3 } from "../../Maths/math.color";
-import type { SmartArray } from "../../Misc/smartArray";
-import type { BaseTexture } from "../../Materials/Textures/baseTexture";
-import type { RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
+import { type SmartArray } from "../../Misc/smartArray";
+import { type BaseTexture } from "../../Materials/Textures/baseTexture";
+import { type RenderTargetTexture } from "../../Materials/Textures/renderTargetTexture";
 import { MaterialFlags } from "../materialFlags";
-import type { UniformBuffer } from "../../Materials/uniformBuffer";
-import type { EffectFallbacks } from "../effectFallbacks";
-import type { CubeTexture } from "../Textures/cubeTexture";
+import { type UniformBuffer } from "../../Materials/uniformBuffer";
+import { type EffectFallbacks } from "../effectFallbacks";
+import { type CubeTexture } from "../Textures/cubeTexture";
 import { TmpVectors } from "../../Maths/math.vector";
-import type { SubMesh } from "../../Meshes/subMesh";
+import { type SubMesh } from "../../Meshes/subMesh";
 import { MaterialPluginBase } from "../materialPluginBase";
 import { Constants } from "../../Engines/constants";
 import { MaterialDefines } from "../materialDefines";
 
-import type { Engine } from "../../Engines/engine";
-import type { Scene } from "../../scene";
-import type { PBRBaseMaterial } from "./pbrBaseMaterial";
+import { type Engine } from "../../Engines/engine";
+import { type Scene } from "../../scene";
+import { type PBRBaseMaterial } from "./pbrBaseMaterial";
 import { BindTextureMatrix, PrepareDefinesForMergedUV } from "../materialHelper.functions";
 
 /**
@@ -79,7 +79,7 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
      * Default value used for legacyTranslucency.
      *
      * This property only exists for backward compatibility reasons.
-     * Set it to true if your rendering in 8.0+ is different from that in 7 when you use sub-surface transluceny. Default is false.
+     * Set it to true if your rendering in 8.0+ is different from that in 7 when you use sub-surface translucency. Default is false.
      */
     public static DEFAULT_LEGACY_TRANSLUCENCY = false;
 
@@ -160,16 +160,20 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
     @serialize()
     public translucencyIntensity: number = 1;
 
+    private _useAlbedoToTintRefraction = false;
     /**
      * When enabled, transparent surfaces will be tinted with the albedo colour (independent of thickness)
      */
     @serialize()
+    @expandToProperty("_markAllSubMeshesAsTexturesDirty")
     public useAlbedoToTintRefraction: boolean = false;
 
+    private _useAlbedoToTintTranslucency = false;
     /**
      * When enabled, translucent surfaces will be tinted with the albedo colour (independent of thickness)
      */
     @serialize()
+    @expandToProperty("_markAllSubMeshesAsTexturesDirty")
     public useAlbedoToTintTranslucency: boolean = false;
 
     private _thicknessTexture: Nullable<BaseTexture> = null;
@@ -362,10 +366,22 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
     /**
      * This property only exists for backward compatibility reasons.
-     * Set it to true if your rendering in 8.0+ is different from that in 7 when you use sub-surface transluceny. Default is false.
+     * Set it to true if your rendering in 8.0+ is different from that in 7 when you use sub-surface translucency. Default is false.
      */
     @serialize()
-    public legacyTransluceny = PBRSubSurfaceConfiguration.DEFAULT_LEGACY_TRANSLUCENCY;
+    public legacyTranslucency = PBRSubSurfaceConfiguration.DEFAULT_LEGACY_TRANSLUCENCY;
+
+    /**
+     * Keeping for backward compatibility... Should not be used anymore. It has been replaced by
+     * the property with the correct spelling.
+     * @see legacyTranslucency
+     */
+    public get legacyTransluceny(): boolean {
+        return this.legacyTranslucency;
+    }
+    public set legacyTransluceny(value: boolean) {
+        this.legacyTranslucency = value;
+    }
 
     private _scene: Scene;
 
@@ -412,6 +428,12 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
             if (scene.texturesEnabled) {
                 if (this._thicknessTexture && MaterialFlags.ThicknessTextureEnabled) {
                     if (!this._thicknessTexture.isReadyOrNotBlocking()) {
+                        return false;
+                    }
+                }
+
+                if (this._refractionIntensityTexture && MaterialFlags.RefractionIntensityTextureEnabled) {
+                    if (!this._refractionIntensityTexture.isReadyOrNotBlocking()) {
                         return false;
                     }
                 }
@@ -481,7 +503,7 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
             defines.SS_DISPERSION = this._isDispersionEnabled;
             defines.SS_TRANSLUCENCY = this._isTranslucencyEnabled;
             defines.SS_TRANSLUCENCY_USE_INTENSITY_FROM_THICKNESS = false;
-            defines.SS_TRANSLUCENCY_LEGACY = this.legacyTransluceny;
+            defines.SS_TRANSLUCENCY_LEGACY = this.legacyTranslucency;
             defines.SS_SCATTERING = this._isScatteringEnabled;
             defines.SS_THICKNESSANDMASK_TEXTURE = false;
             defines.SS_REFRACTIONINTENSITY_TEXTURE = false;
@@ -542,7 +564,7 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
                         defines.SS_REFRACTIONMAP_OPPOSITEZ = this._scene.useRightHandedSystem && refractionTexture.isCube ? !refractionTexture.invertZ : refractionTexture.invertZ;
                         defines.SS_LODINREFRACTIONALPHA = refractionTexture.lodLevelInAlpha;
                         defines.SS_LINKREFRACTIONTOTRANSPARENCY = this._linkRefractionWithTransparency;
-                        defines.SS_ALBEDOFORREFRACTIONTINT = this.useAlbedoToTintRefraction;
+                        defines.SS_ALBEDOFORREFRACTIONTINT = this._useAlbedoToTintRefraction;
                         defines.SS_USE_LOCAL_REFRACTIONMAP_CUBIC = refractionTexture.isCube && (<any>refractionTexture).boundingBoxSize;
                         defines.SS_USE_THICKNESS_AS_DEPTH = this.useThicknessAsDepth;
                     }
@@ -550,7 +572,7 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
             }
 
             if (this._isTranslucencyEnabled) {
-                defines.SS_ALBEDOFORTRANSLUCENCYTINT = this.useAlbedoToTintTranslucency;
+                defines.SS_ALBEDOFORTRANSLUCENCYTINT = this._useAlbedoToTintTranslucency;
             }
         }
     }
@@ -763,6 +785,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
             activeTextures.push(this._refractionTexture);
         }
 
+        if (this._refractionIntensityTexture) {
+            activeTextures.push(this._refractionIntensityTexture);
+        }
+
         if (this._translucencyColorTexture) {
             activeTextures.push(this._translucencyColorTexture);
         }
@@ -779,6 +805,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
         if (this._refractionTexture && this._refractionTexture.animations && this._refractionTexture.animations.length > 0) {
             animatables.push(this._refractionTexture);
+        }
+
+        if (this._refractionIntensityTexture && this._refractionIntensityTexture.animations && this._refractionIntensityTexture.animations.length > 0) {
+            animatables.push(this._refractionIntensityTexture);
         }
 
         if (this._translucencyColorTexture && this._translucencyColorTexture.animations && this._translucencyColorTexture.animations.length > 0) {
@@ -798,6 +828,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
             if (this._refractionTexture) {
                 this._refractionTexture.dispose();
+            }
+
+            if (this._refractionIntensityTexture) {
+                this._refractionIntensityTexture.dispose();
             }
 
             if (this._translucencyColorTexture) {

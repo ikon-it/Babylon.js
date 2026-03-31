@@ -1,14 +1,13 @@
-import type {
-    NodeRenderGraphBuildState,
-    Nullable,
-    NodeRenderGraphInputBlock,
-    AbstractEngine,
-    Scene,
-    FrameGraphTask,
-    FrameGraph,
-    NodeRenderGraphResourceContainerBlock,
-    FrameGraphTextureHandle,
-    // eslint-disable-next-line import/no-internal-modules
+import {
+    type NodeRenderGraphBuildState,
+    type Nullable,
+    type NodeRenderGraphInputBlock,
+    type AbstractEngine,
+    type Scene,
+    type FrameGraphTask,
+    type FrameGraph,
+    type NodeRenderGraphResourceContainerBlock,
+    type FrameGraphTextureHandle,
 } from "core/index";
 import { GetClass } from "../../Misc/typeStore";
 import { serialize } from "../../Misc/decorators";
@@ -288,10 +287,22 @@ export class NodeRenderGraphBlock {
 
         const dependencies = this.getInputByName("dependencies")!;
 
+        Object.defineProperty(this, "dependencies", {
+            get: function (this: FrameGraphTask) {
+                return dependencies;
+            },
+            enumerable: true,
+            configurable: true,
+        });
+
         dependencies.addExcludedConnectionPointFromAllowedTypes(
             NodeRenderGraphBlockConnectionPointTypes.TextureAllButBackBuffer |
                 NodeRenderGraphBlockConnectionPointTypes.ResourceContainer |
                 NodeRenderGraphBlockConnectionPointTypes.ShadowGenerator |
+                NodeRenderGraphBlockConnectionPointTypes.ObjectList |
+                NodeRenderGraphBlockConnectionPointTypes.ShadowLight |
+                NodeRenderGraphBlockConnectionPointTypes.Camera |
+                NodeRenderGraphBlockConnectionPointTypes.Object |
                 additionalAllowedTypes
         );
 
@@ -380,6 +391,26 @@ export class NodeRenderGraphBlock {
         return false;
     }
 
+    protected _getConnectedTextures(targetConnectedPoint: Nullable<NodeRenderGraphConnectionPoint>) {
+        let textureHandles: FrameGraphTextureHandle | FrameGraphTextureHandle[] | undefined;
+        if (targetConnectedPoint) {
+            if (targetConnectedPoint.type === NodeRenderGraphBlockConnectionPointTypes.ResourceContainer) {
+                const container = targetConnectedPoint.ownerBlock as NodeRenderGraphResourceContainerBlock;
+                textureHandles = [];
+                for (let i = 0; i < container.inputs.length; i++) {
+                    const input = container.inputs[i];
+                    if (input.connectedPoint && input.connectedPoint.value !== undefined && NodeRenderGraphConnectionPoint.IsTextureHandle(input.connectedPoint.value)) {
+                        textureHandles.push(input.connectedPoint.value as FrameGraphTextureHandle);
+                    }
+                }
+            } else {
+                textureHandles = targetConnectedPoint.value as FrameGraphTextureHandle;
+            }
+        }
+
+        return textureHandles;
+    }
+
     protected _linkConnectionTypes(inputIndex0: number, inputIndex1: number, looseCoupling = false) {
         if (looseCoupling) {
             this._inputs[inputIndex1]._acceptedConnectionPointType = this._inputs[inputIndex0];
@@ -445,6 +476,7 @@ export class NodeRenderGraphBlock {
         serializationObject.customType = "BABYLON." + this.getClassName();
         serializationObject.id = this.uniqueId;
         serializationObject.name = this.name;
+        serializationObject.comments = this.comments;
         serializationObject.visibleOnFrame = this.visibleOnFrame;
         serializationObject.disabled = this.disabled;
         if (this._additionalConstructionParameters) {

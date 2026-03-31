@@ -4,25 +4,43 @@ import { kebabize } from "./utils.js";
 export type BuildType = /*"lts" | */ "umd" | "esm" | "es6" | "namespace";
 const privatePackages: DevPackageName[] = ["shared-ui-components"];
 export const declarationsOnlyPackages: DevPackageName[] = ["babylonjs-gltf2interface"];
+
+/**
+ * ES packages that are bundled and should not have sub-paths appended when importing.
+ * For these packages, any import like `package/subpath` should be transformed to just `package`.
+ */
+export const bundledESPackages: DevPackageName[] = [
+    "node-editor",
+    "node-geometry-editor",
+    "node-render-graph-editor",
+    "node-particle-editor",
+    "gui-editor",
+    "inspector-legacy",
+    "inspector",
+];
+
 export type DevPackageName =
     | "core"
     | "gui"
     | "materials"
     | "loaders"
     | "serializers"
+    | "inspector-legacy"
     | "inspector"
     | "post-processes"
     | "procedural-textures"
     | "node-editor"
     | "node-geometry-editor"
     | "node-render-graph-editor"
+    | "node-particle-editor"
     | "gui-editor"
     | "accessibility"
     | "viewer"
     | "ktx2decoder"
     | "shared-ui-components"
     | "babylonjs-gltf2interface"
-    | "addons";
+    | "addons"
+    | "smart-filters";
 export type UMDPackageName =
     | "babylonjs"
     | "babylonjs-gui"
@@ -30,10 +48,12 @@ export type UMDPackageName =
     | "babylonjs-loaders"
     | "babylonjs-materials"
     | "babylonjs-procedural-textures"
+    | "babylonjs-inspector-legacy"
     | "babylonjs-inspector"
     | "babylonjs-node-editor"
     | "babylonjs-node-geometry-editor"
     | "babylonjs-node-render-graph-editor"
+    | "babylonjs-node-particle-editor"
     | "babylonjs-gui-editor"
     | "babylonjs-accessibility"
     | "babylonjs-viewer"
@@ -41,7 +61,8 @@ export type UMDPackageName =
     | "babylonjs-ktx2decoder"
     | "babylonjs-shared-ui-components"
     | "babylonjs-gltf2interface"
-    | "babylonjs-addons";
+    | "babylonjs-addons"
+    | "babylonjs-smart-filters";
 export type NamespacePackageName =
     | "BABYLON"
     | "BABYLON.GUI"
@@ -53,6 +74,7 @@ export type NamespacePackageName =
     | "BABYLON.NodeEditor"
     | "BABYLON.NodeGeometryEditor"
     | "BABYLON.NodeRenderGraphEditor"
+    | "BABYLON.NodeParticleEditor"
     | "BABYLON.GuiEditor"
     | "BABYLON.Accessibility"
     | "ADDONS"
@@ -64,7 +86,9 @@ export type NamespacePackageName =
     | "BABYLON.NodeEditor.SharedUIComponents"
     | "BABYLON.NodeGeometryEditor.SharedUIComponents"
     | "BABYLON.NodeRenderGraphEditor.SharedUIComponents"
-    | "BABYLON.GuiEditor.SharedUIComponents";
+    | "BABYLON.NodeParticleEditor.SharedUIComponents"
+    | "BABYLON.GuiEditor.SharedUIComponents"
+    | "BABYLON.SmartFilters";
 export type ES6PackageName =
     | "@babylonjs/core"
     | "@babylonjs/gui"
@@ -72,10 +96,12 @@ export type ES6PackageName =
     | "@babylonjs/loaders"
     | "@babylonjs/serializers"
     | "@babylonjs/procedural-textures"
+    | "@babylonjs/inspector-legacy"
     | "@babylonjs/inspector"
     | "@babylonjs/node-editor"
     | "@babylonjs/node-geometry-editor"
     | "@babylonjs/node-render-graph-editor"
+    | "@babylonjs/node-particle-editor"
     | "@babylonjs/gui-editor"
     | "@babylonjs/accessibility"
     | "@babylonjs/post-processes"
@@ -83,9 +109,10 @@ export type ES6PackageName =
     | "@babylonjs/ktx2decoder"
     | "@babylonjs/shared-ui-components"
     | "@babylonjs/addons"
-    | "babylonjs-gltf2interface";
+    | "babylonjs-gltf2interface"
+    | "@babylonjs/smart-filters";
 
-export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; baseFilename: string; isBundle?: boolean } } = {
+export const umdPackageMapping: { [key in UMDPackageName]: { sourceDir?: string; baseDir: string; baseFilename: string; isBundle?: boolean } } = {
     babylonjs: {
         baseDir: "",
         baseFilename: "babylon",
@@ -110,9 +137,18 @@ export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; ba
         baseDir: "proceduralTexturesLibrary",
         baseFilename: "babylonjs.proceduralTextures",
     },
-    "babylonjs-inspector": {
+    "babylonjs-inspector-legacy": {
+        // Needed because the package name does not currently match the directory name (see prepareSnapshot.ts)
+        sourceDir: "babylonjs-inspector",
         baseDir: "inspector",
         baseFilename: "babylon.inspector",
+        isBundle: true,
+    },
+    "babylonjs-inspector": {
+        // Needed because the package name does not currently match the directory name (see prepareSnapshot.ts)
+        sourceDir: "babylonjs-inspector-v2",
+        baseDir: "inspector",
+        baseFilename: "babylon.inspector-v2",
         isBundle: true,
     },
     "babylonjs-node-editor": {
@@ -126,6 +162,10 @@ export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; ba
     "babylonjs-node-render-graph-editor": {
         baseDir: "nodeRenderGraphEditor",
         baseFilename: "babylon.nodeRenderGraphEditor",
+    },
+    "babylonjs-node-particle-editor": {
+        baseDir: "nodeParticleEditor",
+        baseFilename: "babylon.nodeParticleEditor",
     },
     "babylonjs-gui-editor": {
         baseDir: "guiEditor",
@@ -159,6 +199,10 @@ export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; ba
         baseDir: "addons",
         baseFilename: "babylonjs.addons",
     },
+    "babylonjs-smart-filters": {
+        baseDir: "smart-filters",
+        baseFilename: "babylonjs.smartFilters",
+    },
 };
 export type ESMPackageName = "@babylonjs/esm";
 
@@ -179,6 +223,7 @@ const packageMapping: {
         materials: "babylonjs-materials",
         loaders: "babylonjs-loaders",
         serializers: "babylonjs-serializers",
+        "inspector-legacy": "babylonjs-inspector-legacy",
         inspector: "babylonjs-inspector",
         "node-editor": (_filePath?: string) => {
             // if (filePath && filePath.indexOf("sharedUiComponents") !== -1) {
@@ -198,6 +243,12 @@ const packageMapping: {
             // }
             return "babylonjs-node-render-graph-editor";
         },
+        "node-particle-editor": (_filePath?: string) => {
+            // if (filePath && filePath.indexOf("sharedUiComponents") !== -1) {
+            //     return "babylonjs-shared-ui-components";
+            // }
+            return "babylonjs-node-particle-editor";
+        },
         "gui-editor": (_filePath?: string) => {
             // if (filePath && filePath.indexOf("sharedUiComponents") !== -1) {
             //     return "babylonjs-shared-ui-components";
@@ -212,6 +263,7 @@ const packageMapping: {
         "shared-ui-components": "babylonjs-shared-ui-components",
         "babylonjs-gltf2interface": "babylonjs-gltf2interface",
         addons: "babylonjs-addons",
+        "smart-filters": "babylonjs-smart-filters",
     },
     es6: {
         core: "@babylonjs/core",
@@ -219,10 +271,12 @@ const packageMapping: {
         materials: "@babylonjs/materials",
         loaders: "@babylonjs/loaders",
         serializers: "@babylonjs/serializers",
+        "inspector-legacy": "@babylonjs/inspector-legacy",
         inspector: "@babylonjs/inspector",
         "node-editor": "@babylonjs/node-editor",
         "node-geometry-editor": "@babylonjs/node-geometry-editor",
         "node-render-graph-editor": "@babylonjs/node-render-graph-editor",
+        "node-particle-editor": "@babylonjs/node-particle-editor",
         "gui-editor": "@babylonjs/gui-editor",
         accessibility: "@babylonjs/accessibility",
         "post-processes": "@babylonjs/post-processes",
@@ -232,6 +286,7 @@ const packageMapping: {
         "shared-ui-components": "@babylonjs/shared-ui-components",
         "babylonjs-gltf2interface": "babylonjs-gltf2interface",
         addons: "@babylonjs/addons",
+        "smart-filters": "@babylonjs/smart-filters",
     },
     esm: {
         core: "@babylonjs/esm",
@@ -239,10 +294,12 @@ const packageMapping: {
         materials: "@babylonjs/esm",
         loaders: "@babylonjs/esm",
         serializers: "@babylonjs/esm",
+        "inspector-legacy": "@babylonjs/esm",
         inspector: "@babylonjs/esm",
         "node-editor": "@babylonjs/esm",
         "node-geometry-editor": "@babylonjs/esm",
         "node-render-graph-editor": "@babylonjs/esm",
+        "node-particle-editor": "@babylonjs/esm",
         "gui-editor": "@babylonjs/esm",
         accessibility: "@babylonjs/accessibility",
         "post-processes": "@babylonjs/esm",
@@ -252,6 +309,7 @@ const packageMapping: {
         addons: "@babylonjs/esm",
         "shared-ui-components": "@babylonjs/esm",
         "babylonjs-gltf2interface": "babylonjs-gltf2interface",
+        "smart-filters": "@babylonjs/smart-filters",
     },
     // lts: {
     //     core: "@babylonjs/esm",
@@ -262,6 +320,7 @@ const packageMapping: {
     // },
     namespace: {
         core: (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (
                 filePath &&
                 (filePath.includes("/Debug/axesViewer") ||
@@ -276,6 +335,7 @@ const packageMapping: {
         gui: "BABYLON.GUI",
         materials: "BABYLON",
         loaders: (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("/glTF/1.0")) {
                     // was .endsWith
@@ -291,7 +351,20 @@ const packageMapping: {
             return "BABYLON";
         },
         serializers: "BABYLON",
+        "inspector-legacy": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
+            if (filePath) {
+                if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
+                    // was .endsWith
+                    return "INSPECTOR.SharedUIComponents";
+                } else if (filePath.includes("babylonjs-gltf2interface")) {
+                    return "BABYLON.GLTF2";
+                }
+            }
+            return "INSPECTOR";
+        },
         inspector: (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
                     // was .endsWith
@@ -303,6 +376,7 @@ const packageMapping: {
             return "INSPECTOR";
         },
         "node-editor": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
                     // was .endsWith
@@ -314,6 +388,7 @@ const packageMapping: {
             return "BABYLON.NodeEditor";
         },
         "node-geometry-editor": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
                     // was .endsWith
@@ -325,6 +400,7 @@ const packageMapping: {
             return "BABYLON.NodeGeometryEditor";
         },
         "node-render-graph-editor": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
                     // was .endsWith
@@ -335,7 +411,20 @@ const packageMapping: {
             }
             return "BABYLON.NodeRenderGraphEditor";
         },
+        "node-particle-editor": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
+            if (filePath) {
+                if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
+                    // was .endsWith
+                    return "BABYLON.NodeParticleEditor.SharedUIComponents";
+                } else if (filePath.includes("babylonjs-gltf2interface")) {
+                    return "BABYLON.GLTF2";
+                }
+            }
+            return "BABYLON.NodeParticleEditor";
+        },
         "gui-editor": (filePath?: string) => {
+            filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
                     // was .endsWith
@@ -354,6 +443,7 @@ const packageMapping: {
         viewer: "BabylonViewer",
         "shared-ui-components": "BABYLON.SharedUIComponents",
         "babylonjs-gltf2interface": "BABYLON.GLTF2",
+        "smart-filters": "BABYLON.SmartFilters",
     },
 };
 

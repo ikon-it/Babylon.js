@@ -1,8 +1,8 @@
 import { FlowGraphEventBlock } from "../../flowGraphEventBlock";
-import type { FlowGraphContext } from "core/FlowGraph/flowGraphContext";
+import { type FlowGraphContext } from "core/FlowGraph/flowGraphContext";
 import { RegisterClass } from "../../../Misc/typeStore";
 import { RichTypeNumber } from "core/FlowGraph/flowGraphRichTypes";
-import type { FlowGraphDataConnection } from "core/FlowGraph/flowGraphDataConnection";
+import { type FlowGraphDataConnection } from "core/FlowGraph/flowGraphDataConnection";
 import { FlowGraphBlockNames } from "../flowGraphBlockNames";
 import { FlowGraphEventType } from "core/FlowGraph/flowGraphEventType";
 
@@ -62,7 +62,7 @@ export class FlowGraphSceneTickEventBlock extends FlowGraphEventBlock {
     /**
      * @internal
      */
-    public _cancelPendingTasks(_context: FlowGraphContext) {
+    public override _cancelPendingTasks(_context: FlowGraphContext) {
         // no-op
     }
 

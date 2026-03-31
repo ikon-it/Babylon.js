@@ -1,24 +1,21 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Vector3, Quaternion, TmpVectors } from "../Maths/math.vector";
 import { Color3 } from "../Maths/math.color";
 import { Mesh } from "../Meshes/mesh";
-import type { IGizmo } from "./gizmo";
-import { Gizmo } from "./gizmo";
+import { type IGizmo, Gizmo } from "./gizmo";
 import { UtilityLayerRenderer } from "../Rendering/utilityLayerRenderer";
-import type { Node } from "../node";
+import { type Node } from "../node";
 import { StandardMaterial } from "../Materials/standardMaterial";
-import type { Light } from "../Lights/light";
-import type { Scene } from "../scene";
+import { type Light } from "../Lights/light";
+import { type Scene } from "../scene";
 import { HemisphericLight } from "../Lights/hemisphericLight";
 import { DirectionalLight } from "../Lights/directionalLight";
 import { CreateSphere } from "../Meshes/Builders/sphereBuilder";
 import { CreateHemisphere } from "../Meshes/Builders/hemisphereBuilder";
 import { SpotLight } from "../Lights/spotLight";
 import { TransformNode } from "../Meshes/transformNode";
-import type { PointerInfo } from "../Events/pointerEvents";
-import { PointerEventTypes } from "../Events/pointerEvents";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
+import { type PointerInfo, PointerEventTypes } from "../Events/pointerEvents";
+import { type Observer, Observable } from "../Misc/observable";
 import { CreateCylinder } from "../Meshes/Builders/cylinderBuilder";
 import { Logger } from "core/Misc/logger";
 
@@ -70,10 +67,10 @@ export class LightGizmo extends Gizmo implements ILightGizmo {
             }
 
             this._isHovered = !!(pointerInfo.pickInfo && this._rootMesh.getChildMeshes().indexOf(<Mesh>pointerInfo.pickInfo.pickedMesh) != -1);
-            if (this._isHovered && pointerInfo.event.button === 0) {
+            if (this._isHovered && pointerInfo.type === PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
                 this.onClickedObservable.notifyObservers(this._light);
             }
-        }, PointerEventTypes.POINTERDOWN);
+        });
     }
     protected _light: Nullable<Light> = null;
 

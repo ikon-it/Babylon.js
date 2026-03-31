@@ -1,12 +1,11 @@
-import type { Vector3 } from "core/Maths/math.vector";
+import { type Vector3 } from "core/Maths/math.vector";
 import { RawTexture } from "core/Materials/Textures/rawTexture";
 import { Texture } from "core/Materials/Textures/texture";
 import { Constants } from "core/Engines/constants";
 import { Light } from "core/Lights/light";
-import type { Effect } from "core/Materials/effect";
-import type { ILTCTextures } from "core/Lights/LTC/ltcTextureTool";
-import { DecodeLTCTextureDataAsync } from "core/Lights/LTC/ltcTextureTool";
-import type { Scene } from "core/scene";
+import { type Effect } from "core/Materials/effect";
+import { type ILTCTextures, DecodeLTCTextureDataAsync } from "core/Lights/LTC/ltcTextureTool";
+import { type Scene } from "core/scene";
 import { Logger } from "core/Misc/logger";
 
 declare module "../scene" {
@@ -79,9 +78,10 @@ export abstract class AreaLight extends Light {
      * @param name The friendly name of the light
      * @param position The position of the area light.
      * @param scene The scene the light belongs to
+     * @param dontAddToScene True to not add the light to the scene
      */
-    constructor(name: string, position: Vector3, scene?: Scene) {
-        super(name, scene);
+    constructor(name: string, position: Vector3, scene?: Scene, dontAddToScene?: boolean) {
+        super(name, scene, dontAddToScene);
         this.position = position;
 
         if (!this._scene._ltcTextures) {
@@ -89,7 +89,7 @@ export abstract class AreaLight extends Light {
         }
     }
 
-    public override transferTexturesToEffect(effect: Effect): Light {
+    public override transferTexturesToEffect(effect: Effect, lightIndex: string): Light {
         if (this._scene._ltcTextures) {
             effect.setTexture("areaLightsLTC1Sampler", this._scene._ltcTextures.LTC1);
             effect.setTexture("areaLightsLTC2Sampler", this._scene._ltcTextures.LTC2);

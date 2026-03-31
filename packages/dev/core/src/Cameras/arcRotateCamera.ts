@@ -1,27 +1,27 @@
 import { serialize, serializeAsVector3, serializeAsMeshReference, serializeAsVector2 } from "../Misc/decorators";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
-import type { Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Scene } from "../scene";
 import { Matrix, Vector3, Vector2, TmpVectors, Quaternion } from "../Maths/math.vector";
 import { Clamp } from "../Maths/math.scalar.functions";
 import { Node } from "../node";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
 import { Mesh } from "../Meshes/mesh";
 import { AutoRotationBehavior } from "../Behaviors/Cameras/autoRotationBehavior";
 import { BouncingBehavior } from "../Behaviors/Cameras/bouncingBehavior";
 import { FramingBehavior } from "../Behaviors/Cameras/framingBehavior";
 import { Camera } from "./camera";
 import { TargetCamera } from "./targetCamera";
-import type { ArcRotateCameraPointersInput } from "../Cameras/Inputs/arcRotateCameraPointersInput";
-import type { ArcRotateCameraKeyboardMoveInput } from "../Cameras/Inputs/arcRotateCameraKeyboardMoveInput";
-import type { ArcRotateCameraMouseWheelInput } from "../Cameras/Inputs/arcRotateCameraMouseWheelInput";
+import { type ArcRotateCameraPointersInput } from "../Cameras/Inputs/arcRotateCameraPointersInput";
+import { type ArcRotateCameraKeyboardMoveInput } from "../Cameras/Inputs/arcRotateCameraKeyboardMoveInput";
+import { type ArcRotateCameraMouseWheelInput } from "../Cameras/Inputs/arcRotateCameraMouseWheelInput";
 import { ArcRotateCameraInputsManager } from "../Cameras/arcRotateCameraInputsManager";
 import { Epsilon } from "../Maths/math.constants";
 import { Tools } from "../Misc/tools";
 import { RegisterClass } from "../Misc/typeStore";
 
-import type { Collider } from "../Collisions/collider";
-import type { TransformNode } from "core/Meshes/transformNode";
+import { type Collider } from "../Collisions/collider";
+import { type TransformNode } from "core/Meshes/transformNode";
 
 Node.AddNodeConstructor("ArcRotateCamera", (name, scene) => {
     return () => new ArcRotateCamera(name, 0, 0, 1.0, Vector3.Zero(), scene);
@@ -1040,7 +1040,6 @@ export class ArcRotateCamera extends TargetCamera {
         }
 
         this.inputs.checkInputs();
-
         let hasUserInteractions = false;
 
         // Inertia
@@ -1062,13 +1061,13 @@ export class ArcRotateCamera extends TargetCamera {
             this.inertialAlphaOffset *= this.inertia;
             this.inertialBetaOffset *= this.inertia;
             this.inertialRadiusOffset *= this.inertia;
-            if (Math.abs(this.inertialAlphaOffset) < Epsilon) {
+            if (Math.abs(this.inertialAlphaOffset) < this._rotationEpsilon) {
                 this.inertialAlphaOffset = 0;
             }
-            if (Math.abs(this.inertialBetaOffset) < Epsilon) {
+            if (Math.abs(this.inertialBetaOffset) < this._rotationEpsilon) {
                 this.inertialBetaOffset = 0;
             }
-            if (Math.abs(this.inertialRadiusOffset) < this.speed * Epsilon) {
+            if (Math.abs(this.inertialRadiusOffset) < this.speed * this._rotationEpsilon) {
                 this.inertialRadiusOffset = 0;
             }
         }
@@ -1114,10 +1113,11 @@ export class ArcRotateCamera extends TargetCamera {
             this.inertialPanningX *= this.panningInertia;
             this.inertialPanningY *= this.panningInertia;
 
-            if (Math.abs(this.inertialPanningX) < this.speed * Epsilon) {
+            const inertialPanningLimit = this.speed * this._panningEpsilon;
+            if (Math.abs(this.inertialPanningX) < inertialPanningLimit) {
                 this.inertialPanningX = 0;
             }
-            if (Math.abs(this.inertialPanningY) < this.speed * Epsilon) {
+            if (Math.abs(this.inertialPanningY) < inertialPanningLimit) {
                 this.inertialPanningY = 0;
             }
         }
@@ -1451,6 +1451,15 @@ export class ArcRotateCamera extends TargetCamera {
         // If there are defined limits, we need to take them into account
         distance = Math.max(Math.min(distance, this.upperRadiusLimit || Number.MAX_VALUE), this.lowerRadiusLimit || 0);
         this.radius = distance * this.zoomOnFactor;
+
+        if (this.mode === Camera.ORTHOGRAPHIC_CAMERA) {
+            const aspectRatio = this.getScene().getEngine().getAspectRatio(this);
+            const orthoExtent = (distance * this.zoomOnFactor) / 2;
+            this.orthoLeft = -orthoExtent * aspectRatio;
+            this.orthoRight = orthoExtent * aspectRatio;
+            this.orthoBottom = -orthoExtent;
+            this.orthoTop = orthoExtent;
+        }
 
         this.focusOn({ min: minMaxVector.min, max: minMaxVector.max, distance: distance }, doNotUpdateMaxZ);
     }

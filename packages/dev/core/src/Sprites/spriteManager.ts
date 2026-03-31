@@ -1,25 +1,24 @@
-import type { IDisposable, Scene } from "../scene";
-import type { Nullable } from "../types";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
+import { type IDisposable, type Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Observer, Observable } from "../Misc/observable";
 import { Vector3, TmpVectors, Matrix } from "../Maths/math.vector";
 import { Sprite } from "./sprite";
-import { SpriteSceneComponent } from "./spriteSceneComponent";
+import { SpriteSceneComponent, type InternalSpriteAugmentedScene } from "./spriteSceneComponent";
 import { PickingInfo } from "../Collisions/pickingInfo";
-import type { Camera } from "../Cameras/camera";
+import { type Camera } from "../Cameras/camera";
 import { Texture } from "../Materials/Textures/texture";
 import { SceneComponentConstants } from "../sceneComponent";
 import { Logger } from "../Misc/logger";
 import { Tools } from "../Misc/tools";
 import { WebRequest } from "../Misc/webRequest";
-import type { SpriteRendererOptions } from "./spriteRenderer";
-import { SpriteRenderer } from "./spriteRenderer";
-import type { ThinSprite } from "./thinSprite";
-import type { ISize } from "../Maths/math.size";
+import { type SpriteRendererOptions, SpriteRenderer } from "./spriteRenderer";
+import { type ThinSprite } from "./thinSprite";
+import { type ISize } from "../Maths/math.size";
 import { EngineStore } from "../Engines/engineStore";
 import { Constants } from "../Engines/constants";
 
-import type { Ray } from "../Culling/ray";
+import { type Ray } from "../Culling/ray";
+import { type IAssetContainer } from "../IAssetContainer";
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect
 declare const Reflect: any;
@@ -28,6 +27,11 @@ declare const Reflect: any;
  * Defines the minimum interface to fulfill in order to be a sprite manager.
  */
 export interface ISpriteManager extends IDisposable {
+    /**
+     * Gets or sets the unique id of the sprite manager
+     */
+    uniqueId: number;
+
     /**
      * Gets manager's name
      */
@@ -72,6 +76,11 @@ export interface ISpriteManager extends IDisposable {
 
     /** @internal */
     _wasDispatched: boolean;
+
+    /**
+     * Specifies if the sprite manager should be serialized
+     */
+    doNotSerialize?: boolean;
 
     /**
      * Tests the intersection of a sprite with a specific ray.
@@ -122,6 +131,9 @@ export interface SpriteManagerOptions {
  * @see https://doc.babylonjs.com/features/featuresDeepDive/sprites
  */
 export class SpriteManager implements ISpriteManager {
+    /** @internal */
+    public _parentContainer: Nullable<IAssetContainer> = null;
+
     /** Define the Url to load snippets */
     public static SnippetUrl = Constants.SnippetUrl;
 
@@ -164,6 +176,11 @@ export class SpriteManager implements ISpriteManager {
      * Gets or sets the unique id of the sprite
      */
     public uniqueId: number;
+
+    /**
+     * Specifies if the sprite manager should be serialized
+     */
+    public doNotSerialize = false;
 
     /**
      * Gets the array of sprites
@@ -273,6 +290,13 @@ export class SpriteManager implements ISpriteManager {
         }
     }
 
+    /**
+     * Gets the sprite renderer associated with this manager
+     */
+    public get spriteRenderer() {
+        return this._spriteRenderer;
+    }
+
     private _spriteRenderer: SpriteRenderer;
     /** Associative array from JSON sprite data file */
     private _cellData: any;
@@ -283,7 +307,7 @@ export class SpriteManager implements ISpriteManager {
     private _textureContent: Nullable<Uint8Array>;
     private _onDisposeObserver: Nullable<Observer<SpriteManager>>;
     private _fromPacked: boolean;
-    private _scene: Scene;
+    private _scene: InternalSpriteAugmentedScene;
 
     /**
      * Creates a new sprite manager
@@ -320,7 +344,7 @@ export class SpriteManager implements ISpriteManager {
         }
         this._fromPacked = fromPacked;
 
-        this._scene = scene;
+        this._scene = scene as InternalSpriteAugmentedScene;
         const engine = this._scene.getEngine();
         this._spriteRenderer = new SpriteRenderer(engine, capacity, epsilon, scene, options?.spriteRendererOptions);
 
@@ -345,6 +369,8 @@ export class SpriteManager implements ISpriteManager {
         if (this._fromPacked) {
             this._makePacked(imgUrl, spriteJSON);
         }
+
+        this._scene._onNewSpriteManagerAddedObservable?.notifyObservers(this);
     }
 
     /**
@@ -388,7 +414,7 @@ export class SpriteManager implements ISpriteManager {
             } catch (e) {
                 this._fromPacked = false;
                 this._packedAndReady = false;
-                throw new Error("Invalid JSON from string. Spritesheet managed with constant cell size.");
+                throw new Error("Invalid JSON from string. Spritesheet managed with constant cell size.", { cause: e });
             }
         } else {
             const re = /\./g;
@@ -413,7 +439,7 @@ export class SpriteManager implements ISpriteManager {
                 } catch (e) {
                     this._fromPacked = false;
                     this._packedAndReady = false;
-                    throw new Error("Invalid JSON format. Please check documentation for format specifications.");
+                    throw new Error("Invalid JSON format. Please check documentation for format specifications.", { cause: e });
                 }
             };
             Tools.LoadFile(jsonUrl, onload, undefined, undefined, false, onerror);
@@ -468,8 +494,8 @@ export class SpriteManager implements ISpriteManager {
         const pickedPoint = TmpVectors.Vector3[0];
         const cameraSpacePosition = TmpVectors.Vector3[1];
         const cameraView = camera.getViewMatrix();
-        let activeRay: Ray = ray;
-        let pickedRay: Ray = ray;
+        let activeRay: Ray;
+        let pickedRay!: Ray;
 
         for (let index = 0; index < count; index++) {
             const sprite = this.sprites[index];
@@ -668,6 +694,15 @@ export class SpriteManager implements ISpriteManager {
         if (this._scene.spriteManagers) {
             const index = this._scene.spriteManagers.indexOf(this);
             this._scene.spriteManagers.splice(index, 1);
+            this._scene._onSpriteManagerRemovedObservable?.notifyObservers(this);
+        }
+
+        if (this._parentContainer && this._parentContainer.spriteManagers) {
+            const index = this._parentContainer.spriteManagers.indexOf(this);
+            if (index > -1) {
+                this._parentContainer.spriteManagers.splice(index, 1);
+            }
+            this._parentContainer = null;
         }
 
         // Callback

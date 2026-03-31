@@ -24,8 +24,8 @@
         "outputDirectory": "./declarations"
     },
     {
-        "declarationLibs": ["@dev/inspector"],
-        "devPackageName": "inspector",
+        "declarationLibs": ["@dev/inspector-legacy"],
+        "devPackageName": "inspector-legacy",
         "filename": "inspector.d.ts",
         "outputDirectory": "./declarations"
     },
@@ -45,6 +45,12 @@
         "declarationLibs": ["@tools/node-render-graph-editor"],
         "devPackageName": "node-render-graph-editor",
         "filename": "node-render-graph-editor.d.ts",
+        "outputDirectory": "./declarations"
+    },
+    {
+        "declarationLibs": ["@tools/node-particle-editor"],
+        "devPackageName": "node-particle-editor",
+        "filename": "node-particle-editor.d.ts",
         "outputDirectory": "./declarations"
     },
     {

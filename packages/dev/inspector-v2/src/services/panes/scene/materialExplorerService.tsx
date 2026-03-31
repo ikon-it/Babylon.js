@@ -1,44 +1,61 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Observer } from "core/index";
+import { type ServiceDefinition } from "../../../modularity/serviceDefinition";
+import { type ISceneContext, SceneContextIdentity } from "../../sceneContext";
+import { type IWatcherService, WatcherServiceIdentity } from "../../watcherService";
+import { type ISceneExplorerService, SceneExplorerServiceIdentity } from "./sceneExplorerService";
 
-import type { ServiceDefinition } from "../../../modularity/serviceDefinition";
-import type { ISceneExplorerService } from "./sceneExplorerService";
+import { tokens } from "@fluentui/react-components";
+import { EditRegular } from "@fluentui/react-icons";
 
-import { PaintBrushRegular } from "@fluentui/react-icons";
+import { NodeMaterial } from "core/Materials/Node/nodeMaterial";
+import { Observable } from "core/Misc/observable";
+import { MaterialIcon } from "shared-ui-components/fluent/icons";
+import { EditNodeMaterial } from "../../../misc/nodeMaterialEditor";
+import { DefaultCommandsOrder, DefaultSectionsOrder } from "./defaultSectionsMetadata";
 
-import { SceneExplorerServiceIdentity } from "./sceneExplorerService";
+export const MaterialExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService, ISceneContext, IWatcherService]> = {
+    friendlyName: "Material Explorer",
+    consumes: [SceneExplorerServiceIdentity, SceneContextIdentity, WatcherServiceIdentity],
+    factory: (sceneExplorerService, sceneContext, watcherService) => {
+        const scene = sceneContext.currentScene;
+        if (!scene) {
+            return undefined;
+        }
 
-export const MaterialExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService]> = {
-    friendlyName: "Material Hierarchy",
-    consumes: [SceneExplorerServiceIdentity],
-    factory: (sceneExplorerService) => {
         const sectionRegistration = sceneExplorerService.addSection({
             displayName: "Materials",
-            order: 2,
-            getRootEntities: (scene) => scene.materials,
-            getEntityDisplayName: (material) => material.name,
-            entityIcon: () => <PaintBrushRegular />,
-            watch: (scene, onAdded, onRemoved) => {
-                const observers: Observer<any>[] = [];
+            order: DefaultSectionsOrder.Materials,
+            getRootEntities: () => [...scene.materials, ...scene.multiMaterials],
+            getEntityDisplayInfo: (material) => {
+                const onChangeObservable = new Observable<void>();
 
-                observers.push(
-                    scene.onNewMaterialAddedObservable.add((material) => {
-                        onAdded(material);
-                    })
-                );
-
-                observers.push(
-                    scene.onMaterialRemovedObservable.add((material) => {
-                        onRemoved(material);
-                    })
-                );
+                const nameHookToken = watcherService.watchProperty(material, "name", () => onChangeObservable.notifyObservers());
 
                 return {
-                    dispose: () => {
-                        for (const observer of observers) {
-                            observer.remove();
-                        }
+                    get name() {
+                        return material.name || `Unnamed ${material.getClassName()}`;
                     },
+                    onChange: onChangeObservable,
+                    dispose: () => {
+                        nameHookToken.dispose();
+                        onChangeObservable.clear();
+                    },
+                };
+            },
+            entityIcon: () => <MaterialIcon color={tokens.colorPaletteMarigoldForeground2} />,
+            getEntityAddedObservables: () => [scene.onNewMaterialAddedObservable],
+            getEntityRemovedObservables: () => [scene.onMaterialRemovedObservable],
+        });
+
+        const editNodeMaterialCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity) => entity instanceof NodeMaterial,
+            order: DefaultCommandsOrder.EditNodeMaterial,
+            getCommand: (nodeMaterial) => {
+                return {
+                    type: "action",
+                    displayName: "Edit in Node Material Editor",
+                    icon: () => <EditRegular />,
+                    // eslint-disable-next-line @typescript-eslint/naming-convention
+                    execute: async () => await EditNodeMaterial(nodeMaterial),
                 };
             },
         });
@@ -46,6 +63,7 @@ export const MaterialExplorerServiceDefinition: ServiceDefinition<[], [ISceneExp
         return {
             dispose: () => {
                 sectionRegistration.dispose();
+                editNodeMaterialCommandRegistration.dispose();
             },
         };
     },

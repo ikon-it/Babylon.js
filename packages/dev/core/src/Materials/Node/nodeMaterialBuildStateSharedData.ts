@@ -1,11 +1,10 @@
-import type { NodeMaterialConnectionPoint } from "./nodeMaterialBlockConnectionPoint";
-import type { NodeMaterialBlock } from "./nodeMaterialBlock";
-import type { InputBlock } from "./Blocks/Input/inputBlock";
-import type { Scene } from "../../scene";
-import type { Immutable, Nullable } from "../../types";
-import type { NodeMaterial, NodeMaterialTextureBlocks } from "./nodeMaterial";
+import { type NodeMaterialConnectionPoint } from "./nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBlock } from "./nodeMaterialBlock";
+import { type InputBlock } from "./Blocks/Input/inputBlock";
+import { type Scene } from "../../scene";
+import { type Immutable, type Nullable } from "../../types";
+import { type NodeMaterial, type NodeMaterialTextureBlocks } from "./nodeMaterial";
 import { Logger } from "core/Misc/logger";
-import type { Observable } from "core/Misc/observable";
 
 /**
  * Class used to store shared data between 2 NodeMaterialBuildState
@@ -99,6 +98,19 @@ export class NodeMaterialBuildStateSharedData {
     public animatedInputs: InputBlock[] = [];
 
     /**
+     * Defines to inject in the vertex and fragment shaders
+     */
+    public defines: { [key: string]: string } = {};
+
+    /**
+     * Configurations used to format the generated code
+     */
+    public formatConfig = {
+        getUniformAnnotation: null as Nullable<(name: string) => string>,
+        formatVariablename: (name: string) => name.replace(/[^a-zA-Z_]+/g, ""),
+    };
+
+    /**
      * Build Id used to avoid multiple recompilations
      */
     public buildId: number;
@@ -135,6 +147,7 @@ export class NodeMaterialBuildStateSharedData {
         emitVertex: false,
         emitFragment: false,
         notConnectedNonOptionalInputs: new Array<NodeMaterialConnectionPoint>(),
+        customErrors: new Array<string>(),
     };
 
     /**
@@ -180,11 +193,20 @@ export class NodeMaterialBuildStateSharedData {
     }
 
     /**
+     * Push a new error to the build state, avoiding exceptions that can break the build process
+     * @param message defines the error message to push
+     */
+    public raiseBuildError(message: string) {
+        if (this.checks.customErrors.indexOf(message) === -1) {
+            this.checks.customErrors.push(message);
+        }
+    }
+
+    /**
      * Emits console errors and exceptions if there is a failing check
-     * @param errorObservable defines an Observable to send the error message
      * @returns true if all checks pass
      */
-    public emitErrors(errorObservable: Nullable<Observable<string>> = null) {
+    public emitErrors() {
         let errorMessage = "";
 
         if (!this.checks.emitVertex && !this.allowEmptyVertexProgram) {
@@ -198,13 +220,14 @@ export class NodeMaterialBuildStateSharedData {
                 notConnectedInput.ownerBlock.name
             }[${notConnectedInput.ownerBlock.getClassName()}] is not connected and is not optional.\n`;
         }
+        for (const customError of this.checks.customErrors) {
+            errorMessage += customError + "\n";
+        }
 
         if (errorMessage) {
-            if (errorObservable) {
-                errorObservable.notifyObservers(errorMessage);
-            }
-            Logger.Error("Build of NodeMaterial failed:\n" + errorMessage);
-
+            errorMessage = "Node material build failed: \n" + errorMessage;
+            Logger.Error(errorMessage);
+            this.nodeMaterial.onBuildErrorObservable.notifyObservers(errorMessage);
             return false;
         }
 

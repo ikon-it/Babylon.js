@@ -1,23 +1,19 @@
 import { Logger } from "../Misc/logger";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
-import { Vector3 } from "../Maths/math.vector";
-import type { Quaternion } from "../Maths/math.vector";
+import { type EventState, type Observer, Observable } from "../Misc/observable";
+import { type Nullable } from "../types";
+import { Vector3, type Quaternion } from "../Maths/math.vector";
 import { Color3 } from "../Maths/math.color";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Node } from "../node";
-import type { Mesh } from "../Meshes/mesh";
-import type { GizmoAnchorPoint, GizmoCoordinatesMode, GizmoAxisCache, IGizmo } from "./gizmo";
-import { Gizmo } from "./gizmo";
-import type { IAxisDragGizmo } from "./axisDragGizmo";
-import { AxisDragGizmo } from "./axisDragGizmo";
-import type { IPlaneDragGizmo } from "./planeDragGizmo";
-import { PlaneDragGizmo } from "./planeDragGizmo";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Node } from "../node";
+import { type Mesh } from "../Meshes/mesh";
+import { type GizmoAnchorPoint, type GizmoCoordinatesMode, type GizmoAxisCache, type IGizmo, Gizmo } from "./gizmo";
+import { type IAxisDragGizmo, AxisDragGizmo } from "./axisDragGizmo";
+import { type IPlaneDragGizmo, PlaneDragGizmo } from "./planeDragGizmo";
 import { UtilityLayerRenderer } from "../Rendering/utilityLayerRenderer";
-import type { PointerInfo } from "../Events/pointerEvents";
-import type { GizmoManager } from "./gizmoManager";
-import type { TransformNode } from "../Meshes/transformNode";
+import { type PointerInfo } from "../Events/pointerEvents";
+import { type GizmoManager } from "./gizmoManager";
+import { type TransformNode } from "../Meshes/transformNode";
+import { type DragEvent, type DragStartEndEvent } from "core/Behaviors/Meshes/pointerDragEvents";
 
 /**
  * Interface for position gizmo
@@ -38,11 +34,11 @@ export interface IPositionGizmo extends IGizmo {
     /** True when the mouse pointer is dragging a gizmo mesh */
     readonly isDragging: boolean;
     /** Fires an event when any of it's sub gizmos are dragged */
-    onDragStartObservable: Observable<unknown>;
+    onDragStartObservable: Observable<DragStartEndEvent>;
     /** Fires an event when any of it's sub gizmos are being dragged */
-    onDragObservable: Observable<unknown>;
+    onDragObservable: Observable<DragEvent>;
     /** Fires an event when any of it's sub gizmos are released from dragging */
-    onDragEndObservable: Observable<unknown>;
+    onDragEndObservable: Observable<DragStartEndEvent>;
     /**
      * If the planar drag gizmo is enabled
      * setting this will enable/disable XY, XZ and YZ planes regardless of individual gizmo settings.
@@ -115,11 +111,11 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
     protected _gizmoAxisCache: Map<Mesh, GizmoAxisCache> = new Map();
 
     /** Fires an event when any of it's sub gizmos are dragged */
-    public onDragStartObservable = new Observable();
+    public onDragStartObservable = new Observable<DragStartEndEvent>();
     /** Fires an event when any of it's sub gizmos are being dragged */
-    public onDragObservable = new Observable();
+    public onDragObservable = new Observable<DragEvent>();
     /** Fires an event when any of it's sub gizmos are released from dragging */
-    public onDragEndObservable = new Observable();
+    public onDragEndObservable = new Observable<DragStartEndEvent>();
 
     /**
      * If set to true, planar drag is enabled
@@ -209,15 +205,15 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
         // Relay drag events
         const gizmos = [this.xGizmo, this.yGizmo, this.zGizmo, this.xPlaneGizmo, this.yPlaneGizmo, this.zPlaneGizmo];
         for (const gizmo of gizmos) {
-            gizmo.dragBehavior.onDragStartObservable.add(() => {
-                this.onDragStartObservable.notifyObservers({});
-            });
-            gizmo.dragBehavior.onDragObservable.add(() => {
-                this.onDragObservable.notifyObservers({});
-            });
-            gizmo.dragBehavior.onDragEndObservable.add(() => {
-                this.onDragEndObservable.notifyObservers({});
-            });
+            gizmo.dragBehavior.onDragStartObservable.add((eventData: DragStartEndEvent, eventState: EventState) =>
+                this.onDragStartObservable.notifyObservers(eventData, eventState.mask, eventState.target, eventState.currentTarget, eventState.userInfo)
+            );
+            gizmo.dragBehavior.onDragObservable.add((eventData: DragEvent, eventState: EventState) =>
+                this.onDragObservable.notifyObservers(eventData, eventState.mask, eventState.target, eventState.currentTarget, eventState.userInfo)
+            );
+            gizmo.dragBehavior.onDragEndObservable.add((eventData: DragStartEndEvent, eventState: EventState) =>
+                this.onDragEndObservable.notifyObservers(eventData, eventState.mask, eventState.target, eventState.currentTarget, eventState.userInfo)
+            );
         }
 
         this.attachedMesh = null;
@@ -255,7 +251,7 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
     }
 
     /**
-     * posture that the gizmo will be display
+     * Orientation that the gizmo will be displayed with.
      * When set null, default value will be used (Quaternion(0, 0, 0, 1))
      */
     public override get customRotationQuaternion(): Nullable<Quaternion> {
@@ -411,7 +407,7 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
      */
     public override setCustomMesh() {
         Logger.Error(
-            "Custom meshes are not supported on this gizmo, please set the custom meshes on the gizmos contained within this one (gizmo.xGizmo, gizmo.yGizmo, gizmo.zGizmo,gizmo.xPlaneGizmo, gizmo.yPlaneGizmo, gizmo.zPlaneGizmo)"
+            "Custom meshes are not supported on this gizmo, please set the custom meshes on the gizmos contained within this one (gizmo.xGizmo, gizmo.yGizmo, gizmo.zGizmo, gizmo.xPlaneGizmo, gizmo.yPlaneGizmo, gizmo.zPlaneGizmo)"
         );
     }
 }

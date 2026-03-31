@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Scene, Camera, FrameGraph, FrameGraphObjectList } from "core/index";
+import { type Scene, type Camera, type FrameGraph, type FrameGraphObjectList } from "core/index";
 import { FrameGraphTask } from "../../frameGraphTask";
 
 /**
@@ -33,9 +32,13 @@ export class FrameGraphCullObjectsTask extends FrameGraphTask {
         super(name, frameGraph);
         this._scene = scene;
         this.outputObjectList = {
-            meshes: [],
-            particleSystems: [],
+            meshes: null,
+            particleSystems: null,
         };
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphCullObjectsTask";
     }
 
     public record() {
@@ -43,10 +46,22 @@ export class FrameGraphCullObjectsTask extends FrameGraphTask {
             throw new Error(`FrameGraphCullObjectsTask ${this.name}: objectList and camera are required`);
         }
 
-        const pass = this._frameGraph.addCullPass(this.name);
+        // Initial output values
+        this.outputObjectList.meshes = this.objectList.meshes;
+        this.outputObjectList.particleSystems = this.objectList.particleSystems;
+
+        const pass = this._frameGraph.addObjectListPass(this.name);
 
         pass.setObjectList(this.outputObjectList);
         pass.setExecuteFunc((_context) => {
+            // No culling on particle systems
+            this.outputObjectList.particleSystems = this.objectList.particleSystems;
+
+            if (this._scene._activeMeshesFrozen) {
+                // If active meshes are frozen, we don't need culling: we keep the last list created before freezing
+                return;
+            }
+
             this.outputObjectList.meshes = [];
 
             this.camera._updateFrustumPlanes();
@@ -71,7 +86,7 @@ export class FrameGraphCullObjectsTask extends FrameGraphTask {
             }
         });
 
-        const passDisabled = this._frameGraph.addCullPass(this.name + "_disabled", true);
+        const passDisabled = this._frameGraph.addObjectListPass(this.name + "_disabled", true);
 
         passDisabled.setObjectList(this.outputObjectList);
         passDisabled.setExecuteFunc((_context) => {

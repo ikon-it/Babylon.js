@@ -1,17 +1,14 @@
 import { NodeMaterialBlock } from "../nodeMaterialBlock";
 import { NodeMaterialBlockConnectionPointTypes } from "../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../nodeMaterialBuildState";
+import { type NodeMaterialBuildState } from "../nodeMaterialBuildState";
 import { NodeMaterialBlockTargets } from "../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterialConnectionPoint } from "../nodeMaterialBlockConnectionPoint";
-import { NodeMaterialConnectionPointDirection } from "../nodeMaterialBlockConnectionPoint";
-import type { AbstractMesh } from "../../../Meshes/abstractMesh";
-import type { NodeMaterialDefines } from "../nodeMaterial";
-import { NodeMaterial } from "../nodeMaterial";
-import type { Effect } from "../../effect";
-import type { Nullable } from "../../../types";
+import { type NodeMaterialConnectionPoint, NodeMaterialConnectionPointDirection } from "../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialDefines, NodeMaterial } from "../nodeMaterial";
+import { type Effect } from "../../effect";
+import { type Nullable } from "../../../types";
 import { RegisterClass } from "../../../Misc/typeStore";
 import { Texture } from "../../Textures/texture";
-import type { Scene } from "../../../scene";
+import { type Scene } from "../../../scene";
 import { Constants } from "../../../Engines/constants";
 import "../../../Shaders/ShadersInclude/helperFunctions";
 import { ImageSourceBlock } from "./Dual/imageSourceBlock";
@@ -29,6 +26,7 @@ export class TriPlanarBlock extends NodeMaterialBlock {
     protected _tempTextureRead: string;
     private _samplerName: string;
     private _textureInfoName: string;
+    private _textureInfoName2: string;
     private _imageSource: Nullable<ImageSourceBlock>;
 
     /**
@@ -324,7 +322,11 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         return this._outputs[6];
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    /**
+     * Prepares the defines for the block
+     * @param defines - the defines to prepare
+     */
+    public override prepareDefines(defines: NodeMaterialDefines) {
         if (!defines._areTexturesDirty) {
             return;
         }
@@ -337,6 +339,10 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         defines.setValue(this._gammaDefineName, toLinear, true);
     }
 
+    /**
+     * Checks if the block is ready
+     * @returns true if the block is ready
+     */
     public override isReady() {
         if (this.texture && !this.texture.isReadyOrNotBlocking()) {
             return false;
@@ -345,12 +351,17 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         return true;
     }
 
+    /**
+     * Bind the block
+     * @param effect - the effect to bind
+     */
     public override bind(effect: Effect) {
         if (!this.texture) {
             return;
         }
 
-        effect.setFloat(this._textureInfoName, this.texture.level);
+        effect.setFloat4(this._textureInfoName, this.texture.level, this.texture.uAng, this.texture.vAng, this.texture.wAng);
+        effect.setFloat4(this._textureInfoName2, this.texture.uOffset, this.texture.vOffset, this.texture.uScale, this.texture.vScale);
 
         if (!this._imageSource) {
             effect.setTexture(this._samplerName, this.texture);
@@ -414,6 +425,33 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         const suffix = state.fSuffix;
 
         state.compilationString += `
+            // apply rotation
+            {
+            float cosAngle = cos(${this._textureInfoName}.y);
+            float sinAngle = sin(${this._textureInfoName}.y);
+            ${uvx} = mat2${suffix}(cosAngle, -sinAngle, sinAngle, cosAngle) * ${uvx};
+            cosAngle = cos(${this._textureInfoName}.z);
+            sinAngle = sin(${this._textureInfoName}.z);
+            ${uvy} = mat2${suffix}(cosAngle, sinAngle, -sinAngle, cosAngle) * ${uvy};
+            cosAngle = cos(${this._textureInfoName}.w);
+            sinAngle = sin(${this._textureInfoName}.w);
+            ${uvz} = mat2${suffix}(cosAngle, -sinAngle, sinAngle, cosAngle) * ${uvz};
+
+            // apply scaling
+            vec2${suffix} uvScale = vec2${suffix}(${this._textureInfoName2}.z, ${this._textureInfoName2}.w);
+            ${uvx} = ${uvx} * uvScale;
+            ${uvy} = ${uvy} * uvScale;
+            ${uvz} = ${uvz} * uvScale;
+
+            // apply offset
+            vec2${suffix} offset = vec2${suffix}(${this._textureInfoName2}.x, ${this._textureInfoName2}.y);
+            ${uvx} = ${uvx} + offset;
+            ${uvy} = ${uvy} + offset;
+            ${uvz} = ${uvz} + offset;
+            }
+        `;
+
+        state.compilationString += `
             ${state._declareLocalVar(x, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${this._generateTextureSample(samplerName, uvx, state)};
             ${state._declareLocalVar(y, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${this._generateTextureSample(samplerYName, uvy, state)};
             ${state._declareLocalVar(z, NodeMaterialBlockConnectionPointTypes.Vector4)} = ${this._generateTextureSample(samplerZName, uvz, state)};
@@ -456,7 +494,7 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         let complement = "";
 
         if (!this.disableLevelMultiplication) {
-            complement = ` * ${state.shaderLanguage === ShaderLanguage.WGSL ? "uniforms." : ""}${this._textureInfoName}`;
+            complement = ` * ${state.shaderLanguage === ShaderLanguage.WGSL ? "uniforms." : ""}${this._textureInfoName}.x`;
         }
 
         state.compilationString += `${state._declareOutput(output)} = ${this._tempTextureRead}.${swizzle}${complement};\n`;
@@ -473,8 +511,9 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         }
 
         this._textureInfoName = state._getFreeVariableName("textureInfoName");
+        this._textureInfoName2 = state._getFreeVariableName("textureInfoName2");
 
-        this.level.associatedVariableName = (state.shaderLanguage === ShaderLanguage.WGSL ? "uniforms." : "") + this._textureInfoName;
+        this.level.associatedVariableName = (state.shaderLanguage === ShaderLanguage.WGSL ? "uniforms." : "") + this._textureInfoName + ".x";
 
         this._tempTextureRead = state._getFreeVariableName("tempTextureRead");
         this._linearDefineName = state._getFreeDefineName("ISLINEAR");
@@ -495,7 +534,8 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         const comments = `//${this.name}`;
         state._emitFunctionFromInclude("helperFunctions", comments);
 
-        state._emitUniformFromString(this._textureInfoName, NodeMaterialBlockConnectionPointTypes.Float);
+        state._emitUniformFromString(this._textureInfoName, NodeMaterialBlockConnectionPointTypes.Vector4);
+        state._emitUniformFromString(this._textureInfoName2, NodeMaterialBlockConnectionPointTypes.Vector4);
 
         this._generateTextureLookup(state);
 
@@ -535,6 +575,10 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         return codeString;
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -549,6 +593,12 @@ export class TriPlanarBlock extends NodeMaterialBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block from a serialization object
+     * @param serializationObject - the object to deserialize from
+     * @param scene - the current scene
+     * @param rootUrl - the root URL for loading
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

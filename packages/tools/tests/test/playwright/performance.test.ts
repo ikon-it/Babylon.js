@@ -28,11 +28,11 @@ export const checkPerformanceOfScene = async (page: Page, baseUrl: string, numbe
         });
     }
     time.sort();
-    // remove edge cases - 2 of each end
+    // remove edge cases - 1 of each end
     time.pop();
     time.shift();
     // return the average rendering time
-    return time.reduce((partialSum, a) => partialSum + a, 0) / (numberOfPasses - 2);
+    return time.reduce((partialSum, a) => partialSum + a, 0) / time.length;
 };
 
 export const evaluateRenderScene = async ({ renderCount }: { renderCount: number }): Promise<number> => {
@@ -122,7 +122,7 @@ export const performanceTests = async (engineType = "webgl2", testFileName = "co
     async function preparePage(browser: Browser, baseUrl: string, title: string) {
         page = await browser.newPage();
         await page.goto(baseUrl + `/empty.html`, {
-            // waitUntil: "load", // for chrome should be "networkidle0"
+            // waitUntil: "load",
             timeout: 0,
         });
         await page.waitForSelector("#babylon-canvas", { timeout: 20000 });

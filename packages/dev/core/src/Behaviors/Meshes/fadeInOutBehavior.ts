@@ -1,9 +1,9 @@
-import type { Behavior } from "../behavior";
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
-import type { Mesh } from "../../Meshes/mesh";
-import type { Nullable } from "../../types";
-import type { Observer } from "core/Misc/observable";
-import type { Scene } from "core/scene";
+import { type Behavior } from "../behavior";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
+import { type Mesh } from "../../Meshes/mesh";
+import { type Nullable } from "../../types";
+import { type Observer } from "core/Misc/observable";
+import { type Scene } from "core/scene";
 
 /**
  * A behavior that when attached to a mesh will allow the mesh to fade in and out
@@ -49,6 +49,13 @@ export class FadeInOutBehavior implements Behavior<Mesh> {
     private _onBeforeRenderObserver: Nullable<Observer<Scene>> | undefined;
     private _delay: number = 0;
     private _time: number = 300;
+
+    /**
+     * Attached node of this behavior
+     */
+    public get attachedNode(): Nullable<Mesh> {
+        return this._ownerNode;
+    }
 
     /**
      * Instantiates the FadeInOutBehavior

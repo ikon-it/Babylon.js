@@ -1,5 +1,5 @@
-import type { InternalTexture } from "../internalTexture";
-import type { IInternalTextureLoader } from "./internalTextureLoader";
+import { type InternalTexture } from "../internalTexture";
+import { type IInternalTextureLoader } from "./internalTextureLoader";
 import { Constants } from "../../../Engines/constants";
 import { LoadIESData } from "core/Lights/IES/iesLoader";
 
@@ -37,7 +37,7 @@ export class _IESTextureLoader implements IInternalTextureLoader {
 
         const textureData = LoadIESData(uint8array);
 
-        callback(textureData.width, textureData.height, false, false, () => {
+        callback(textureData.width, textureData.height, !!texture.useMipMaps, false, () => {
             const engine = texture.getEngine();
             texture.type = Constants.TEXTURETYPE_FLOAT;
             texture.format = Constants.TEXTUREFORMAT_R;

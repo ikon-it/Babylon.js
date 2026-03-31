@@ -35,18 +35,6 @@ Please use the Github issues (after discussing them on the forum) **only** for:
 
 We will try to enforce these rules as we consider the forum is a better place for discussions and learnings.
 
-## Online one-click setup for Contributing
-
-You can use Gitpod (A free online VS Code like IDE) for contributing online. With a single click it'll launch a workspace and automatically:
-
--   clone the BabylonJS repo.
--   install the dependencies.
--   run `npm run start`.
-
-so that you can start straight away.
-
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/BabylonJS/Babylon.js)
-
 ## Pull requests
 
 We are not complicated people, but we still have some [coding guidelines](https://doc.babylonjs.com/contribute/toBabylon/approvedNamingConventions/)
@@ -60,7 +48,7 @@ To validate your PR, please follow these steps:
 
 -   Run `npm run build:dev` locally and make sure that no error is generated
 -   Make sure that all public functions and classes are commented using JSDoc/TSDoc syntax
--   Run `npm run test:unit` for unit tests, and check the buildSystem.md file for information regarding the visualization tests.
+-   Run `npm run test:unit` for unit tests, and check the [how to contribute documentation: Visualization tests](https://doc.babylonjs.com/contribute/toBabylon/HowToContribute/#visualization-tests) section for information on how to run the visualization tests.
 
 ## What should go where
 
@@ -72,3 +60,25 @@ In order to not bloat the core engine with unwanted or unnecessary features (tha
 -   Does this feature already exist in a similar framework?
 
 If your PR does not fall into the core category you can consider using our [Extensions repo](https://github.com/BabylonJS/Extensions) for more high level features.
+
+## Managing Cloud Agents (GitHub Agentic Workflows)
+
+This repository uses [GitHub Agentic Workflows](https://github.com/github/gh-aw) to run AI-powered automation in GitHub Actions. The workflow definitions live in `.github/workflows/*.md` files and are compiled to `.lock.yml` files before they can run.
+
+If you want to create, update, or test these cloud agent workflows, we recommend installing the `gh-aw` CLI extension first:
+
+```bash
+gh extension install github/gh-aw
+```
+
+You can then compile, validate, and test workflows locally before checking them in. For example, to test a workflow from your working branch without merging to `main`:
+
+```bash
+# Compile your workflow changes
+gh aw compile
+
+# Run a workflow from your current branch
+gh workflow run <workflow-name>.lock.yml --ref <your-branch>
+```
+
+> **Note:** The `gh-aw` extension is optional. It is only needed if you are working on the agent workflow definitions themselves. It is not required for general Babylon.js development.

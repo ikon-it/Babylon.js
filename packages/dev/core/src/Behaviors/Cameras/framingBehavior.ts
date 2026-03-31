@@ -1,18 +1,16 @@
-import type { Behavior } from "../../Behaviors/behavior";
-import type { Camera } from "../../Cameras/camera";
-import type { ArcRotateCamera } from "../../Cameras/arcRotateCamera";
+import { type Behavior } from "../../Behaviors/behavior";
+import { type Camera } from "../../Cameras/camera";
+import { type ArcRotateCamera } from "../../Cameras/arcRotateCamera";
 import { ExponentialEase, EasingFunction } from "../../Animations/easing";
-import type { Observer } from "../../Misc/observable";
-import { Observable } from "../../Misc/observable";
-import type { Nullable } from "../../types";
-import type { PointerInfoPre } from "../../Events/pointerEvents";
-import { PointerEventTypes } from "../../Events/pointerEvents";
+import { type Observer, Observable } from "../../Misc/observable";
+import { type Nullable } from "../../types";
+import { type PointerInfoPre, PointerEventTypes } from "../../Events/pointerEvents";
 import { PrecisionDate } from "../../Misc/precisionDate";
 
-import type { AbstractMesh } from "../../Meshes/abstractMesh";
-import type { TransformNode } from "../../Meshes/transformNode";
+import { type AbstractMesh } from "../../Meshes/abstractMesh";
+import { type TransformNode } from "../../Meshes/transformNode";
 import { Vector3 } from "../../Maths/math.vector";
-import type { Animatable } from "../../Animations/animatable.core";
+import { type Animatable } from "../../Animations/animatable.core";
 import { Animation } from "../../Animations/animation";
 
 /**
@@ -173,11 +171,18 @@ export class FramingBehavior implements Behavior<ArcRotateCamera> {
      */
     public autoCorrectCameraLimitsAndSensibility = true;
 
+    /**
+     * Attached node of this behavior
+     */
+    public get attachedNode(): Nullable<ArcRotateCamera> {
+        return this._attachedCamera;
+    }
+
     // Default behavior functions
     private _onPrePointerObservableObserver: Nullable<Observer<PointerInfoPre>>;
     private _onAfterCheckInputsObserver: Nullable<Observer<Camera>>;
     private _onMeshTargetChangedObserver: Nullable<Observer<Nullable<TransformNode>>>;
-    private _attachedCamera: Nullable<ArcRotateCamera>;
+    private _attachedCamera: Nullable<ArcRotateCamera> = null;
     private _isPointerDown = false;
     private _lastInteractionTime = -Infinity;
 
@@ -444,7 +449,7 @@ export class FramingBehavior implements Behavior<ArcRotateCamera> {
                 this._betaTransition = Animation.CreateAnimation("beta", Animation.ANIMATIONTYPE_FLOAT, 60, FramingBehavior.EasingFunction);
             }
 
-            const animatabe = Animation.TransitionTo(
+            const animatable = Animation.TransitionTo(
                 "beta",
                 defaultBeta,
                 this._attachedCamera,
@@ -458,8 +463,8 @@ export class FramingBehavior implements Behavior<ArcRotateCamera> {
                 }
             );
 
-            if (animatabe) {
-                this._animatables.push(animatabe);
+            if (animatable) {
+                this._animatables.push(animatable);
             }
         }
     }

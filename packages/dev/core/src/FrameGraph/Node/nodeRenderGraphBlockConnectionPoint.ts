@@ -1,11 +1,10 @@
-import type {
-    Nullable,
-    NodeRenderGraphBlock,
-    NodeRenderGraphBlockConnectionPointValueType,
-    NodeRenderGraphInputBlock,
-    IShadowLight,
-    FrameGraphShadowGeneratorTask,
-    // eslint-disable-next-line import/no-internal-modules
+import {
+    type Nullable,
+    type NodeRenderGraphBlock,
+    type NodeRenderGraphBlockConnectionPointValueType,
+    type NodeRenderGraphInputBlock,
+    type IShadowLight,
+    type FrameGraphShadowGeneratorTask,
 } from "core/index";
 import { Observable } from "../../Misc/observable";
 import { NodeRenderGraphBlockConnectionPointTypes, NodeRenderGraphConnectionPointCompatibilityStates, NodeRenderGraphConnectionPointDirection } from "./Types/nodeRenderGraphTypes";

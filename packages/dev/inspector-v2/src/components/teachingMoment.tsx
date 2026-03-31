@@ -1,16 +1,22 @@
-import type { FunctionComponent } from "react";
-import type { MakePopoverTeachingMoment } from "../hooks/teachingMomentHooks";
+import { type FunctionComponent } from "react";
+import { type MakePopoverTeachingMoment } from "../hooks/teachingMomentHooks";
 
 import { makeStyles, TeachingPopover, TeachingPopoverBody, TeachingPopoverHeader, TeachingPopoverSurface } from "@fluentui/react-components";
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const useStyles = makeStyles({
     extensionTeachingPopover: {
         maxWidth: "320px",
     },
 });
 
+/**
+ * The state returned by the teaching moment hook.
+ */
 type TeachingMomentState = ReturnType<ReturnType<typeof MakePopoverTeachingMoment>>;
+
+/**
+ * Props for the {@link TeachingMoment} component.
+ */
 type TeachingMomentProps = Pick<TeachingMomentState, "shouldDisplay" | "positioningRef" | "onOpenChange"> & {
     title: string;
     description: string;

@@ -1,39 +1,41 @@
 import { SerializationHelper } from "../Misc/decorators.serialization";
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Scene } from "../scene";
 import { Matrix, Quaternion } from "../Maths/math.vector";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
-import type { SubMesh } from "../Meshes/subMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Mesh } from "../Meshes/mesh";
+import { type SubMesh } from "../Meshes/subMesh";
 import { VertexBuffer } from "../Buffers/buffer";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Texture } from "../Materials/Textures/texture";
-import type { Effect, IEffectCreationOptions, IShaderPath } from "./effect";
+import { type Effect, type IEffectCreationOptions, type IShaderPath } from "./effect";
 import { RegisterClass } from "../Misc/typeStore";
 import { EffectFallbacks } from "./effectFallbacks";
 import { WebRequest } from "../Misc/webRequest";
-import type { ShaderLanguage } from "./shaderLanguage";
-import type { UniformBuffer } from "./uniformBuffer";
-import type { TextureSampler } from "./Textures/textureSampler";
-import type { StorageBuffer } from "../Buffers/storageBuffer";
+import { type ShaderLanguage } from "./shaderLanguage";
+import { type UniformBuffer } from "./uniformBuffer";
+import { type TextureSampler } from "./Textures/textureSampler";
+import { type StorageBuffer } from "../Buffers/storageBuffer";
 import { PushMaterial } from "./pushMaterial";
 import { EngineStore } from "../Engines/engineStore";
 import { Constants } from "../Engines/constants";
 import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "./clipPlaneMaterialHelper";
-import type { WebGPUEngine } from "core/Engines/webgpuEngine";
+import { type WebGPUEngine } from "core/Engines/webgpuEngine";
 
-import type { ExternalTexture } from "./Textures/externalTexture";
+import { type ExternalTexture } from "./Textures/externalTexture";
 import {
     BindBonesParameters,
     BindFogParameters,
     BindLogDepth,
     BindMorphTargetParameters,
     BindSceneUniformBuffer,
-    PrepareAttributesForBakedVertexAnimation,
     PrepareDefinesAndAttributesForMorphTargets,
     PushAttributesForInstances,
 } from "./materialHelper.functions";
-import type { IColor3Like, IColor4Like, IVector2Like, IVector3Like, IVector4Like } from "core/Maths/math.like";
+import { type IColor3Like, type IColor4Like, type IVector2Like, type IVector3Like, type IVector4Like } from "core/Maths/math.like";
+import { type InternalTexture } from "./Textures/internalTexture";
+
+import { PrepareVertexPullingUniforms, BindVertexPullingUniforms, type IVertexPullingMetadata } from "./vertexPullingHelper.functions";
 
 const OnCreatedEffectParameters = { effect: null as unknown as Effect, subMesh: null as unknown as Nullable<SubMesh> };
 
@@ -118,6 +120,7 @@ export class ShaderMaterial extends PushMaterial {
     private _shaderPath: IShaderPath | string;
     private _options: IShaderMaterialOptions;
     private _textures: { [name: string]: BaseTexture } = {};
+    private _internalTextures: { [name: string]: InternalTexture } = {};
     private _textureArrays: { [name: string]: BaseTexture[] } = {};
     private _externalTextures: { [name: string]: ExternalTexture } = {};
     private _floats: { [name: string]: number } = {};
@@ -146,6 +149,7 @@ export class ShaderMaterial extends PushMaterial {
     private _cachedWorldViewMatrix = new Matrix();
     private _cachedWorldViewProjectionMatrix = new Matrix();
     private _multiview = false;
+    private _vertexPullingMetadata: Map<string, IVertexPullingMetadata> | null = null;
 
     /**
      * @internal
@@ -262,6 +266,21 @@ export class ShaderMaterial extends PushMaterial {
             this._options.samplers.push(name);
         }
         this._textures[name] = texture;
+
+        return this;
+    }
+
+    /**
+     * Set an internal texture in the shader.
+     * @param name Define the name of the uniform samplers as defined in the shader
+     * @param texture Define the texture to bind to this sampler
+     * @returns the material itself allowing "fluent" like uniform updates
+     */
+    public setInternalTexture(name: string, texture: InternalTexture): ShaderMaterial {
+        if (this._options.samplers.indexOf(name) === -1) {
+            this._options.samplers.push(name);
+        }
+        this._internalTextures[name] = texture;
 
         return this;
     }
@@ -749,8 +768,8 @@ export class ShaderMaterial extends PushMaterial {
             if (skeleton.isUsingTextureForMatrices) {
                 defines.push("#define BONETEXTURE");
 
-                if (uniforms.indexOf("boneTextureWidth") === -1) {
-                    uniforms.push("boneTextureWidth");
+                if (uniforms.indexOf("boneTextureInfo") === -1) {
+                    uniforms.push("boneTextureInfo");
                 }
 
                 if (this._options.samplers.indexOf("boneSampler") === -1) {
@@ -827,14 +846,22 @@ export class ShaderMaterial extends PushMaterial {
                 if (this._options.samplers.indexOf("bakedVertexAnimationTexture") === -1) {
                     this._options.samplers.push("bakedVertexAnimationTexture");
                 }
-            }
 
-            PrepareAttributesForBakedVertexAnimation(attribs, mesh, defines);
+                if (useInstances) {
+                    attribs.push("bakedVertexAnimationSettingsInstanced");
+                }
+            }
         }
 
         // Textures
         for (const name in this._textures) {
             if (!this._textures[name].isReady()) {
+                return false;
+            }
+        }
+
+        for (const name in this._internalTextures) {
+            if (!this._internalTextures[name].isReady) {
                 return false;
             }
         }
@@ -870,6 +897,30 @@ export class ShaderMaterial extends PushMaterial {
             defines.push("#define LOGARITHMICDEPTH");
             if (uniforms.indexOf("logarithmicDepthConstant") === -1) {
                 uniforms.push("logarithmicDepthConstant");
+            }
+        }
+
+        const renderingMesh = subMesh ? subMesh.getRenderingMesh() : mesh;
+        if (renderingMesh && this.useVertexPulling) {
+            // Add vertex buffer metadata defines for proper stride/offset handling
+            const geometry = renderingMesh.geometry;
+            if (geometry) {
+                this._vertexPullingMetadata = PrepareVertexPullingUniforms(geometry);
+                if (this._vertexPullingMetadata) {
+                    this._vertexPullingMetadata.forEach((_, attribute) => {
+                        uniforms.push(`vp_${attribute}_info`);
+                    });
+                }
+            }
+
+            defines.push("#define USE_VERTEX_PULLING");
+
+            const indexBuffer = renderingMesh.geometry?.getIndexBuffer();
+            if (indexBuffer && !(renderingMesh as Mesh).isUnIndexed) {
+                defines.push("#define VERTEX_PULLING_USE_INDEX_BUFFER");
+                if (indexBuffer.is32Bits) {
+                    defines.push("#define VERTEX_PULLING_INDEX_BUFFER_32BITS");
+                }
             }
         }
 
@@ -1048,6 +1099,10 @@ export class ShaderMaterial extends PushMaterial {
             // Clip plane
             BindClipPlane(effect, this, scene);
 
+            if (this._vertexPullingMetadata) {
+                BindVertexPullingUniforms(effect, this._vertexPullingMetadata);
+            }
+
             // Misc
             if (this._useLogarithmicDepth) {
                 BindLogDepth(storeEffectOnSubMeshes ? subMesh.materialDefines : effect.defines, effect, scene);
@@ -1062,6 +1117,10 @@ export class ShaderMaterial extends PushMaterial {
             // Texture
             for (name in this._textures) {
                 effect.setTexture(name, this._textures[name]);
+            }
+
+            for (name in this._internalTextures) {
+                effect._bindTexture(name, this._internalTextures[name]);
             }
 
             // Texture arrays
@@ -1260,6 +1319,13 @@ export class ShaderMaterial extends PushMaterial {
             }
         }
 
+        const internalTexture = texture.getInternalTexture();
+        for (const name in this._internalTextures) {
+            if (this._internalTextures[name] === internalTexture) {
+                return true;
+            }
+        }
+
         for (const name in this._textureArrays) {
             const array = this._textureArrays[name];
             for (let index = 0; index < array.length; index++) {
@@ -1306,6 +1372,10 @@ export class ShaderMaterial extends PushMaterial {
         // Texture
         for (const key in this._textures) {
             result.setTexture(key, this._textures[key]);
+        }
+
+        for (const key in this._internalTextures) {
+            result.setInternalTexture(key, this._internalTextures[key]);
         }
 
         // TextureArray
@@ -1448,6 +1518,9 @@ export class ShaderMaterial extends PushMaterial {
             for (name in this._textures) {
                 this._textures[name].dispose();
             }
+            for (name in this._internalTextures) {
+                this._internalTextures[name].dispose();
+            }
 
             for (name in this._textureArrays) {
                 const array = this._textureArrays[name];
@@ -1458,6 +1531,7 @@ export class ShaderMaterial extends PushMaterial {
         }
 
         this._textures = {};
+        this._internalTextures = {};
         super.dispose(forceDisposeEffect, forceDisposeTextures, notBoundToMesh);
     }
 

@@ -1,7 +1,7 @@
 import { Observable } from "../../Misc/observable";
 import { SoundState } from "../soundState";
 import { AbstractAudioNode, AudioNodeType } from "./abstractAudioNode";
-import type { AbstractSound, IAbstractSoundPlayOptions, IAbstractSoundPlayOptionsBase } from "./abstractSound";
+import { type AbstractSound, type IAbstractSoundPlayOptions, type IAbstractSoundPlayOptionsBase } from "./abstractSound";
 
 /**
  * Options for creating a sound instance.
@@ -60,5 +60,9 @@ export abstract class _AbstractSoundInstance extends AbstractAudioNode {
 
         this._state = value;
         this.onStateChangedObservable.notifyObservers(this);
+
+        if (this._state === SoundState.Stopped) {
+            this.onEndedObservable.notifyObservers(this);
+        }
     }
 }

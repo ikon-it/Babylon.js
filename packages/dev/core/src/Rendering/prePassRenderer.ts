@@ -1,21 +1,22 @@
 import { PrePassRenderTarget } from "../Materials/Textures/prePassRenderTarget";
-import type { Scene } from "../scene";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Scene } from "../scene";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
-import type { PostProcess } from "../PostProcesses/postProcess";
-import type { Effect } from "../Materials/effect";
+import { type PostProcess } from "../PostProcesses/postProcess";
+import { type Effect } from "../Materials/effect";
 import { _WarnImport } from "../Misc/devTools";
 import { Color4 } from "../Maths/math.color";
-import type { Nullable } from "../types";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Camera } from "../Cameras/camera";
+import { type Nullable } from "../types";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Camera } from "../Cameras/camera";
 import { Material } from "../Materials/material";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { PrePassEffectConfiguration } from "./prePassEffectConfiguration";
-import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type PrePassEffectConfiguration } from "./prePassEffectConfiguration";
+import { type RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { GeometryBufferRenderer } from "../Rendering/geometryBufferRenderer";
 
 import "../Engines/Extensions/engine.multiRender";
+import "./geometryBufferRendererSceneComponent";
 
 /**
  * Renders a pre pass of the scene
@@ -897,7 +898,10 @@ export class PrePassRenderer {
             if (this.renderTargets[i].renderTargetTexture) {
                 postProcesses = this._getPostProcessesSource(this.renderTargets[i]);
             } else {
-                const camera = this._scene.activeCamera;
+                // When there are multiple active cameras, we have to choose one. We assume it's the first one and not scene.activeCamera, because in a number of cases,
+                // _update() will be called from an async method, meaning the active camera will be the last one in the list of active cameras,
+                // which is generally not the right camera to use for the prepass setup.
+                const camera = this._scene.activeCameras && this._scene.activeCameras.length > 0 ? this._scene.activeCameras[0] : this._scene.activeCamera;
                 if (!camera) {
                     continue;
                 }

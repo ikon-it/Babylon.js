@@ -1,16 +1,28 @@
-import type { INode, IEXTMeshGpuInstancing } from "babylonjs-gltf2interface";
-import { AccessorType, AccessorComponentType } from "babylonjs-gltf2interface";
-import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
-import type { BufferManager } from "../bufferManager";
+import { type INode, type IEXTMeshGpuInstancing, AccessorType, AccessorComponentType } from "babylonjs-gltf2interface";
+import { type IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
+import { type BufferManager } from "../bufferManager";
 import { GLTFExporter } from "../glTFExporter";
-import type { Nullable } from "core/types";
-import type { Node } from "core/node";
+import { type Nullable } from "core/types";
+import { type Node } from "core/node";
 import { Mesh } from "core/Meshes/mesh";
 import "core/Meshes/thinInstanceMesh";
 import { TmpVectors, Quaternion, Vector3 } from "core/Maths/math.vector";
 import { ConvertToRightHandedPosition, ConvertToRightHandedRotation } from "../glTFUtilities";
 
+import { Logger } from "core/Misc/logger";
+
 const NAME = "EXT_mesh_gpu_instancing";
+
+function ColorBufferToRGBAToRGB(colorBuffer: Float32Array, instanceCount: number) {
+    const colorBufferRgb = new Float32Array(instanceCount * 3);
+
+    for (let i = 0; i < instanceCount; i++) {
+        colorBufferRgb[i * 3 + 0] = colorBuffer[i * 4 + 0];
+        colorBufferRgb[i * 3 + 1] = colorBuffer[i * 4 + 1];
+        colorBufferRgb[i * 3 + 2] = colorBuffer[i * 4 + 2];
+    }
+    return colorBufferRgb;
+}
 
 /**
  * [Specification](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_mesh_gpu_instancing/README.md)
@@ -25,6 +37,11 @@ export class EXT_mesh_gpu_instancing implements IGLTFExporterExtensionV2 {
 
     /** Defines whether this extension is required */
     public required = false;
+
+    /**
+     * Internal state to emit warning about instance color alpha once
+     */
+    private _instanceColorWarned = false;
 
     private _exporter: GLTFExporter;
 
@@ -122,6 +139,23 @@ export class EXT_mesh_gpu_instancing implements IGLTFExporterExtensionV2 {
                     // do we need to write SCALE ?
                     if (hasAnyInstanceWorldScale) {
                         extension.attributes["SCALE"] = this._buildAccessor(scaleBuffer, AccessorType.VEC3, babylonNode.thinInstanceCount, bufferManager);
+                    }
+                    let colorBuffer = babylonNode._userThinInstanceBuffersStorage?.data?.instanceColor;
+                    if (colorBuffer) {
+                        const instanceCount = babylonNode.thinInstanceCount;
+                        const accessorType = AccessorType.VEC3;
+                        if (babylonNode.hasVertexAlpha && colorBuffer.length === instanceCount * 4) {
+                            if (!this._instanceColorWarned) {
+                                Logger.Warn("EXT_mesh_gpu_instancing: Exporting instance colors as RGB, alpha channel of instance color is not exported");
+                                this._instanceColorWarned = true;
+                            }
+                            colorBuffer = ColorBufferToRGBAToRGB(colorBuffer, instanceCount);
+                        } else if (colorBuffer.length === instanceCount * 4) {
+                            colorBuffer = ColorBufferToRGBAToRGB(colorBuffer, instanceCount);
+                        }
+                        if (colorBuffer.length === instanceCount * 3) {
+                            extension.attributes["_COLOR_0"] = this._buildAccessor(colorBuffer, accessorType, instanceCount, bufferManager);
+                        }
                     }
 
                     /* eslint-enable @typescript-eslint/naming-convention*/

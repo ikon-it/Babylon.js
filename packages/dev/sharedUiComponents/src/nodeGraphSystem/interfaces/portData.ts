@@ -1,5 +1,5 @@
-import type { Nullable } from "core/types";
-import type { GraphNode } from "../graphNode";
+import { type Nullable } from "core/types";
+import { type GraphNode } from "../graphNode";
 
 export enum PortDataDirection {
     /** Input */
@@ -11,6 +11,7 @@ export enum PortDataDirection {
 export enum PortDirectValueTypes {
     Float,
     Int,
+    String,
 }
 
 export interface IPortDirectValueDefinition {
@@ -46,6 +47,7 @@ export interface IPortData {
     isExposedOnFrame: boolean;
     exposedPortPosition: number;
     isConnected: boolean;
+    isInactive: boolean;
     direction: PortDataDirection;
     ownerData: any;
     connectedPort: Nullable<IPortData>;

@@ -1,24 +1,24 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { SerializationHelper } from "core/Misc/decorators.serialization";
-import type { Matrix } from "core/Maths/math.vector";
+import { type Matrix } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import type { IShadowLight } from "core/Lights/shadowLight";
-import type { IEffectCreationOptions } from "core/Materials/effect";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type IShadowLight } from "core/Lights/shadowLight";
+import { type IEffectCreationOptions } from "core/Materials/effect";
 import { MaterialDefines } from "core/Materials/materialDefines";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { VertexBuffer } from "core/Buffers/buffer";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { SubMesh } from "core/Meshes/subMesh";
-import type { Mesh } from "core/Meshes/mesh";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import { type SubMesh } from "core/Meshes/subMesh";
+import { type Mesh } from "core/Meshes/mesh";
 import { Scene } from "core/scene";
 import { RegisterClass } from "core/Misc/typeStore";
 
 import "./shadowOnly.fragment";
 import "./shadowOnly.vertex";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import type { CascadedShadowGenerator } from "core/Lights/Shadows/cascadedShadowGenerator";
+import { type CascadedShadowGenerator } from "core/Lights/Shadows/cascadedShadowGenerator";
 import { AddClipPlaneUniforms, BindClipPlane } from "core/Materials/clipPlaneMaterialHelper";
 import {
     BindBonesParameters,
@@ -141,7 +141,19 @@ export class ShadowOnlyMaterial extends PushMaterial {
 
         PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
-        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this.needAlphaTestingForMesh(mesh), defines);
+        PrepareDefinesForMisc(
+            mesh,
+            scene,
+            this._useLogarithmicDepth,
+            this.pointsCloud,
+            this.fogEnabled,
+            this.needAlphaTestingForMesh(mesh),
+            defines,
+            undefined,
+            undefined,
+            undefined,
+            this._isVertexOutputInvariant
+        );
 
         defines._needNormals = PrepareDefinesForLights(scene, mesh, defines, false, 1);
 

@@ -17,3 +17,6 @@ export * from "./freeCameraMouseInput";
 export * from "./freeCameraMouseWheelInput";
 export * from "./freeCameraTouchInput";
 export * from "./freeCameraVirtualJoystickInput";
+export * from "./geospatialCameraPointersInput";
+export * from "./geospatialCameraMouseWheelInput";
+export * from "./geospatialCameraKeyboardInput";

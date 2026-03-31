@@ -1,4 +1,4 @@
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { GreasedLineMeshColorMode } from "./greasedLineMaterialInterfaces";
 
 /**
@@ -67,7 +67,7 @@ export function GetCustomCode(shaderType: string, cameraFacing: boolean): Nullab
                     let grlWidth: f32 = grlBaseWidth * input.grl_widths;
 
                     let worldDir: vec3f = normalize(grlNext - grlPrevious);
-                    let nearPosition: vec3f = positionUpdated + (worldDir * 0.001);
+                    let nearPosition: vec3f = positionUpdated + (worldDir * 0.01);
                     let grlMatrix: mat4x4f = uniforms.viewProjection * finalWorld;
                     let grlFinalPosition: vec4f = grlMatrix * vec4f(positionUpdated, 1.0); 
                     let screenNearPos: vec4f = grlMatrix * vec4(nearPosition, 1.0);
@@ -109,7 +109,6 @@ export function GetCustomCode(shaderType: string, cameraFacing: boolean): Nullab
         if (cameraFacing) {
             obj["!vertexOutputs\\.position\\s=\\sscene\\.viewProjection\\s\\*\\sworldPos;"] = "//"; // not needed for camera facing GRL
         }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return obj;
     }
 

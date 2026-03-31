@@ -3,10 +3,10 @@ import { PostProcess } from "../PostProcesses/postProcess";
 
 import { ApplyPostProcess } from "./textureTools";
 
-import type { Texture } from "../Materials/Textures/texture";
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
-import type { Scene } from "../scene";
-import { ShaderLanguage } from "core/Materials";
+import { type Texture } from "../Materials/Textures/texture";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
+import { type Scene } from "../scene";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Class used to host RGBD texture specific utilities

@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraph, FrameGraphTextureHandle, Camera, FrameGraphTextureCreationOptions } from "core/index";
+import { type FrameGraph, type FrameGraphTextureHandle, type Camera, type FrameGraphTextureCreationOptions } from "core/index";
 import { Constants } from "core/Engines/constants";
 import { FrameGraphTask } from "../../frameGraphTask";
 import { ThinSSRRenderingPipeline } from "core/PostProcesses/RenderPipeline/Pipelines/thinSSRRenderingPipeline";
@@ -20,6 +19,17 @@ export class FrameGraphSSRRenderingPipelineTask extends FrameGraphTask {
      * The sampling mode to use for the source texture.
      */
     public sourceSamplingMode = Constants.TEXTURE_BILINEAR_SAMPLINGMODE;
+
+    /**
+     * The alpha mode to use when applying the SSR effect.
+     */
+    public get alphaMode() {
+        return this._ssrBlurCombiner.alphaMode;
+    }
+
+    public set alphaMode(mode: number) {
+        this._ssrBlurCombiner.alphaMode = mode;
+    }
 
     /**
      * The normal texture used by the SSR effect.
@@ -60,6 +70,9 @@ export class FrameGraphSSRRenderingPipelineTask extends FrameGraphTask {
         this._camera = camera;
 
         this.ssr.camera = camera;
+        if (this._ssr) {
+            this._ssr.camera = camera;
+        }
     }
 
     /**
@@ -87,7 +100,7 @@ export class FrameGraphSSRRenderingPipelineTask extends FrameGraphTask {
     public override set name(name: string) {
         this._name = name;
         if (this._ssr) {
-            this._ssr.name = `${name} SSR`;
+            this._ssr.name = `${name} SSR main`;
         }
         if (this._ssrBlurX) {
             this._ssrBlurX.name = `${name} SSR Blur X`;
@@ -124,26 +137,20 @@ export class FrameGraphSSRRenderingPipelineTask extends FrameGraphTask {
 
         this.ssr = new ThinSSRRenderingPipeline(name, frameGraph.scene);
 
-        this._ssr = new FrameGraphSSRTask(`${name} SSR`, this._frameGraph, this.ssr._ssrPostProcess);
+        this._ssr = new FrameGraphSSRTask(`${name} SSR main`, this._frameGraph, this.ssr._ssrPostProcess);
         this._ssrBlurX = new FrameGraphSSRBlurTask(`${name} SSR Blur X`, this._frameGraph, this.ssr._ssrBlurXPostProcess);
         this._ssrBlurY = new FrameGraphSSRBlurTask(`${name} SSR Blur Y`, this._frameGraph, this.ssr._ssrBlurYPostProcess);
         this._ssrBlurCombiner = new FrameGraphPostProcessTask(`${name} SSR Blur Combiner`, this._frameGraph, this.ssr._ssrBlurCombinerPostProcess);
-
-        this.onTexturesAllocatedObservable.add((context) => {
-            this._ssr.onTexturesAllocatedObservable.notifyObservers(context);
-            // We should not forward the notification if blur is not enabled
-            if (this.ssr.blurDispersionStrength !== 0) {
-                this._ssrBlurX.onTexturesAllocatedObservable.notifyObservers(context);
-                this._ssrBlurY.onTexturesAllocatedObservable.notifyObservers(context);
-                this._ssrBlurCombiner.onTexturesAllocatedObservable.notifyObservers(context);
-            }
-        });
 
         this.outputTexture = this._frameGraph.textureManager.createDanglingHandle();
     }
 
     public override isReady() {
         return this.ssr.isReady();
+    }
+
+    public override getClassName(): string {
+        return "FrameGraphSSRRenderingPipelineTask";
     }
 
     public record(): void {
@@ -247,7 +254,9 @@ export class FrameGraphSSRRenderingPipelineTask extends FrameGraphTask {
 
         passDisabled.setRenderTarget(this.outputTexture);
         passDisabled.setExecuteFunc((context) => {
-            context.copyTexture(this.sourceTexture);
+            if (this.alphaMode === Constants.ALPHA_DISABLE) {
+                context.copyTexture(this.sourceTexture);
+            }
         });
     }
 

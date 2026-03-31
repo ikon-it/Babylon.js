@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { GlobalState } from "../globalState";
+import { type GlobalState } from "../globalState";
 
 import { Engine } from "core/Engines/engine";
 import { SceneLoader } from "core/Loading/sceneLoader";
@@ -69,7 +69,7 @@ class Reflector {
                     this._globalState.onSceneLoaded.notifyObservers({ scene: scene, filename: "Reflector scene" });
 
                     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                    scene.debugLayer.show();
+                    this._globalState.showDebugLayer();
                 });
                 break;
             }

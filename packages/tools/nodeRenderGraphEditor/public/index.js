@@ -1,4 +1,5 @@
 /* global BABYLON */
+var cdnPort = 1337;
 let snippetUrl = "https://snippet.babylonjs.com";
 let currentSnippetToken;
 let previousHash = "";
@@ -43,7 +44,7 @@ let loadScriptAsync = function (url, instantResolve) {
 
 const Versions = {
     dist: ["https://cdn.babylonjs.com/timestamp.js?t=" + Date.now(), "https://preview.babylonjs.com/babylon.js", "https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js"],
-    local: [`//${window.location.hostname}:1337/babylon.js`, `//${window.location.hostname}:1337/loaders/babylonjs.loaders.min.js`],
+    local: [`//${window.location.hostname}:${cdnPort}/babylon.js`, `//${window.location.hostname}:${cdnPort}/loaders/babylonjs.loaders.min.js`],
 };
 
 let loadInSequence = async function (versions, index, resolve) {
@@ -98,7 +99,7 @@ let checkBabylonVersionAsync = function () {
             globalThis.BABYLON.Tools.ScriptBaseUrl = "https://cdn.babylonjs.com/v" + version;
         } else if (activeVersion === "local") {
             // eslint-disable-next-line no-undef
-            globalThis.BABYLON.Tools.ScriptBaseUrl = window.location.protocol + `//${window.location.hostname}:1337/`;
+            globalThis.BABYLON.Tools.ScriptBaseUrl = window.location.protocol + `//${window.location.hostname}:${cdnPort}/`;
         }
     });
 };
@@ -127,7 +128,7 @@ checkBabylonVersionAsync().then(() => {
 
                     try {
                         let xmlHttp = new XMLHttpRequest();
-                        xmlHttp.onreadystatechange = function () {
+                        xmlHttp.onreadystatechange = async function () {
                             if (xmlHttp.readyState == 4) {
                                 if (xmlHttp.status == 200) {
                                     let snippet = JSON.parse(JSON.parse(xmlHttp.responseText).jsonPayload);
@@ -138,7 +139,7 @@ checkBabylonVersionAsync().then(() => {
                                     } else {
                                         nodeRenderGraph.parseSerializedObject(serializationObject);
                                         try {
-                                            nodeRenderGraph.build();
+                                            await nodeRenderGraph.buildAsync();
                                         } catch (err) {
                                             // Swallow the error here
                                         }
@@ -218,7 +219,11 @@ checkBabylonVersionAsync().then(() => {
                 let engine;
 
                 if (useWebGPU && (await BABYLON.WebGPUEngine.IsSupportedAsync)) {
-                    engine = new BABYLON.WebGPUEngine(canvas);
+                    engine = new BABYLON.WebGPUEngine(canvas, {
+                        enableGPUDebugMarkers: true,
+                        enableAllFeatures: true,
+                        setMaximumLimits: true,
+                    });
                     await engine.initAsync();
                 } else {
                     localStorage.setItem("Engine", 0);
@@ -233,7 +238,7 @@ checkBabylonVersionAsync().then(() => {
 
                 nodeRenderGraph = new BABYLON.NodeRenderGraph("node", scene);
                 nodeRenderGraph.setToDefault();
-                nodeRenderGraph.build();
+                await nodeRenderGraph.buildAsync();
 
                 showEditor();
             } else {

@@ -1,26 +1,26 @@
 import { RawTexture } from "../../Materials/Textures/rawTexture";
 import { WebXRFeatureName, WebXRFeaturesManager } from "../webXRFeaturesManager";
-import type { WebXRSessionManager } from "../webXRSessionManager";
+import { type WebXRSessionManager } from "../webXRSessionManager";
 import { WebXRAbstractFeature } from "./WebXRAbstractFeature";
 import { Tools } from "../../Misc/tools";
 import { Texture } from "../../Materials/Textures/texture";
-import type { Observer } from "../../Misc/observable";
-import { Observable } from "../../Misc/observable";
-import type { Nullable } from "../../types";
+import { type Observer, Observable } from "../../Misc/observable";
+import { type Nullable } from "../../types";
 import { Constants } from "../../Engines/constants";
 import { WebGLHardwareTexture } from "../../Engines/WebGL/webGLHardwareTexture";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
-import type { ThinEngine } from "../../Engines/thinEngine";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type ThinEngine } from "../../Engines/thinEngine";
 import { MaterialPluginBase } from "core/Materials/materialPluginBase";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
-import type { Material } from "core/Materials/material";
+import { type Material } from "core/Materials/material";
 import { MaterialDefines } from "core/Materials/materialDefines";
-import type { UniformBuffer } from "core/Materials/uniformBuffer";
+import { type UniformBuffer } from "core/Materials/uniformBuffer";
 import { PBRBaseMaterial } from "core/Materials/PBR/pbrBaseMaterial";
-import { RegisterMaterialPlugin } from "core/Materials/materialPluginManager";
-import type { Camera } from "core/Cameras/camera";
+import { RegisterMaterialPlugin, UnregisterMaterialPlugin } from "core/Materials/materialPluginManager";
+import { type Camera } from "core/Cameras/camera";
 import { Matrix } from "core/Maths/math.vector";
-import type { Engine } from "core/Engines/engine";
+import { type Engine } from "core/Engines/engine";
+import { RegisterClass } from "../../Misc/typeStore";
 
 export type WebXRDepthUsage = "cpu" | "gpu";
 export type WebXRDepthDataFormat = "ushort" | "float" | "luminance-alpha";
@@ -145,6 +145,7 @@ class WebXRDepthSensingMaterialPlugin extends MaterialPluginBase {
     constructor(material: Material) {
         super(material, "DepthSensing", 222, new DepthSensingMaterialDefines());
         this._varColorName = material instanceof PBRBaseMaterial ? "finalColor" : "color";
+        this.doNotSerialize = true;
         ManagedMaterialPlugins.push(this);
     }
 
@@ -287,6 +288,8 @@ class WebXRDepthSensingMaterialPlugin extends MaterialPluginBase {
     }
 }
 
+RegisterClass(`BABYLON.DepthSensingMaterialPlugin`, WebXRDepthSensingMaterialPlugin);
+
 /**
  * WebXR Feature for WebXR Depth Sensing Module
  * @since 5.49.1
@@ -425,6 +428,8 @@ export class WebXRDepthSensing extends WebXRAbstractFeature {
         // https://immersive-web.github.io/depth-sensing/
         Tools.Warn("depth-sensing is an experimental and unstable feature.");
         EnableDiscard = !options.useToleranceFactorForDepthSensing;
+
+        RegisterMaterialPlugin("WebXRDepthSensingMaterialPlugin", (material) => new WebXRDepthSensingMaterialPlugin(material));
     }
 
     /**
@@ -494,6 +499,8 @@ export class WebXRDepthSensing extends WebXRAbstractFeature {
      * Dispose this feature and all of the resources attached
      */
     public override dispose(): void {
+        super.dispose();
+        UnregisterMaterialPlugin("WebXRDepthSensingMaterialPlugin");
         this._cachedDepthImageTexture?.dispose();
         this.onGetDepthInMetersAvailable.clear();
         // cleanup
@@ -706,5 +713,3 @@ WebXRFeaturesManager.AddWebXRFeature(
     WebXRDepthSensing.Version,
     false
 );
-
-RegisterMaterialPlugin("WebXRDepthSensingMaterialPlugin", (material) => new WebXRDepthSensingMaterialPlugin(material));

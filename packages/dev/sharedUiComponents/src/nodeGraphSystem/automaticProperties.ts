@@ -1,5 +1,5 @@
-import type { IEditablePropertyOption } from "core/Decorators/nodeDecorator";
-import type { StateManager } from "./stateManager";
+import { type IEditablePropertyOption } from "core/Decorators/nodeDecorator";
+import { type StateManager } from "./stateManager";
 
 /**
  * Function used to force a rebuild of the node system
@@ -7,10 +7,19 @@ import type { StateManager } from "./stateManager";
  * @param stateManager defines the state manager to use
  * @param propertyName name of the property that has been changed
  * @param notifiers list of notifiers to use
+ * @param engageActiveRefresh if active refresh should be engaged
  */
-export function ForceRebuild(source: any, stateManager: StateManager, propertyName: string, notifiers?: IEditablePropertyOption["notifiers"]) {
+export function ForceRebuild(source: any, stateManager: StateManager, propertyName: string, notifiers?: IEditablePropertyOption["notifiers"], engageActiveRefresh = true) {
     if (notifiers?.onValidation && !notifiers?.onValidation(source, propertyName)) {
         return;
+    }
+
+    if (stateManager.getScene) {
+        const rebuild = notifiers?.callback?.(stateManager.getScene(), source) ?? false;
+
+        if (rebuild) {
+            stateManager.onRebuildRequiredObservable.notifyObservers();
+        }
     }
 
     if (!notifiers || notifiers.update) {
@@ -25,11 +34,9 @@ export function ForceRebuild(source: any, stateManager: StateManager, propertyNa
         stateManager.onPreviewCommandActivated.notifyObservers(true);
     }
 
-    if (stateManager.getScene) {
-        const rebuild = notifiers?.callback?.(stateManager.getScene(), source) ?? false;
-
-        if (rebuild) {
-            stateManager.onRebuildRequiredObservable.notifyObservers();
+    if (engageActiveRefresh && stateManager.activeNode) {
+        for (const refresh of stateManager.activeNode._visualPropertiesRefresh) {
+            refresh();
         }
     }
 }

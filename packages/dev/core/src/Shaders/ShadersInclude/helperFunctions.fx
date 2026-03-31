@@ -158,10 +158,25 @@ float pow5(float value) {
     return sq * sq * value;
 }
 
+// refract assuming entry and exit of a unit sphere with IOR eta.
+// This is an approximation of true refraction (which would require true ray casting)
+// I and N should be unit length, normalized vectors
+vec3 double_refract(vec3 I, vec3 N, float eta) {
+  vec3 Tfront = refract(I, N, 1.0/eta);
+  vec3 Nback = normalize(reflect(N, Tfront));
+  return refract(Tfront, -Nback, eta);
+}
+
+// Assumes input color is linear encoded, not gamma-corrected.
+float getLuminanceUnclamped(vec3 color)
+{
+    return dot(color, LuminanceEncodeApprox);
+}
+
 // Returns the saturated luminance. Assumes input color is linear encoded, not gamma-corrected.
 float getLuminance(vec3 color)
 {
-    return saturate(dot(color, LuminanceEncodeApprox));
+    return saturate(getLuminanceUnclamped(color));
 }
 
 // https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
@@ -235,3 +250,29 @@ float sqrtClamped(float value) {
 float avg(vec3 value) {
     return dot(value, vec3(0.333333333));
 }
+
+#if defined(WEBGL2) || defined(WEBGPU) || defined(NATIVE) 
+uint extractBits(uint value, int offset, int width) {
+    return (value >> offset) & ((1u << width) - 1u);
+}
+
+// Returns the position of the only set bit in the value, only works if theres exactly 1 bit set
+int onlyBitPosition(uint value) {
+    // https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightFloatCast
+    return (floatBitsToInt(float(value)) >> 23) - 0x7f;
+}
+
+vec3 singleScatterToMultiScatterAlbedo(vec3 rho_ss) {
+  vec3 s = sqrt(max(vec3(1.0) - rho_ss, vec3(0.0)));
+  return (vec3(1.0) - s) * (vec3(1.0) - vec3(0.139) * s) / (vec3(1.0) + vec3(1.17) * s);
+}
+
+float min3(vec3 v) {
+    return min(v.x, min(v.y, v.z));
+}
+
+float max3(vec3 v) {
+    return max(v.x, max(v.y, v.z));
+}
+
+#endif

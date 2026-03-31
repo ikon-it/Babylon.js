@@ -1,12 +1,12 @@
 import { ThinEngine } from "../../Engines/thinEngine";
 import { InternalTexture, InternalTextureSource } from "../../Materials/Textures/internalTexture";
 import { Logger } from "../../Misc/logger";
-import type { Nullable } from "../../types";
-import type { Scene } from "../../scene";
+import { type Nullable } from "../../types";
+import { type Scene } from "../../scene";
 import { Constants } from "../constants";
 import { SphericalPolynomial } from "core/Maths/sphericalPolynomial";
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
-import type { DDSInfo } from "core/Misc/dds";
+import { type DDSInfo } from "core/Misc/dds";
 
 declare module "../../Engines/abstractEngine" {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -59,7 +59,7 @@ ThinEngine.prototype.createPrefilteredCubeTexture = function (
 
         const texture = loadData.texture as InternalTexture;
         if (!createPolynomials) {
-            texture._sphericalPolynomial = new SphericalPolynomial();
+            texture._sphericalPolynomial = texture._sphericalPolynomial ?? new SphericalPolynomial();
         } else if (loadData.info.sphericalPolynomial) {
             texture._sphericalPolynomial = loadData.info.sphericalPolynomial;
         }
@@ -81,7 +81,6 @@ ThinEngine.prototype.createPrefilteredCubeTexture = function (
             return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/naming-convention
         const { DDSTools } = await import("core/Misc/dds");
 
         const textures: BaseTexture[] = [];

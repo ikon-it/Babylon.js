@@ -5,10 +5,11 @@ module.exports = (env) => {
     const commonConfig = commonConfigGenerator({
         mode: env.production ? "production" : "development",
         devPackageAliasPath: `../../../dev/inspector/dist`, // not really needed?
-        devPackageName: "inspector",
+        devPackageName: "inspector-legacy",
         namespace: "INSPECTOR",
         es6Mode: true,
         maxMode: true,
+        minToMax: true,
         alias: {
             "shared-ui-components": path.resolve("../../../dev/sharedUiComponents/dist"),
         },

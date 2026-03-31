@@ -1,12 +1,11 @@
-import type { SpotLight } from "core/Lights/spotLight";
-import type { Nullable } from "core/types";
+import { type SpotLight } from "core/Lights/spotLight";
+import { type Nullable } from "core/types";
 import { Vector3, Quaternion, TmpVectors } from "core/Maths/math.vector";
 import { Light } from "core/Lights/light";
-import type { Node } from "core/node";
+import { type Node } from "core/node";
 import { ShadowLight } from "core/Lights/shadowLight";
-import type { INode, IKHRLightsPunctual_LightReference, IKHRLightsPunctual_Light, IKHRLightsPunctual } from "babylonjs-gltf2interface";
-import { KHRLightsPunctual_LightType } from "babylonjs-gltf2interface";
-import type { IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
+import { type INode, type IKHRLightsPunctual_LightReference, type IKHRLightsPunctual_Light, type IKHRLightsPunctual, KHRLightsPunctual_LightType } from "babylonjs-gltf2interface";
+import { type IGLTFExporterExtensionV2 } from "../glTFExporterExtension";
 import { GLTFExporter } from "../glTFExporter";
 import { Logger } from "core/Misc/logger";
 import { ConvertToRightHandedPosition, OmitDefaultValues, CollapseChildIntoParent, IsChildCollapsible } from "../glTFUtilities";
@@ -107,17 +106,15 @@ export class KHR_lights_punctual implements IGLTFExporterExtensionV2 {
                 node.translation = translation.asArray();
             }
 
-            // Babylon lights have "constant" rotation and variable direction, while
-            // glTF lights have variable rotation and constant direction. Therefore,
-            // compute a quaternion that aligns the Babylon light's direction with glTF's constant one.
+            // Represent the Babylon light's direction as a quaternion
+            // relative to glTF lights' forward direction, (0, 0, -1).
             if (lightType !== KHRLightsPunctual_LightType.POINT) {
                 const direction = babylonNode.direction.normalizeToRef(TmpVectors.Vector3[0]);
                 if (convertToRightHanded) {
                     ConvertToRightHandedPosition(direction);
                 }
-                const angle = Math.acos(Vector3.Dot(LIGHTDIRECTION, direction));
-                const axis = Vector3.Cross(LIGHTDIRECTION, direction);
-                const lightRotationQuaternion = Quaternion.RotationAxisToRef(axis, angle, TmpVectors.Quaternion[0]);
+
+                const lightRotationQuaternion = Quaternion.FromUnitVectorsToRef(LIGHTDIRECTION, direction, TmpVectors.Quaternion[0]);
                 if (!Quaternion.IsIdentity(lightRotationQuaternion)) {
                     node.rotation = lightRotationQuaternion.asArray();
                 }

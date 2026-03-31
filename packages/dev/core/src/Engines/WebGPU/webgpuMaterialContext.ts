@@ -1,11 +1,11 @@
 /* eslint-disable babylonjs/available */
 /* eslint-disable jsdoc/require-jsdoc */
 import { ExternalTexture } from "../../Materials/Textures/externalTexture";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
-import type { TextureSampler } from "../../Materials/Textures/textureSampler";
-import type { Nullable } from "../../types";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type TextureSampler } from "../../Materials/Textures/textureSampler";
+import { type Nullable } from "../../types";
 import { Constants } from "../constants";
-import type { IMaterialContext } from "../IMaterialContext";
+import { type IMaterialContext } from "../IMaterialContext";
 import { WebGPUCacheSampler } from "./webgpuCacheSampler";
 
 /** @internal */
@@ -38,6 +38,8 @@ export class WebGPUMaterialContext implements IMaterialContext {
     // in the WebGPUPipelineContext (see @WebGPUPipelineContext.bindGroupLayouts) for later retrieval in the bind group cache implementation (see @WebGPUCacheBindGroups.getBindGroups), thanks to this property.
     // There's the same problem with depth textures, where "float" filtering is not supported either.
     public textureState: number;
+
+    public useVertexPulling = false;
 
     public get forceBindGroupCreation() {
         // If there is at least one external texture to bind, we must recreate the bind groups each time

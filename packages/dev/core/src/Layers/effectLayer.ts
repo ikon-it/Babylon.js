@@ -1,28 +1,29 @@
 import { serialize, serializeAsColor4, serializeAsCameraReference } from "../Misc/decorators";
 import { Tools } from "../Misc/tools";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
-import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
-import type { ISize } from "../Maths/math.size";
-import type { Color4 } from "../Maths/math.color";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable } from "../types";
+import { type Camera } from "../Cameras/camera";
+import { type Scene } from "../scene";
+import { type ISize } from "../Maths/math.size";
+import { type Color4 } from "../Maths/math.color";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { EngineStore } from "../Engines/engineStore";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
-import type { PostProcess } from "../PostProcesses/postProcess";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Mesh } from "../Meshes/mesh";
+import { type PostProcess } from "../PostProcesses/postProcess";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import type { Effect } from "../Materials/effect";
-import type { Material } from "../Materials/material";
+import { type Effect } from "../Materials/effect";
+import { type Material } from "../Materials/material";
 import { Constants } from "../Engines/constants";
 
 import { _WarnImport } from "../Misc/devTools";
 import { GetExponentOfTwo } from "../Misc/tools.functions";
-import type { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { type ShaderLanguage } from "core/Materials/shaderLanguage";
 import { ThinEffectLayer } from "./thinEffectLayer";
+import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
 
 /**
  * Effect layer options. This helps customizing the behaviour
@@ -61,6 +62,11 @@ export interface IEffectLayerOptions {
     mainTextureType: number;
 
     /**
+     * The format of the main texture. Default: TEXTUREFORMAT_RGBA
+     */
+    mainTextureFormat: number;
+
+    /**
      * Whether or not to generate a stencil buffer. Default: false
      */
     generateStencilBuffer: boolean;
@@ -76,6 +82,7 @@ export interface IEffectLayerOptions {
  */
 export abstract class EffectLayer {
     private _effectLayerOptions: IEffectLayerOptions;
+    protected _mainTextureCreatedSize: ISize = { width: 0, height: 0 };
 
     protected _scene: Scene;
     protected _engine: AbstractEngine;
@@ -116,6 +123,11 @@ export abstract class EffectLayer {
     public static set ForceGLSL(value: boolean) {
         ThinEffectLayer.ForceGLSL = value;
     }
+
+    /**
+     * The unique id of the layer
+     */
+    public readonly uniqueId = UniqueIdGenerator.UniqueId;
 
     /**
      * The name of the layer
@@ -310,7 +322,7 @@ export abstract class EffectLayer {
 
         this._engine = this._scene.getEngine();
         this._maxSize = this._engine.getCaps().maxTextureSize;
-        this._scene.effectLayers.push(this);
+        this._scene.addEffectLayer(this);
 
         this._thinEffectLayer.onDisposeObservable.add(() => {
             this.onDisposeObservable.notifyObservers(this);
@@ -422,6 +434,7 @@ export abstract class EffectLayer {
             camera: null,
             renderingGroupId: -1,
             mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
+            mainTextureFormat: Constants.TEXTUREFORMAT_RGBA,
             generateStencilBuffer: false,
             ...options,
         };
@@ -469,6 +482,7 @@ export abstract class EffectLayer {
             this._scene,
             {
                 type: this._effectLayerOptions.mainTextureType,
+                format: this._effectLayerOptions.mainTextureFormat,
                 samplingMode: Texture.TRILINEAR_SAMPLINGMODE,
                 generateStencilBuffer: this._effectLayerOptions.generateStencilBuffer,
                 existingObjectRenderer: this._thinEffectLayer.objectRenderer,
@@ -533,10 +547,9 @@ export abstract class EffectLayer {
         }
 
         // Handle size changes.
-        const size = this._mainTexture.getSize();
         this._setMainTextureSize();
         if (
-            (size.width !== this._mainTextureDesiredSize.width || size.height !== this._mainTextureDesiredSize.height) &&
+            (this._mainTextureCreatedSize.width !== this._mainTextureDesiredSize.width || this._mainTextureCreatedSize.height !== this._mainTextureDesiredSize.height) &&
             this._mainTextureDesiredSize.width !== 0 &&
             this._mainTextureDesiredSize.height !== 0
         ) {
@@ -545,6 +558,8 @@ export abstract class EffectLayer {
             this._disposeTextureAndPostProcesses();
             this._createMainTexture();
             this._createTextureAndPostProcesses();
+            this._mainTextureCreatedSize.width = this._mainTextureDesiredSize.width;
+            this._mainTextureCreatedSize.height = this._mainTextureDesiredSize.height;
         }
     }
 
@@ -642,10 +657,7 @@ export abstract class EffectLayer {
         this._disposeTextureAndPostProcesses();
 
         // Remove from scene
-        const index = this._scene.effectLayers.indexOf(this, 0);
-        if (index > -1) {
-            this._scene.effectLayers.splice(index, 1);
-        }
+        this._scene.removeEffectLayer(this);
 
         // Callback
         this.onDisposeObservable.clear();

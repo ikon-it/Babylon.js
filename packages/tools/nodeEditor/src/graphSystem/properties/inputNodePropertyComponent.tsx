@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { GlobalState } from "../../globalState";
+import { type GlobalState } from "../../globalState";
 import { FloatPropertyTabComponent } from "../../components/propertyTab/properties/floatPropertyTabComponent";
 import { Vector2PropertyTabComponent } from "../../components/propertyTab/properties/vector2PropertyTabComponent";
 import { Color3PropertyTabComponent } from "../../components/propertyTab/properties/color3PropertyTabComponent";
@@ -10,17 +10,18 @@ import { LineContainerComponent } from "shared-ui-components/lines/lineContainer
 import { NodeMaterialBlockConnectionPointTypes } from "core/Materials/Node/Enums/nodeMaterialBlockConnectionPointTypes";
 import { NodeMaterialSystemValues } from "core/Materials/Node/Enums/nodeMaterialSystemValues";
 import { AnimatedInputBlockTypes } from "core/Materials/Node/Blocks/Input/animatedInputBlockTypes";
-import type { InputBlock } from "core/Materials/Node/Blocks/Input/inputBlock";
-import { GeneralPropertyTabComponent } from "./genericNodePropertyComponent";
+import { type InputBlock } from "core/Materials/Node/Blocks/Input/inputBlock";
+import { GetGeneralProperties } from "./genericNodePropertyComponent";
 import { CheckBoxLineComponent } from "../../sharedComponents/checkBoxLineComponent";
 import { Color4PropertyTabComponent } from "../../components/propertyTab/properties/color4PropertyTabComponent";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
+import { type Nullable } from "core/types";
+import { type Observer } from "core/Misc/observable";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
-import type { IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
+import { type IPropertyComponentProps } from "shared-ui-components/nodeGraphSystem/interfaces/propertyComponentProps";
 import { OptionsLine } from "shared-ui-components/lines/optionsLineComponent";
 import { FloatLineComponent } from "shared-ui-components/lines/floatLineComponent";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
+import { PropertyTabComponentBase } from "shared-ui-components/components/propertyTabComponentBase";
 
 export class InputPropertyTabComponent extends React.Component<IPropertyComponentProps> {
     private _onValueChangedObserver: Nullable<Observer<InputBlock>>;
@@ -212,6 +213,7 @@ export class InputPropertyTabComponent extends React.Component<IPropertyComponen
                     { label: "View", value: NodeMaterialSystemValues.View },
                     { label: "View x Projection", value: NodeMaterialSystemValues.ViewProjection },
                     { label: "Projection", value: NodeMaterialSystemValues.Projection },
+                    { label: "Projection Inverse", value: NodeMaterialSystemValues.ProjectionInverse },
                 ];
                 break;
             case NodeMaterialBlockConnectionPointTypes.Color3:
@@ -234,7 +236,10 @@ export class InputPropertyTabComponent extends React.Component<IPropertyComponen
                 ];
                 break;
             case NodeMaterialBlockConnectionPointTypes.Vector3:
-                systemValuesOptions = [{ label: "Camera position", value: NodeMaterialSystemValues.CameraPosition }];
+                systemValuesOptions = [
+                    { label: "Camera position", value: NodeMaterialSystemValues.CameraPosition },
+                    { label: "Camera forward", value: NodeMaterialSystemValues.CameraForward },
+                ];
                 attributeOptions = [
                     { label: "position", value: "position" },
                     { label: "normal", value: "normal" },
@@ -273,8 +278,8 @@ export class InputPropertyTabComponent extends React.Component<IPropertyComponen
         ];
 
         return (
-            <div>
-                <GeneralPropertyTabComponent stateManager={this.props.stateManager} nodeData={this.props.nodeData} />
+            <PropertyTabComponentBase>
+                {GetGeneralProperties({ stateManager: this.props.stateManager, nodeData: this.props.nodeData })}
                 <LineContainerComponent title="PROPERTIES">
                     {inputBlock.isUniform && !inputBlock.isSystemValue && inputBlock.animationType === AnimatedInputBlockTypes.None && (
                         <OptionsLine
@@ -418,7 +423,7 @@ export class InputPropertyTabComponent extends React.Component<IPropertyComponen
                         <CheckBoxLineComponent label="Visible on frame" target={inputBlock} propertyName={"visibleOnFrame"}></CheckBoxLineComponent>
                     )}
                 </LineContainerComponent>
-            </div>
+            </PropertyTabComponentBase>
         );
     }
 }

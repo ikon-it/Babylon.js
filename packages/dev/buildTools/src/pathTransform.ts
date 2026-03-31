@@ -1,8 +1,15 @@
 import * as ts from "typescript";
 import * as path from "path";
 import * as fs from "fs";
-import type { BuildType, PublicPackageVariable } from "./packageMapping.js";
-import { getDevPackagesByBuildType, getPublicPackageName, isValidDevPackageName, declarationsOnlyPackages } from "./packageMapping.js";
+import {
+    type BuildType,
+    type PublicPackageVariable,
+    getDevPackagesByBuildType,
+    getPublicPackageName,
+    isValidDevPackageName,
+    declarationsOnlyPackages,
+    bundledESPackages,
+} from "./packageMapping.js";
 
 const AddJS = (to: string, forceAppend?: boolean | string): string => (forceAppend && !to.endsWith(".js") ? to + (forceAppend === true ? ".js" : forceAppend) : to);
 
@@ -73,6 +80,14 @@ export const transformPackageLocation = (location: string, options: ITransformer
         }
         return AddJS(computedPath, options.appendJS);
     } else {
+        if (directoryParts.length === 0) {
+            // Do not add .js to imports that reference the root of a package
+            return returnPackage;
+        }
+        // For bundled packages, always return just the package name without sub-paths
+        if (bundledESPackages.indexOf(basePackage) !== -1) {
+            return returnPackage;
+        }
         return AddJS(options.packageOnly ? returnPackage : `${returnPackage}/${directoryParts.join("/")}`, options.appendJS);
     }
 };
@@ -141,6 +156,11 @@ function TransformerFactory<T extends TransformerNode>(context: ts.Transformatio
             if (ts.isStringLiteral(node)) {
                 return getResolvedPathNode(node) || node;
             }
+            // Skip type literals - they can't contain dynamic imports and their
+            // get/set accessor signatures cause lexical environment issues in TS 5.9
+            if (ts.isTypeLiteralNode(node)) {
+                return node;
+            }
             return ts.visitEachChild(node, pathReplacer, context);
         }
 
@@ -184,6 +204,12 @@ function TransformerFactory<T extends TransformerNode>(context: ts.Transformatio
              */
             if (ts.isModuleDeclaration(node)) {
                 return ts.visitEachChild(node, pathReplacer, context);
+            }
+
+            // Skip type literals - they can't contain dynamic imports and their
+            // get/set accessor signatures cause lexical environment issues in TS 5.9
+            if (ts.isTypeLiteralNode(node)) {
+                return node;
             }
 
             return ts.visitEachChild(node, visitor, context);

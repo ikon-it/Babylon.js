@@ -1,9 +1,7 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraphTextureHandle, FrameGraphTextureManager, IMultiRenderTargetOptions, RenderTargetWrapper } from "core/index";
+import { type FrameGraphTextureHandle, type FrameGraphTextureManager, type IMultiRenderTargetOptions, type RenderTargetWrapper } from "core/index";
 
 /**
  * @internal
- * @experimental
  */
 export class FrameGraphRenderTarget {
     protected readonly _textureManager: FrameGraphTextureManager;
@@ -35,7 +33,7 @@ export class FrameGraphRenderTarget {
             const engine = this._textureManager.engine;
 
             // _renderTargets and _renderTargetDepth cannot both be undefined
-            const textureHandle = this._renderTargets === undefined ? this._renderTargetDepth! : this._renderTargets[0];
+            const textureHandle = this._renderTargets === undefined || this._renderTargets.length === 0 ? this._renderTargetDepth! : this._renderTargets[0];
 
             if (this._textureManager.isBackbuffer(textureHandle)) {
                 this._isBackBuffer = true;
@@ -63,6 +61,8 @@ export class FrameGraphRenderTarget {
                         `FrameGraphRenderTarget.renderTargetWrapper: Failed to get texture from handle. handle: ${handle}, name: ${this.name}, index: ${i}, renderTargets: ${this._renderTargets}`
                     );
                 }
+
+                texture.incrementReferences();
 
                 this._renderTargetWrapper.setTexture(texture, i, false);
             }
@@ -94,5 +94,9 @@ export class FrameGraphRenderTarget {
         }
 
         return this._renderTargetDepth === other._renderTargetDepth;
+    }
+
+    public dispose() {
+        this._renderTargetWrapper?.dispose();
     }
 }

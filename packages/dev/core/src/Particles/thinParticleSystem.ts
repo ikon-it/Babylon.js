@@ -1,43 +1,42 @@
-/* eslint-disable import/no-internal-modules */
-import type { Immutable, Nullable } from "../types";
+import { type Immutable, type Nullable } from "../types";
 import { FactorGradient, ColorGradient, Color3Gradient, GradientHelper } from "../Misc/gradients";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
+import { type Observer, Observable } from "../Misc/observable";
 import { Vector3, Matrix, TmpVectors } from "../Maths/math.vector";
 import { VertexBuffer, Buffer } from "../Buffers/buffer";
 
-import type { Effect } from "../Materials/effect";
+import { type Effect } from "../Materials/effect";
 import { RawTexture } from "../Materials/Textures/rawTexture";
 import { EngineStore } from "../Engines/engineStore";
-import type { IDisposable, Scene } from "../scene";
+import { type IDisposable, type Scene } from "../scene";
 
-import type { IParticleSystem } from "./IParticleSystem";
+import { type IParticleSystem } from "./IParticleSystem";
 import { BaseParticleSystem } from "./baseParticleSystem";
 import { Particle } from "./particle";
 import { Constants } from "../Engines/constants";
-import type { IAnimatable } from "../Animations/animatable.interface";
+import { type IAnimatable } from "../Animations/animatable.interface";
 import { DrawWrapper } from "../Materials/drawWrapper";
 
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { Color4, Color3, TmpColors } from "../Maths/math.color";
-import type { ISize } from "../Maths/math.size";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type ISize } from "../Maths/math.size";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 
 import "../Engines/Extensions/engine.alpha";
 import { AddClipPlaneUniforms, PrepareStringDefinesForClipPlanes, BindClipPlane } from "../Materials/clipPlaneMaterialHelper";
 
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
 import { BindFogParameters, BindLogDepth } from "../Materials/materialHelper.functions";
 import { BoxParticleEmitter } from "./EmitterTypes/boxParticleEmitter";
 import { Lerp } from "../Maths/math.scalar.functions";
 import { PrepareSamplersForImageProcessing, PrepareUniformsForImageProcessing } from "../Materials/imageProcessingConfiguration.functions";
-import type { ThinEngine } from "../Engines/thinEngine";
+import { type ThinEngine } from "../Engines/thinEngine";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import {
     _CreateAngleData,
     _CreateAngleGradientsData,
     _CreateColorData,
+    _CreateColorDeadData,
     _CreateColorGradientsData,
     _CreateCustomDirectionData,
     _CreateCustomPositionData,
@@ -70,8 +69,7 @@ import {
     _ProcessSizeGradients,
     _ProcessVelocityGradients,
 } from "./thinParticleSystem.function";
-import type { _IExecutionQueueItem } from "./Queue/executionQueue";
-import { _ConnectAfter, _ConnectBefore, _RemoveFromQueue } from "./Queue/executionQueue";
+import { type _IExecutionQueueItem, _ConnectAfter, _ConnectBefore, _RemoveFromQueue } from "./Queue/executionQueue";
 
 /**
  * This represents a thin particle system in Babylon.
@@ -116,9 +114,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         this._startDirectionFunction = value;
 
         if (value) {
-            this._directionProcessing.process = _CreateCustomDirectionData;
+            this._directionCreation.process = _CreateCustomDirectionData;
         } else {
-            this._directionProcessing.process = _CreateDirectionData;
+            this._directionCreation.process = _CreateDirectionData;
         }
     }
 
@@ -157,6 +155,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      * An event triggered when the system is stopped
      */
     public onStoppedObservable = new Observable<IParticleSystem>();
+    /**
+     * An event triggered when the system is started
+     */
+    public onStartedObservable = new Observable<IParticleSystem>();
 
     private _onDisposeObserver: Nullable<Observer<IParticleSystem>>;
     /**
@@ -193,13 +195,20 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     /** @internal */
     public _colorDiff = new Color4(0, 0, 0, 0);
     /** @internal */
-    public _scaledDirection = Vector3.Zero();
-    /** @internal */
     public _scaledGravity = Vector3.Zero();
     private _currentRenderId = -1;
     private _alive: boolean;
     private _useInstancing = false;
     private _vertexArrayObject: Nullable<WebGLVertexArrayObject>;
+
+    private _isDisposed = false;
+
+    /**
+     * Gets a boolean indicating that the particle system was disposed
+     */
+    public get isDisposed(): boolean {
+        return this._isDisposed;
+    }
 
     private _started = false;
     private _stopped = false;
@@ -230,7 +239,8 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     private _rampGradientsTexture: Nullable<RawTexture>;
     private _useRampGradients = false;
 
-    protected _updateQueueStart: Nullable<_IExecutionQueueItem> = null;
+    /** @internal */
+    public _updateQueueStart: Nullable<_IExecutionQueueItem> = null;
     protected _colorProcessing: _IExecutionQueueItem;
     protected _angularSpeedGradientProcessing: _IExecutionQueueItem;
     protected _angularSpeedProcessing: _IExecutionQueueItem;
@@ -244,25 +254,31 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     protected _sizeGradientProcessing: _IExecutionQueueItem;
     protected _remapGradientProcessing: _IExecutionQueueItem;
 
-    private _lifeTimeCreation: _IExecutionQueueItem;
-    private _positionCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _lifeTimeCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _positionCreation: _IExecutionQueueItem;
     private _isLocalCreation: _IExecutionQueueItem;
-    private _directionCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _directionCreation: _IExecutionQueueItem;
     private _emitPowerCreation: _IExecutionQueueItem;
-    private _sizeCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _sizeCreation: _IExecutionQueueItem;
     private _startSizeCreation: Nullable<_IExecutionQueueItem> = null;
-    private _angleCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _angleCreation: _IExecutionQueueItem;
     private _velocityCreation: _IExecutionQueueItem;
     private _limitVelocityCreation: _IExecutionQueueItem;
     private _dragCreation: _IExecutionQueueItem;
-    private _colorCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _colorCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _colorDeadCreation: _IExecutionQueueItem;
     private _sheetCreation: _IExecutionQueueItem;
     private _rampCreation: _IExecutionQueueItem;
     private _noiseCreation: _IExecutionQueueItem;
     private _createQueueStart: Nullable<_IExecutionQueueItem> = null;
 
-    /** @internal */
-    public _directionScale: number;
     /** @internal */
     public _tempScaledUpdateSpeed: number;
     /** @internal */
@@ -298,13 +314,18 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 previousItem: null,
                 nextItem: null,
             };
-            _ConnectAfter(this._rampCreation, this._colorCreation);
-            this._remapGradientProcessing = {
-                process: _ProcessRemapGradients,
-                previousItem: null,
-                nextItem: null,
-            };
-            _ConnectAfter(this._remapGradientProcessing, this._gravityProcessing);
+            _ConnectAfter(this._rampCreation, this._colorDeadCreation);
+
+            // NPE based particles system do not have an update queue as that's represented by update blocks
+            // So even if there is ramp/remap, do not try to add it to the queue unless it exists already (if it exists, gravityProcessing will be defined)
+            if (this._gravityProcessing) {
+                this._remapGradientProcessing = {
+                    process: _ProcessRemapGradients,
+                    previousItem: null,
+                    nextItem: null,
+                };
+                _ConnectAfter(this._remapGradientProcessing, this._gravityProcessing);
+            }
         } else {
             _RemoveFromQueue(this._rampCreation);
             _RemoveFromQueue(this._remapGradientProcessing);
@@ -379,10 +400,12 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 nextItem: null,
             };
 
-            _ConnectAfter(this._sheetCreation, this._colorCreation);
+            _ConnectAfter(this._sheetCreation, this._colorDeadCreation);
         } else {
             _RemoveFromQueue(this._sheetCreation);
         }
+
+        this._reset();
     }
 
     /**
@@ -470,6 +493,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         return this._indexBuffer;
     }
 
+    /**
+     * Gets or sets a texture used to add random noise to particle positions
+     */
     public override get noiseTexture() {
         return this._noiseTexture;
     }
@@ -492,7 +518,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             previousItem: null,
             nextItem: null,
         };
-        _ConnectAfter(this._noiseCreation, this._colorCreation);
+        _ConnectAfter(this._noiseCreation, this._colorDeadCreation);
 
         this._noiseProcessing = {
             process: _ProcessNoise,
@@ -511,6 +537,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      * @param customEffect a custom effect used to change the way particles are rendered by default
      * @param isAnimationSheetEnabled Must be true if using a spritesheet to animate the particles texture
      * @param epsilon Offset used to render the particles
+     * @param noUpdateQueue If true, the particle system will start with an empty update queue
      */
     constructor(
         name: string,
@@ -518,7 +545,8 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         sceneOrEngine: Scene | AbstractEngine,
         customEffect: Nullable<Effect> = null,
         isAnimationSheetEnabled: boolean = false,
-        epsilon: number = 0.01
+        epsilon: number = 0.01,
+        noUpdateQueue: boolean = false
     ) {
         super(name);
 
@@ -592,45 +620,54 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         };
         _ConnectAfter(this._colorCreation, this._angleCreation);
 
+        this._colorDeadCreation = {
+            process: _CreateColorDeadData,
+            previousItem: null,
+            nextItem: null,
+        };
+        _ConnectAfter(this._colorDeadCreation, this._colorCreation);
+
         this._createQueueStart = this._lifeTimeCreation;
 
         // Processing queue
-        this._colorProcessing = {
-            process: _ProcessColor,
-            previousItem: null,
-            nextItem: null,
-        };
+        if (!noUpdateQueue) {
+            this._colorProcessing = {
+                process: _ProcessColor,
+                previousItem: null,
+                nextItem: null,
+            };
 
-        this._angularSpeedProcessing = {
-            process: _ProcessAngularSpeed,
-            previousItem: null,
-            nextItem: null,
-        };
-        _ConnectAfter(this._angularSpeedProcessing, this._colorProcessing);
+            this._angularSpeedProcessing = {
+                process: _ProcessAngularSpeed,
+                previousItem: null,
+                nextItem: null,
+            };
+            _ConnectAfter(this._angularSpeedProcessing, this._colorProcessing);
 
-        this._directionProcessing = {
-            process: _ProcessDirection,
-            previousItem: null,
-            nextItem: null,
-        };
-        _ConnectAfter(this._directionProcessing, this._angularSpeedProcessing);
+            this._directionProcessing = {
+                process: _ProcessDirection,
+                previousItem: null,
+                nextItem: null,
+            };
+            _ConnectAfter(this._directionProcessing, this._angularSpeedProcessing);
 
-        this._positionProcessing = {
-            process: _ProcessPosition,
-            previousItem: null,
-            nextItem: null,
-        };
-        _ConnectAfter(this._positionProcessing, this._directionProcessing);
+            this._positionProcessing = {
+                process: _ProcessPosition,
+                previousItem: null,
+                nextItem: null,
+            };
+            _ConnectAfter(this._positionProcessing, this._directionProcessing);
 
-        this._gravityProcessing = {
-            process: _ProcessGravity,
-            previousItem: null,
-            nextItem: null,
-        };
+            this._gravityProcessing = {
+                process: _ProcessGravity,
+                previousItem: null,
+                nextItem: null,
+            };
 
-        _ConnectAfter(this._gravityProcessing, this._positionProcessing);
+            _ConnectAfter(this._gravityProcessing, this._positionProcessing);
 
-        this._updateQueueStart = this._colorProcessing;
+            this._updateQueueStart = this._colorProcessing;
+        }
 
         this._isAnimationSheetEnabled = isAnimationSheetEnabled;
 
@@ -681,7 +718,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 }
 
                 this._ratio = particle.age / particle.lifeTime;
-                this._directionScale = this._tempScaledUpdateSpeed;
+                particle._properties.directionScale = this._tempScaledUpdateSpeed;
 
                 // Processing queue
                 let currentQueueItem = this._updateQueueStart;
@@ -691,7 +728,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                     currentQueueItem = currentQueueItem.nextItem;
                 }
 
-                if (this._isAnimationSheetEnabled) {
+                if (this._isAnimationSheetEnabled && !noUpdateQueue) {
                     particle.updateCellIndex();
                 }
 
@@ -701,12 +738,12 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 if (particle.age >= particle.lifeTime) {
                     // Recycle by swapping with last particle
                     this._emitFromParticle(particle);
-                    if (particle._attachedSubEmitters) {
-                        for (const subEmitter of particle._attachedSubEmitters) {
+                    if (particle._properties.attachedSubEmitters) {
+                        for (const subEmitter of particle._properties.attachedSubEmitters) {
                             subEmitter.particleSystem.disposeOnStop = true;
                             subEmitter.particleSystem.stop();
                         }
-                        particle._attachedSubEmitters = null;
+                        particle._properties.attachedSubEmitters = null;
                     }
                     this.recycleParticle(particle);
                     if (sameParticleArray) {
@@ -719,11 +756,15 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /** @internal */
-    public _emitFromParticle: (particle: Particle) => void = (particle) => {
+    public _emitFromParticle: (particle: Particle) => void = (_particle) => {
         // Do nothing
     };
 
-    serialize(serializeTexture: boolean) {
+    /**
+     * Serializes the particle system to a JSON object.
+     * @param _serializeTexture Whether to serialize the texture information
+     */
+    serialize(_serializeTexture: boolean) {
         throw new Error("Method not implemented.");
     }
 
@@ -731,9 +772,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      * Clones the particle system.
      * @param name The name of the cloned object
      * @param newEmitter The new emitter to use
-     * @param cloneTexture Also clone the textures if true
+     * @param _cloneTexture Also clone the textures if true
      */
-    public clone(name: string, newEmitter: any, cloneTexture = false): ThinParticleSystem {
+    public clone(name: string, newEmitter: any, _cloneTexture = false): ThinParticleSystem {
         throw new Error("Method not implemented.");
     }
 
@@ -795,6 +836,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         }
     }
 
+    /**
+     * The amount of time the particle system is running (depends of the overall update speed).
+     */
     public override get targetStopDuration(): number {
         return this._targetStopDuration;
     }
@@ -1103,7 +1147,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 previousItem: null,
                 nextItem: null,
             };
-            _ConnectBefore(this._dragCreation, this._colorCreation);
+            _ConnectBefore(this._dragCreation, this._colorDeadCreation);
 
             this._dragGradientProcessing = {
                 process: _ProcessDragGradients,
@@ -1352,6 +1396,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      * Resets the draw wrappers cache
      */
     public resetDrawCache(): void {
+        if (!this._drawWrappers) {
+            return;
+        }
         for (const drawWrappers of this._drawWrappers) {
             if (drawWrappers) {
                 for (const drawWrapper of drawWrappers) {
@@ -1364,12 +1411,12 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /** @internal */
-    public _fetchR(u: number, v: number, width: number, height: number, pixels: Uint8Array): number {
+    public _fetchR(u: number, v: number, width: number, height: number, pixels: Uint8Array | Uint8ClampedArray): number {
         u = Math.abs(u) * 0.5 + 0.5;
         v = Math.abs(v) * 0.5 + 0.5;
 
-        const wrappedU = (u * width) % width | 0;
-        const wrappedV = (v * height) % height | 0;
+        const wrappedU = ((u * width) % width) | 0;
+        const wrappedV = ((v * height) % height) | 0;
 
         const position = (wrappedU + wrappedV * width) * 4;
         return pixels[position] / 255;
@@ -1467,7 +1514,6 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             offsets = this._spriteBuffer.createVertexBuffer("offset", 0, 2);
         } else {
             offsets = this._vertexBuffer.createVertexBuffer("offset", dataOffset, 2, this._vertexBufferSize, this._useInstancing);
-            dataOffset += 2;
         }
         this._vertexBuffers["offset"] = offsets;
 
@@ -1532,10 +1578,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      */
     public start(delay = this.startDelay): void {
         if (!this.targetStopDuration && this._hasTargetStopDurationDependantGradient()) {
-            // eslint-disable-next-line no-throw-literal
             throw "Particle system started with a targetStopDuration dependant gradient (eg. startSizeGradients) but no targetStopDuration set";
         }
         if (delay) {
+            this.startDelay = delay;
             setTimeout(() => {
                 this.start(0);
             }, delay);
@@ -1597,6 +1643,8 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         if (this.beginAnimationOnStart && this.animations && this.animations.length > 0 && this._scene) {
             this._scene.beginAnimation(this, this.beginAnimationFrom, this.beginAnimationTo, this.beginAnimationLoop);
         }
+
+        this.onStartedObservable.notifyObservers(this);
     }
 
     /**
@@ -1616,7 +1664,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /** @internal */
-    public _postStop(stopSubEmitters: boolean) {
+    public _postStop(_stopSubEmitters: boolean) {
         // Do nothing
     }
 
@@ -1636,9 +1684,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     public _appendParticleVertex(index: number, particle: Particle, offsetX: number, offsetY: number): void {
         let offset = index * this._vertexBufferSize;
 
-        this._vertexData[offset++] = particle.position.x + this.worldOffset.x;
-        this._vertexData[offset++] = particle.position.y + this.worldOffset.y;
-        this._vertexData[offset++] = particle.position.z + this.worldOffset.z;
+        const floatingOriginOffset = TmpVectors.Vector3[0].copyFrom(this._scene?.floatingOriginOffset || Vector3.ZeroReadOnly);
+        this._vertexData[offset++] = particle.position.x + this.worldOffset.x - floatingOriginOffset.x;
+        this._vertexData[offset++] = particle.position.y + this.worldOffset.y - floatingOriginOffset.y;
+        this._vertexData[offset++] = particle.position.z + this.worldOffset.z - floatingOriginOffset.z;
         this._vertexData[offset++] = particle.color.r;
         this._vertexData[offset++] = particle.color.g;
         this._vertexData[offset++] = particle.color.b;
@@ -1653,8 +1702,8 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         }
 
         if (!this._isBillboardBased) {
-            if (particle._initialDirection) {
-                let initialDirection = particle._initialDirection;
+            if (particle._properties.initialDirection) {
+                let initialDirection = particle._properties.initialDirection;
                 if (this.isLocal) {
                     Vector3.TransformNormalToRef(initialDirection, this._emitterWorldMatrix, TmpVectors.Vector3[0]);
                     initialDirection = TmpVectors.Vector3[0];
@@ -1709,7 +1758,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             }
 
             this._vertexData[offset++] = offsetX;
-            this._vertexData[offset++] = offsetY;
+            this._vertexData[offset] = offsetY;
         }
     }
 
@@ -1726,6 +1775,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         if (lastParticle !== particle) {
             lastParticle.copyTo(particle);
         }
+        lastParticle.metadata = null;
         this._stockParticles.push(lastParticle);
     };
 
@@ -1743,7 +1793,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     };
 
     /** @internal */
-    public _prepareParticle(particle: Particle) {
+    public _prepareParticle(_particle: Particle) {
         //Do nothing
     }
 
@@ -1977,11 +2027,16 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /**
+     * Gets or sets a boolean indicating that the particle system is paused (no animation will be done).
+     */
+    public paused = false;
+
+    /**
      * Animates the particle system for the current frame by emitting new particles and or animating the living ones.
      * @param preWarmOnly will prevent the system from updating the vertex buffer (default is false)
      */
     public animate(preWarmOnly = false): void {
-        if (!this._started) {
+        if (!this._started || this.paused) {
             return;
         }
 
@@ -2007,21 +2062,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             this._newPartsExcess = 0;
             this.manualEmitCount = 0;
         } else {
-            let rate = this.emitRate;
-
-            if (this._emitRateGradients && this._emitRateGradients.length > 0 && this.targetStopDuration) {
-                const ratio = this._actualFrame / this.targetStopDuration;
-                GradientHelper.GetCurrentGradient(ratio, this._emitRateGradients, (currentGradient, nextGradient, scale) => {
-                    if (currentGradient !== this._currentEmitRateGradient) {
-                        this._currentEmitRate1 = this._currentEmitRate2;
-                        this._currentEmitRate2 = (<FactorGradient>nextGradient).getFactor();
-                        this._currentEmitRateGradient = <FactorGradient>currentGradient;
-                    }
-
-                    rate = Lerp(this._currentEmitRate1, this._currentEmitRate2, scale);
-                });
-            }
-
+            const rate = this._calculateEmitRate();
             newParticles = (rate * this._scaledUpdateSpeed) >> 0;
             this._newPartsExcess += rate * this._scaledUpdateSpeed - newParticles;
         }
@@ -2076,12 +2117,36 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         }
     }
 
+    /**
+     * Internal only. Calculates the current emit rate based on the gradients if any.
+     * @returns The emit rate
+     * @internal
+     */
+    public _calculateEmitRate(): number {
+        let rate = this.emitRate;
+
+        if (this._emitRateGradients && this._emitRateGradients.length > 0 && this.targetStopDuration) {
+            const ratio = this._actualFrame / this.targetStopDuration;
+            GradientHelper.GetCurrentGradient(ratio, this._emitRateGradients, (currentGradient, nextGradient, scale) => {
+                if (currentGradient !== this._currentEmitRateGradient) {
+                    this._currentEmitRate1 = this._currentEmitRate2;
+                    this._currentEmitRate2 = (<FactorGradient>nextGradient).getFactor();
+                    this._currentEmitRateGradient = <FactorGradient>currentGradient;
+                }
+
+                rate = Lerp(this._currentEmitRate1, this._currentEmitRate2, scale);
+            });
+        }
+
+        return rate;
+    }
+
     private _appendParticleVertices(offset: number, particle: Particle) {
         this._appendParticleVertex(offset++, particle, 0, 0);
         if (!this._useInstancing) {
             this._appendParticleVertex(offset++, particle, 1, 0);
             this._appendParticleVertex(offset++, particle, 1, 1);
-            this._appendParticleVertex(offset++, particle, 0, 1);
+            this._appendParticleVertex(offset, particle, 0, 1);
         }
     }
 
@@ -2200,10 +2265,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 engine.bindBuffers(this._vertexBuffers, this._linesIndexBufferUseInstancing, effect);
             } else {
                 if (!this._vertexArrayObject) {
-                    this._vertexArrayObject = (this._engine as ThinEngine).recordVertexArrayObject(this._vertexBuffers, null, effect);
+                    this._vertexArrayObject = (this._engine as ThinEngine).recordVertexArrayObject(this._vertexBuffers, this._indexBuffer, effect);
                 }
 
-                (this._engine as ThinEngine).bindVertexArrayObject(this._vertexArrayObject, this._scene?.forceWireframe ? this._linesIndexBufferUseInstancing : this._indexBuffer);
+                (this._engine as ThinEngine).bindVertexArrayObject(this._vertexArrayObject, this._indexBuffer);
             }
         } else {
             if (!this._indexBuffer) {
@@ -2267,7 +2332,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             }
         }
 
-        let outparticles = 0;
+        let outparticles: number;
 
         if (this.blendMode === BaseParticleSystem.BLENDMODE_MULTIPLYADD) {
             outparticles = this._render(BaseParticleSystem.BLENDMODE_MULTIPLY) + this._render(BaseParticleSystem.BLENDMODE_ADD);
@@ -2282,7 +2347,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /** @internal */
-    public _onDispose(disposeAttachedSubEmitters = false, disposeEndSubEmitters = false) {
+    public _onDispose(_disposeAttachedSubEmitters = false, _disposeEndSubEmitters = false) {
         // Do Nothing
     }
 
@@ -2360,7 +2425,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         this.onDisposeObservable.notifyObservers(this);
         this.onDisposeObservable.clear();
         this.onStoppedObservable.clear();
+        this.onStartedObservable.clear();
 
         this.reset();
+
+        this._isDisposed = true;
     }
 }

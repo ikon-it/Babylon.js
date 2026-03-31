@@ -1,5 +1,4 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { Observable } from "core/index";
+import { type Observable } from "core/index";
 
 import { useEffect, useState } from "react";
 

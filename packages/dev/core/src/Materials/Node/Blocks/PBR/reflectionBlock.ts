@@ -1,21 +1,19 @@
 import { NodeMaterialBlockConnectionPointTypes } from "../../Enums/nodeMaterialBlockConnectionPointTypes";
-import type { NodeMaterialBuildState } from "../../nodeMaterialBuildState";
-import type { NodeMaterialConnectionPoint } from "../../nodeMaterialBlockConnectionPoint";
-import { NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
+import { type NodeMaterialBuildState } from "../../nodeMaterialBuildState";
+import { type NodeMaterialConnectionPoint, NodeMaterialConnectionPointDirection } from "../../nodeMaterialBlockConnectionPoint";
 import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
+import { type NodeMaterial, type NodeMaterialDefines } from "../../nodeMaterial";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
 import { ReflectionTextureBaseBlock } from "../Dual/reflectionTextureBaseBlock";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
-import type { Nullable } from "../../../../types";
+import { type Nullable } from "../../../../types";
 import { Texture } from "../../../Textures/texture";
-import type { BaseTexture } from "../../../Textures/baseTexture";
-import type { Mesh } from "../../../../Meshes/mesh";
-import type { SubMesh } from "../../../../Meshes/subMesh";
-import type { Effect } from "../../../effect";
+import { type BaseTexture } from "../../../Textures/baseTexture";
+import { type Mesh } from "../../../../Meshes/mesh";
+import { type SubMesh } from "../../../../Meshes/subMesh";
+import { type Effect } from "../../../effect";
 import { editableInPropertyPage, PropertyTypeForEdition } from "../../../../Decorators/nodeDecorator";
-import type { Scene } from "../../../../scene";
+import { type Scene } from "../../../../scene";
 import { Logger } from "core/Misc/logger";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
@@ -35,6 +33,7 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
     /** @internal */
     public _vReflectionFilteringInfoName: string;
     private _scene: Scene;
+    private _iblIntensityName: string;
 
     /**
      * The properties below are set by the main PBR block prior to calling methods of this class.
@@ -195,8 +194,12 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
         return this._scene.environmentTexture;
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
-        super.prepareDefines(mesh, nodeMaterial, defines);
+    /**
+     * Prepare the list of defines
+     * @param defines - the list of defines to update
+     */
+    public override prepareDefines(defines: NodeMaterialDefines) {
+        super.prepareDefines(defines);
 
         const reflectionTexture = this._getTexture();
         const reflection = reflectionTexture && reflectionTexture.getTextureMatrix;
@@ -228,6 +231,13 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
         }
     }
 
+    /**
+     * Bind data to effect
+     * @param effect - the effect to bind data to
+     * @param nodeMaterial - the node material
+     * @param mesh - the mesh to bind data for
+     * @param subMesh - the submesh to bind data for
+     */
     public override bind(effect: Effect, nodeMaterial: NodeMaterial, mesh?: Mesh, subMesh?: SubMesh) {
         super.bind(effect, nodeMaterial, mesh);
 
@@ -242,6 +252,8 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
         } else {
             effect.setTexture(this._2DSamplerName, reflectionTexture);
         }
+
+        effect.setFloat(this._iblIntensityName, this._scene.iblIntensity * reflectionTexture.level);
 
         const width = reflectionTexture.getSize().width;
 
@@ -401,8 +413,12 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
 
         state._emitUniformFromString(this._vReflectionFilteringInfoName, NodeMaterialBlockConnectionPointTypes.Vector2);
 
+        this._iblIntensityName = state._getFreeVariableName("iblIntensity");
+
+        state._emitUniformFromString(this._iblIntensityName, NodeMaterialBlockConnectionPointTypes.Float);
+
         code += `#ifdef REFLECTION
-            ${state._declareLocalVar(this._vReflectionInfosName, NodeMaterialBlockConnectionPointTypes.Vector2)} = vec2${state.fSuffix}(1., 0.);
+            ${state._declareLocalVar(this._vReflectionInfosName, NodeMaterialBlockConnectionPointTypes.Vector2)} = vec2${state.fSuffix}(${(isWebGPU ? "uniforms." : "") + this._iblIntensityName}, 0.);
 
             ${isWebGPU ? "var reflectionOut: reflectionOutParams" : "reflectionOutParams reflectionOut"};
 
@@ -494,6 +510,10 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
         return codeString;
     }
 
+    /**
+     * Serializes the block
+     * @returns the serialized object
+     */
     public override serialize(): any {
         const serializationObject = super.serialize();
 
@@ -504,6 +524,12 @@ export class ReflectionBlock extends ReflectionTextureBaseBlock {
         return serializationObject;
     }
 
+    /**
+     * Deserializes the block
+     * @param serializationObject - the object to deserialize from
+     * @param scene - the scene to deserialize in
+     * @param rootUrl - the root URL for assets
+     */
     public override _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);
 

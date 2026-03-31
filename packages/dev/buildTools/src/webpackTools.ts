@@ -1,11 +1,21 @@
 /* eslint-disable no-console */
 import type ts from "typescript";
 import transformer from "./pathTransform.js";
-import type { BuildType, DevPackageName, UMDPackageName } from "./packageMapping.js";
-import { getPackageMappingByDevName, getPublicPackageName, isValidDevPackageName, umdPackageMapping } from "./packageMapping.js";
+import {
+    type BuildType,
+    type DevPackageName,
+    type UMDPackageName,
+    getPackageMappingByDevName,
+    getPublicPackageName,
+    isValidDevPackageName,
+    umdPackageMapping,
+} from "./packageMapping.js";
 import * as path from "path";
-import { camelize } from "./utils.js";
-import type { RuleSetRule, Configuration } from "webpack";
+import * as fs from "fs";
+import { camelize, copyFile } from "./utils.js";
+import { type RuleSetRule, type Configuration, type Compiler, type WebpackPluginInstance } from "webpack";
+import * as ReactRefreshWebpackPlugin from "@pmmmwh/react-refresh-webpack-plugin";
+import ReactRefreshTypeScript from "react-refresh-typescript";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const externalsFunction = (excludePackages: string[] = [], type: BuildType = "umd") => {
@@ -65,12 +75,22 @@ export const getRules = (
         resourceType?: "asset/inline" | "asset/resource";
         extraRules?: RuleSetRule[];
         mode?: "development" | "production";
+        enableFastRefresh?: boolean; // for react fast refresh
     } = {
         includeAssets: true,
         includeCSS: true,
         sideEffects: true,
     }
 ) => {
+    const getCustomTransformers = options.enableFastRefresh
+        ? (program: ts.Program) => {
+              const transformers: ts.CustomTransformers = options?.tsOptions?.getCustomTransformers?.(program) ?? {};
+              transformers.before = transformers.before ?? [];
+              transformers.before.push(ReactRefreshTypeScript());
+              return transformers;
+          }
+        : options?.tsOptions?.getCustomTransformers;
+
     const rules: RuleSetRule[] = [
         {
             test: /\.tsx?$/,
@@ -79,7 +99,7 @@ export const getRules = (
             sideEffects: options.sideEffects,
             options: {
                 configFile: "tsconfig.build.json",
-                ...options.tsOptions,
+                ...{ ...options.tsOptions, getCustomTransformers },
             },
         },
         {
@@ -177,36 +197,81 @@ export const commonDevWebpackConfiguration = (
         port: number;
         static?: string[];
         showBuildProgress?: boolean;
-    }
+    },
+    additionalPlugins?: WebpackPluginInstance[]
 ) => {
     const production = env.mode === "production" || process.env.NODE_ENV === "production";
+    const enableHotReload = (env.enableHotReload !== undefined || process.env.ENABLE_HOT_RELOAD === "true") && !production ? true : false;
+
+    let plugins: WebpackPluginInstance[] | undefined = additionalPlugins;
+    const enableOverlay: boolean = !!process.env.ENABLE_DEV_OVERLAY;
+    if (devServerConfig && enableHotReload) {
+        plugins = plugins ?? [];
+        plugins.push(new ReactRefreshWebpackPlugin({ overlay: enableOverlay }));
+    }
+
+    // Resolve static dirs once so both devServer.static and the middleware use the same absolute paths
+    const resolvedStaticDirs = devServerConfig?.static ? devServerConfig.static.map((dir) => path.resolve(dir)) : undefined;
+
     return {
         mode: production ? "production" : "development",
         devtool: production ? "source-map" : "inline-cheap-module-source-map",
         devServer: devServerConfig
             ? {
                   port: devServerConfig.port,
-                  static: devServerConfig.static ? devServerConfig.static.map((dir) => path.resolve(dir)) : undefined,
+                  static: resolvedStaticDirs,
                   webSocketServer: production ? false : "ws",
                   compress: production,
                   server: env.enableHttps !== undefined || process.env.ENABLE_HTTPS === "true" ? "https" : "http",
-                  hot: (env.enableHotReload !== undefined || process.env.ENABLE_HOT_RELOAD === "true") && !production ? true : false,
+                  hot: enableHotReload,
                   liveReload: (env.enableLiveReload !== undefined || process.env.ENABLE_LIVE_RELOAD === "true") && !production ? true : false,
                   headers: {
                       // eslint-disable-next-line @typescript-eslint/naming-convention
                       "Access-Control-Allow-Origin": "*",
                   },
                   client: {
-                      overlay: process.env.DISABLE_DEV_OVERLAY
-                          ? false
-                          : {
+                      overlay: enableOverlay
+                          ? {
                                 warnings: false,
                                 errors: true,
-                            },
+                            }
+                          : false,
                       logging: production ? "error" : "info",
                       progress: devServerConfig.showBuildProgress,
                   },
                   allowedHosts: process.env.ALLOWED_HOSTS ? process.env.ALLOWED_HOSTS.split(",") : undefined,
+                  setupMiddlewares: (middlewares: any[], _devServer: any) => {
+                      const parsedPort = parseInt(process.env.CDN_PORT || "1337", 10);
+                      const cdnPort = Number.isFinite(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 1337;
+                      if (cdnPort !== 1337 && resolvedStaticDirs) {
+                          // Precompute the patched index.js content once at startup rather than
+                          // re-reading from disk on every request.
+                          let patchedContent: string | undefined;
+                          for (const dir of resolvedStaticDirs) {
+                              const filePath = path.join(dir, "index.js");
+                              try {
+                                  const content = fs.readFileSync(filePath, "utf-8");
+                                  if (content.includes("var cdnPort = 1337;")) {
+                                      patchedContent = content.replace("var cdnPort = 1337;", `var cdnPort = ${cdnPort};`);
+                                      break;
+                                  }
+                              } catch {
+                                  // File not found in this static dir, try next
+                              }
+                          }
+                          if (patchedContent !== undefined) {
+                              const cached = patchedContent;
+                              middlewares.unshift((req: any, res: any, next: any) => {
+                                  if (req.path !== "/index.js") {
+                                      return next();
+                                  }
+                                  res.type("application/javascript");
+                                  res.send(cached);
+                              });
+                          }
+                      }
+                      return middlewares;
+                  },
               }
             : undefined,
         output: env.outputFilename
@@ -217,8 +282,46 @@ export const commonDevWebpackConfiguration = (
                   devtoolModuleFilenameTemplate: production ? "webpack://[namespace]/[resource-path]?[loaders]" : "file:///[absolute-resource-path]",
               }
             : undefined,
+        plugins,
+        performance: {
+            hints: false,
+        },
     };
 };
+
+/**
+ * Originally our build commands for our tools were running both dev and prod, outputted an unminified max.js file during CI. This impacted memory usage during
+ * build and is not necessary for debugging since we offer source maps. We have since removed the dev step from our builds, but in order to preserve
+ * backwards compatibility for users who may have been referencing the .max.js file directly, we now copy the minified file to a .max.js file
+ * after the build is complete. This plugin will only run if the `minToMax` option is set to true in the webpack configuration.
+ */
+class CopyMinToMaxWebpackPlugin {
+    apply(compiler: Compiler) {
+        compiler.hooks.done.tap("CopyToMax", (stats) => {
+            if (stats.hasErrors()) {
+                console.error("Build had errors, skipping CopyMinToMax plugin");
+                return;
+            }
+            const outputPath = stats.compilation.outputOptions.path;
+            if (outputPath) {
+                for (const chunk of stats.compilation.chunks) {
+                    for (const file of chunk.files) {
+                        const from = path.join(outputPath, file);
+                        let to;
+                        if (file.includes(".min.js")) {
+                            // if maxMode is false, the minified file will have .min.js suffix and the max file will have no suffix
+                            to = path.join(outputPath, file.replace(/\.min\.js$/, ".js"));
+                        } else {
+                            // if maxMode is true, the minified file will have no suffix and the max file will have max.js suffix
+                            to = path.join(outputPath, file.replace(/\.js$/, ".max.js"));
+                        }
+                        copyFile(from, to);
+                    }
+                }
+            }
+        });
+    }
+}
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const commonUMDWebpackConfiguration = (options: {
@@ -235,6 +338,7 @@ export const commonUMDWebpackConfiguration = (options: {
     es6Mode?: boolean;
     maxMode?: boolean; // if true filename will have .max for the dev version and nothing for the prod version
     extraExternals?: Configuration["externals"]; // see https://webpack.js.org/configuration/externals/#combining-syntaxes
+    minToMax?: boolean; // if true, will copy the minified file to a file with max.js suffix. This is for back-compat reasons in case users reference .max.js output directly. For debugging purposes, we expose the sourcemap
 }) => {
     const packageMapping = getPackageMappingByDevName(options.devPackageName);
     const packageName = getPublicPackageName(options.es6Mode ? packageMapping.es6 : packageMapping.umd);
@@ -248,6 +352,7 @@ export const commonUMDWebpackConfiguration = (options: {
         entry: options.entryPoints ?? "./src/index.ts",
         devtool: options.mode === "production" ? "source-map" : "inline-cheap-module-source-map",
         mode: options.mode || "development",
+        plugins: options.minToMax && options.mode === "production" ? [new CopyMinToMaxWebpackPlugin()] : [],
         output: {
             path: options.outputPath || path.resolve("./dist"),
             filename: (typeof options.overrideFilename === "function" && options.overrideFilename) || filename,
@@ -262,12 +367,18 @@ export const commonUMDWebpackConfiguration = (options: {
             libraryExport: "default",
             umdNamedDefine: true,
             globalObject: '(typeof self !== "undefined" ? self : typeof global !== "undefined" ? global : this)',
+            // This disables chunking / code splitting. For UMD, we always want a single output file per entry point.
+            // NOTE: The normal way of doing this is by limiting the max chunks, as described here: https://webpack.js.org/plugins/limit-chunk-count-plugin/#maxchunks
+            //       However, that didn't work when testing (fewer chunks were created, but still more than 1). There is a long Webpack github issue about this, where
+            //       eventually someone suggests the following config option, which apparently worked for many other people, and worked for us too.
+            //       https://github.com/webpack/webpack/issues/12464#issuecomment-1911309972
+            chunkFormat: false,
         },
         resolve: {
             extensions: [".ts", ".js"],
             alias: {
-                // default alias - for its own package to the lts version
-                [options.devPackageName]: path.resolve(options.devPackageAliasPath || `../../../lts/${camelize(options.devPackageName)}/dist`),
+                // default alias - for its own package to the dev version
+                [options.devPackageName]: path.resolve(options.devPackageAliasPath || `../../../dev/${camelize(options.devPackageName)}/dist`),
                 ...options.alias,
             },
         },
@@ -277,7 +388,6 @@ export const commonUMDWebpackConfiguration = (options: {
                 tsOptions: {
                     getCustomTransformers: (_program: ts.Program) => {
                         // webpack program
-                        console.log("generating transformers...");
                         return {
                             after: [
                                 transformer(_program, {
@@ -303,6 +413,9 @@ export const commonUMDWebpackConfiguration = (options: {
                 includeCSS: true,
                 mode: options.mode || "development",
             }),
+        },
+        performance: {
+            hints: false,
         },
         ...options.extendedWebpackConfig,
     } as Configuration;

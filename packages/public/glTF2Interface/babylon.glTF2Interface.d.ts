@@ -145,13 +145,17 @@ declare module BABYLON.GLTF2 {
          */
         PNG = "image/png",
         /**
-         * WEBP Mime-type
+         * WEBP Mime-type, available via EXT_texture_webp
          */
         WEBP = "image/webp",
         /**
-         * AVIF Mime-type
+         * AVIF Mime-type, available via EXT_texture_avif
          */
         AVIF = "image/avif",
+        /**
+         * KTX2 Mime-type, available via KHR_texture_basisu
+         */
+        KTX2 = "image/ktx2",
     }
 
     /**
@@ -813,9 +817,9 @@ declare module BABYLON.GLTF2 {
          */
         sampler?: number;
         /**
-         * The index of the image used by this texture
+         * The index of the image used by this texture. When undefined, an extension or other mechanism should supply an alternate texture source, otherwise behavior is undefined.
          */
-        source: number;
+        source?: number;
     }
 
     /**
@@ -1068,6 +1072,47 @@ declare module BABYLON.GLTF2 {
         clearcoatRoughnessFactor?: number;
         clearcoatRoughnessTexture?: ITextureInfo;
         clearcoatNormalTexture?: IMaterialNormalTextureInfo;
+        /**
+         * Dictionary object with extension-specific objects
+         */
+        extensions?: {
+            [key: string]: any;
+        };
+    }
+
+    /**
+     * Interfaces from the KHR_materials_clearcoat extension
+     */
+    /** @internal */
+    interface IKHRMaterialsCoat {
+        coatFactor?: number;
+        coatTexture?: ITextureInfo;
+        coatRoughnessFactor?: number;
+        coatRoughnessTexture?: ITextureInfo;
+        coatNormalTexture?: IMaterialNormalTextureInfo;
+        coatIor?: number;
+        coatDarkeningFactor?: number;
+        coatColorFactor?: number[];
+        coatColorTexture?: ITextureInfo;
+        coatAnisotropyStrength?: number;
+        coatAnisotropyRotation?: number;
+        coatAnisotropyTexture?: ITextureInfo;
+        /**
+         * Dictionary object with extension-specific objects
+         */
+        extensions?: {
+            [key: string]: any;
+        };
+    }
+
+    /** @internal */
+    interface IKHRMaterialsClearcoatAnisotropy {
+        clearcoatAnisotropyStrength?: number;
+        clearcoatAnisotropyRotation?: number;
+        clearcoatAnisotropyTexture?: ITextureInfo;
+        extensions?: {
+            [key: string]: any;
+        };
     }
 
     /** @internal */
@@ -1085,6 +1130,14 @@ declare module BABYLON.GLTF2 {
         anisotropyStrength?: number;
         anisotropyRotation?: number;
         anisotropyTexture?: ITextureInfo;
+        extensions?: {
+            [key: string]: any;
+        };
+    }
+
+    /** @internal */
+    interface IKHRMaterialsAnisotropyOpenPbr {
+        anisotropyOpenPbrEnabled: boolean;
     }
 
     /**
@@ -1106,6 +1159,17 @@ declare module BABYLON.GLTF2 {
         thicknessTexture?: ITextureInfo;
         attenuationDistance?: number;
         attenuationColor?: number[];
+    }
+
+    /**
+     * Interfaces from the KHR_materials_volume_scatter extension
+     */
+
+    /** @internal */
+    interface IKHRMaterialsVolumeScatter {
+        scatterAnisotropy?: number;
+        multiscatterColor?: number[];
+        multiscatterColorTexture?: ITextureInfo;
     }
 
     /**
@@ -1189,6 +1253,20 @@ declare module BABYLON.GLTF2 {
     }
 
     /**
+     * Interfaces from the KHR_materials_fuzz extension
+     */
+
+    /** @internal */
+    interface IKHRMaterialsFuzz {
+        fuzzFactor?: number;
+        fuzzTexture?: ITextureInfo;
+        fuzzColorFactor?: number[];
+        fuzzColorTexture?: ITextureInfo;
+        fuzzRoughnessFactor?: number;
+        fuzzRoughnessTexture?: ITextureInfo;
+    }
+
+    /**
      * Interfaces from the KHR_materials_diffuse_transmission extension
      * !!! Experimental Extension Subject to Changes !!!
      */
@@ -1205,7 +1283,7 @@ declare module BABYLON.GLTF2 {
      * Interfaces from the EXT_materials_diffuse_roughness extension
      */
     /** @internal */
-    interface IEXTMaterialsDiffuseRoughness {
+    interface IKHRMaterialsDiffuseRoughness {
         diffuseRoughnessFactor?: number;
         diffuseRoughnessTexture?: ITextureInfo;
     }
@@ -1385,6 +1463,37 @@ declare module BABYLON.GLTF2 {
     }
 
     /**
+     * Interfaces from the EXT_lights_area extension
+     */
+
+    /** @internal */
+    const enum EXTLightsArea_LightType {
+        RECT = "rect",
+        DISK = "disk",
+    }
+
+    /** @internal */
+    interface IEXTLightsArea_LightReference {
+        light: number;
+    }
+
+    /** @internal */
+    interface IEXTLightsArea_Light extends IChildRootProperty {
+        type: EXTLightsArea_LightType;
+        color?: number[];
+        intensity?: number;
+        size?: number;
+        rect?: {
+            aspect: number;
+        };
+    }
+
+    /** @internal */
+    interface IEXTLightsArea {
+        lights: IEXTLightsArea_Light[];
+    }
+
+    /**
      * Interfaces for the KHR_interactivity extension
      */
     interface IKHRInteractivity {
@@ -1425,8 +1534,6 @@ declare module BABYLON.GLTF2 {
     type ValueType = (boolean | number)[];
 
     type ValueSignature = "bool" | "float" | "float2" | "float3" | "float4" | "float2x2" | "float3x3" | "float4x4" | "int" | "custom";
-
-    type ConfigurationValueSignature = "bool" | "int" | "int[]" | "string";
 
     type ConfigurationValueType = (boolean | number | string)[];
 
@@ -1543,6 +1650,6 @@ declare module BABYLON.GLTF2 {
         /**
          * Array size depends on the type. primitives have array size 1, rest depending on the object type (2,3,4,16)
          */
-        value: ConfigurationValueType;
+        value?: ConfigurationValueType;
     }
 }

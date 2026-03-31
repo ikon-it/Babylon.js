@@ -1,16 +1,14 @@
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { serialize } from "../../Misc/decorators";
-import type { Observer } from "../../Misc/observable";
-import type { ICameraInput } from "../../Cameras/cameraInputsManager";
-import { CameraInputTypes } from "../../Cameras/cameraInputsManager";
-import type { FlyCamera } from "../../Cameras/flyCamera";
-import type { PointerInfo } from "../../Events/pointerEvents";
-import { PointerEventTypes } from "../../Events/pointerEvents";
-import type { Scene } from "../../scene";
+import { type Observer } from "../../Misc/observable";
+import { type ICameraInput, CameraInputTypes } from "../../Cameras/cameraInputsManager";
+import { type FlyCamera } from "../../Cameras/flyCamera";
+import { type PointerInfo, PointerEventTypes } from "../../Events/pointerEvents";
+import { type Scene } from "../../scene";
 import { Quaternion } from "../../Maths/math.vector";
 import { Axis } from "../../Maths/math.axis";
 import { Tools } from "../../Misc/tools";
-import type { IPointerEvent } from "../../Events/deviceInputEvents";
+import { type IPointerEvent } from "../../Events/deviceInputEvents";
 /**
  * Listen to mouse events to control the camera.
  * @see https://doc.babylonjs.com/features/featuresDeepDive/cameras/customizingCameraInputs
@@ -240,12 +238,10 @@ export class FlyCameraMouseInput implements ICameraInput<FlyCamera> {
      */
     private _rotateCamera(offsetX: number, offsetY: number): void {
         const camera = this.camera;
+
         const handednessMultiplier = camera._calculateHandednessMultiplier();
-
-        offsetX *= handednessMultiplier;
-
-        const x = offsetX / this.angularSensibility;
-        const y = offsetY / this.angularSensibility;
+        const x = (offsetX * handednessMultiplier) / this.angularSensibility;
+        const y = (offsetY * handednessMultiplier) / this.angularSensibility;
 
         // Initialize to current rotation.
         const currentRotation = Quaternion.RotationYawPitchRoll(camera.rotation.y, camera.rotation.x, camera.rotation.z);

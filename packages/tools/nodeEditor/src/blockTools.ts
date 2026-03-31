@@ -50,7 +50,7 @@ import { FrontFacingBlock } from "core/Materials/Node/Blocks/Fragment/frontFacin
 import { MeshAttributeExistsBlock } from "core/Materials/Node/Blocks/meshAttributeExistsBlock";
 import { NegateBlock } from "core/Materials/Node/Blocks/negateBlock";
 import { PowBlock } from "core/Materials/Node/Blocks/powBlock";
-import type { Scene } from "core/scene";
+import { type Scene } from "core/scene";
 import { RandomNumberBlock } from "core/Materials/Node/Blocks/randomNumberBlock";
 import { ReplaceColorBlock } from "core/Materials/Node/Blocks/replaceColorBlock";
 import { PosterizeBlock } from "core/Materials/Node/Blocks/posterizeBlock";
@@ -58,11 +58,12 @@ import { ArcTan2Block } from "core/Materials/Node/Blocks/arcTan2Block";
 import { ReciprocalBlock } from "core/Materials/Node/Blocks/reciprocalBlock";
 import { GradientBlock } from "core/Materials/Node/Blocks/gradientBlock";
 import { WaveBlock, WaveBlockKind } from "core/Materials/Node/Blocks/waveBlock";
-import type { NodeMaterial } from "core/Materials/Node/nodeMaterial";
+import { type NodeMaterial } from "core/Materials/Node/nodeMaterial";
 import { WorleyNoise3DBlock } from "core/Materials/Node/Blocks/worleyNoise3DBlock";
 import { SimplexPerlin3DBlock } from "core/Materials/Node/Blocks/simplexPerlin3DBlock";
 import { NormalBlendBlock } from "core/Materials/Node/Blocks/normalBlendBlock";
 import { Rotate2dBlock } from "core/Materials/Node/Blocks/rotate2dBlock";
+import { PannerBlock } from "core/Materials/Node/Blocks/pannerBlock";
 import { DerivativeBlock } from "core/Materials/Node/Blocks/Fragment/derivativeBlock";
 import { RefractBlock } from "core/Materials/Node/Blocks/refractBlock";
 import { ReflectBlock } from "core/Materials/Node/Blocks/reflectBlock";
@@ -87,6 +88,7 @@ import { ScreenSizeBlock } from "core/Materials/Node/Blocks/Fragment/screenSizeB
 import { MatrixBuilderBlock } from "core/Materials/Node/Blocks/matrixBuilderBlock";
 import { SceneDepthBlock } from "core/Materials/Node/Blocks/Dual/sceneDepthBlock";
 import { ImageSourceBlock } from "core/Materials/Node/Blocks/Dual/imageSourceBlock";
+import { DepthSourceBlock } from "core/Materials/Node/Blocks/Dual/depthSourceBlock";
 import { CloudBlock } from "core/Materials/Node/Blocks/cloudBlock";
 import { VoronoiNoiseBlock } from "core/Materials/Node/Blocks/voronoiNoiseBlock";
 import { ScreenSpaceBlock } from "core/Materials/Node/Blocks/Fragment/screenSpaceBlock";
@@ -112,10 +114,13 @@ import { MatrixSplitterBlock } from "core/Materials/Node/Blocks/matrixSplitterBl
 import { NodeMaterialDebugBlock } from "core/Materials/Node/Blocks/debugBlock";
 import { IridescenceBlock } from "core/Materials/Node/Blocks/PBR/iridescenceBlock";
 import { SmartFilterTextureBlock } from "core/Materials/Node/Blocks/Dual/smartFilterTextureBlock";
+import { AmbientOcclusionBlock } from "core/Materials/Node/Blocks/Fragment/ambientOcclusionBlock";
 
 export class BlockTools {
     public static GetBlockFromString(data: string, scene: Scene, nodeMaterial: NodeMaterial) {
         switch (data) {
+            case "AmbientOcclusionBlock":
+                return new AmbientOcclusionBlock("Ambient Occlusion");
             case "DebugBlock":
                 return new NodeMaterialDebugBlock("Debug");
             case "MatrixSplitterBlock":
@@ -156,6 +161,8 @@ export class BlockTools {
                 return new DerivativeBlock("Derivative");
             case "Rotate2dBlock":
                 return new Rotate2dBlock("Rotate2d");
+            case "PannerBlock":
+                return new PannerBlock("Panner");
             case "NormalBlendBlock":
                 return new NormalBlendBlock("NormalBlend");
             case "WorleyNoise3DBlock":
@@ -413,10 +420,20 @@ export class BlockTools {
                 projectionMatrixBlock.setAsSystemValue(NodeMaterialSystemValues.Projection);
                 return projectionMatrixBlock;
             }
+            case "ProjectionInverseMatrixBlock": {
+                const projectionInverseMatrixBlock = new InputBlock("ProjectionInverse");
+                projectionInverseMatrixBlock.setAsSystemValue(NodeMaterialSystemValues.ProjectionInverse);
+                return projectionInverseMatrixBlock;
+            }
             case "CameraPositionBlock": {
                 const cameraPosition = new InputBlock("Camera position");
                 cameraPosition.setAsSystemValue(NodeMaterialSystemValues.CameraPosition);
                 return cameraPosition;
+            }
+            case "CameraForwardBlock": {
+                const cameraForward = new InputBlock("Camera forward");
+                cameraForward.setAsSystemValue(NodeMaterialSystemValues.CameraForward);
+                return cameraForward;
             }
             case "CameraParametersBlock": {
                 const cameraParameters = new InputBlock("Camera parameters");
@@ -679,6 +696,8 @@ export class BlockTools {
             }
             case "ImageSourceBlock":
                 return new ImageSourceBlock("ImageSource");
+            case "DepthSourceBlock":
+                return new DepthSourceBlock("DepthSource");
             case "ClipPlanesBlock":
                 return new ClipPlanesBlock("ClipPlanes");
             case "FragDepthBlock":

@@ -127,8 +127,7 @@
                         </svg>
                     </div>
                 </babylon-viewer-annotation>
-                <babylon-viewer-annotation hotspot="thruster">
-                </babylon-viewer-annotation>
+                <babylon-viewer-annotation hotspot="thruster"> </babylon-viewer-annotation>
                 <babylon-viewer-annotation hotspot="poi"></babylon-viewer-annotation>
             </babylon-viewer>
         </div>
@@ -162,8 +161,16 @@
                 <input type="checkbox" id="environmentVisibilityInput" oninput="onEnvironmentVisibility()" />
             </div>
             <div>
+                <span>SSAO</span>
+                <select id="ssaoSelect" oninput="onSSAO()">
+                    <option value="disabled">Disabled</option>
+                    <option value="enabled">Enabled</option>
+                    <option selected value="auto">Auto</option>
+                </select>
+            </div>
+            <div>
                 <span>Shadows Quality</span>
-                <select id="shadowQualityInput" checked oninput="onShadowQuality()">
+                <select id="shadowQualityInput" oninput="onShadowQuality()">
                     <option value="none">None</option>
                     <option value="normal">Normal (shadow map)</option>
                     <option value="high">High (environment shadow)</option>
@@ -309,18 +316,20 @@
                 }
             };
 
-            let isInspectorVisible = false;
+            let inspectorToken = null;
             globalThis.onToggleInspector = async () => {
-                const { Inspector } = await import("inspector/inspector");
+                const { ShowInspector } = await import("inspector/inspector");
                 console.log("toggle inspector");
-                if (isInspectorVisible) {
-                    Inspector.Hide();
+                if (inspectorToken) {
+                    inspectorToken.dispose();
+                    inspectorToken = null;
                 } else {
                     console.log(viewerDetails != null);
                     console.log(viewerDetails?.scene != null);
-                    Inspector.Show(viewerDetails.scene, {});
+                    inspectorToken = ShowInspector(viewerDetails.scene, {
+                        // containerElement: document.body,
+                    });
                 }
-                isInspectorVisible = !isInspectorVisible;
             };
 
             let isTopContentVisible = false;
@@ -374,6 +383,11 @@
                 const checked = document.querySelector("#environmentVisibilityInput").checked;
                 const viewer = viewerElement.viewerDetails.viewer;
                 checked ? viewer.loadEnvironment("auto", { skybox: true }) : viewer.resetEnvironment({ skybox: true });
+            };
+            globalThis.onSSAO = () => {
+                const value = document.querySelector("#ssaoSelect").value;
+                const viewer = viewerElement.viewerDetails.viewer;
+                viewer.postProcessing = { ssao: value };
             };
             globalThis.onShadowQuality = () => {
                 const value = document.querySelector("#shadowQualityInput").value;

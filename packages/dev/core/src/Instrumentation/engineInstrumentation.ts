@@ -1,8 +1,8 @@
-import type { Observer } from "../Misc/observable";
+import { type Observer } from "../Misc/observable";
 import { PerfCounter } from "../Misc/perfCounter";
-import type { Nullable } from "../types";
-import type { IDisposable } from "../scene";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable } from "../types";
+import { type IDisposable } from "../scene";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 /**
  * This class can be used to get instrumentation data from a Babylon engine
  * @see https://doc.babylonjs.com/features/featuresDeepDive/scene/optimize_your_scene#engineinstrumentation
@@ -19,11 +19,13 @@ export class EngineInstrumentation implements IDisposable {
     private _onBeforeShaderCompilationObserver: Nullable<Observer<AbstractEngine>> = null;
     private _onAfterShaderCompilationObserver: Nullable<Observer<AbstractEngine>> = null;
 
+    private _disposed = false;
+
     // Properties
     /**
      * Gets the perf counter used for GPU frame time
      */
-    public get gpuFrameTimeCounter(): Nullable<PerfCounter> {
+    public get gpuFrameTimeCounter(): PerfCounter {
         return this.engine.getGPUFrameTimeCounter();
     }
 
@@ -77,7 +79,8 @@ export class EngineInstrumentation implements IDisposable {
             });
 
             this._onAfterShaderCompilationObserver = this.engine.onAfterShaderCompilationObservable.add(() => {
-                this._shaderCompilationTime.endMonitoring();
+                this._shaderCompilationTime.endMonitoring(false);
+                this._shaderCompilationTime.endFrame();
             });
         } else {
             this.engine.onBeforeShaderCompilationObservable.remove(this._onBeforeShaderCompilationObserver);
@@ -104,6 +107,10 @@ export class EngineInstrumentation implements IDisposable {
      * Dispose and release associated resources.
      */
     public dispose() {
+        if (this._disposed) {
+            return;
+        }
+
         this.engine.onBeginFrameObservable.remove(this._onBeginFrameObserver);
         this._onBeginFrameObserver = null;
 
@@ -117,5 +124,6 @@ export class EngineInstrumentation implements IDisposable {
         this._onAfterShaderCompilationObserver = null;
 
         (<any>this.engine) = null;
+        this._disposed = true;
     }
 }

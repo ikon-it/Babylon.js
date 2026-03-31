@@ -1,36 +1,48 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { IDisposable } from "core/index";
+import { type ComponentType, type FunctionComponent, createElement, Suspense, useCallback, useEffect, useState } from "react";
 
-import type { ComponentType, FunctionComponent } from "react";
-import type { IExtensionFeed } from "./extensibility/extensionFeed";
-import type { IExtension } from "./extensibility/extensionManager";
-import type { WeaklyTypedServiceDefinition } from "./modularity/serviceContainer";
-import type { IRootComponentService, ShellServiceOptions } from "./services/shellService";
+import { type IDisposable } from "core/index";
+import { type IExtensionFeed } from "./extensibility/extensionFeed";
+import { type IExtension, type InstallFailedInfo, ExtensionManager } from "./extensibility/extensionManager";
+import { type WeaklyTypedServiceDefinition, ServiceContainer } from "./modularity/serviceContainer";
+import { type ISettingsStore, SettingsStore, SettingsStoreIdentity } from "./services/settingsStore";
+import { type IRootComponentService, type ShellServiceOptions, MakeShellServiceDefinition, RootComponentServiceIdentity } from "./services/shellService";
+import { type ThemeMode, ThemeModeSettingDescriptor, ThemeServiceDefinition } from "./services/themeService";
+import { type IWatcherService, WatcherServiceDefinition, WatcherServiceIdentity } from "./services/watcherService";
 
-import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, FluentProvider, makeStyles, Spinner } from "@fluentui/react-components";
-import { createElement, Suspense, useCallback, useEffect, useState } from "react";
+import {
+    Body1,
+    Button,
+    Dialog,
+    DialogActions,
+    DialogBody,
+    DialogContent,
+    DialogSurface,
+    DialogTitle,
+    List,
+    ListItem,
+    makeStyles,
+    Spinner,
+    tokens,
+} from "@fluentui/react-components";
+import { ErrorCircleRegular } from "@fluentui/react-icons";
 import { createRoot } from "react-dom/client";
-import { useTernaryDarkMode } from "usehooks-ts";
 
-import { Logger } from "core/Misc";
 import { Deferred } from "core/Misc/deferred";
-
+import { Logger } from "core/Misc/logger";
+import { ToastProvider } from "shared-ui-components/fluent/primitives/toast";
+import { Theme } from "./components/theme";
 import { ExtensionManagerContext } from "./contexts/extensionManagerContext";
-import { ExtensionManager } from "./extensibility/extensionManager";
-import { ServiceContainer } from "./modularity/serviceContainer";
-import { ExtensionListServiceDefinition } from "./services/extensionsListService";
-import { MakeShellServiceDefinition, RootComponentServiceIdentity } from "./services/shellService";
+import { SettingsStoreContext } from "./contexts/settingsContext";
+import { WatcherContext } from "./contexts/watcherContext";
 import { ThemeSelectorServiceDefinition } from "./services/themeSelectorService";
-//import { DarkTheme, LightTheme } from "./themes/babylonTheme";
-import { webDarkTheme as DarkTheme, webLightTheme as LightTheme } from "@fluentui/react-components";
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const useStyles = makeStyles({
     app: {
         colorScheme: "light dark",
         flexGrow: 1,
         display: "flex",
         flexDirection: "column",
+        backgroundColor: tokens.colorTransparentBackground,
     },
     spinner: {
         flexGrow: 1,
@@ -40,9 +52,23 @@ const useStyles = makeStyles({
             to: { opacity: 1 },
         },
     },
+    extensionErrorTitleDiv: {
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: tokens.spacingHorizontalS,
+    },
+    extensionErrorIcon: {
+        color: tokens.colorPaletteRedForeground1,
+    },
 });
 
 export type ModularToolOptions = {
+    /**
+     * The namespace for the tool, used for scoping persisted settings and other storage.
+     */
+    namespace: string;
+
     /**
      * The container element where the tool will be rendered.
      */
@@ -54,9 +80,14 @@ export type ModularToolOptions = {
     serviceDefinitions: readonly WeaklyTypedServiceDefinition[];
 
     /**
-     * Whether the tool should allow user selection of the theme (e.g. dark/light/system).
+     * The theme mode to use. If not specified, the default is "system", which uses the system/browser preference, and the last used mode is persisted.
      */
-    isThemeable?: boolean;
+    themeMode?: ThemeMode;
+
+    /**
+     * Whether to show the theme selector in the toolbar. Default is true.
+     */
+    showThemeSelector?: boolean;
 
     /**
      * The extension feeds that provide optional extensions the user can install.
@@ -70,53 +101,78 @@ export type ModularToolOptions = {
  * @returns A token that can be used to dispose of the tool.
  */
 export function MakeModularTool(options: ModularToolOptions): IDisposable {
-    const { containerElement, serviceDefinitions, isThemeable = true, extensionFeeds = [] } = options;
+    const { namespace, containerElement, serviceDefinitions, themeMode, showThemeSelector = true, extensionFeeds = [] } = options;
+
+    // Create the settings store immediately as it will be exposed to services and through React context.
+    const settingsStore = new SettingsStore(namespace);
+
+    // If a theme mode is provided, just write the setting so it is the active theme.
+    if (themeMode) {
+        settingsStore.writeSetting(ThemeModeSettingDescriptor, themeMode);
+    }
 
     const modularToolRootComponent: FunctionComponent = () => {
         const classes = useStyles();
         const [extensionManagerContext, setExtensionManagerContext] = useState<ExtensionManagerContext>();
-        const { isDarkMode } = useTernaryDarkMode();
         const [requiredExtensions, setRequiredExtensions] = useState<string[]>();
         const [requiredExtensionsDeferred, setRequiredExtensionsDeferred] = useState<Deferred<boolean>>();
+        const [extensionInstallError, setExtensionInstallError] = useState<InstallFailedInfo>();
 
-        const [rootComponent, setRootComponent] = useState<ComponentType>();
+        const [bootstrapServices, setBootstrapServices] = useState<{ rootComponentService: IRootComponentService; watcherService: IWatcherService }>();
 
         // This is the main async initialization.
         useEffect(() => {
             const initializeExtensionManagerAsync = async () => {
                 const serviceContainer = new ServiceContainer("ModularToolContainer");
 
+                // Expose the settings store as a service so other services can read/write settings.
+                await serviceContainer.addServiceAsync<[ISettingsStore], []>({
+                    friendlyName: "Settings Store",
+                    produces: [SettingsStoreIdentity],
+                    factory: () => settingsStore,
+                });
+
+                // Register watcher service early since many other services will rely on it.
+                // TODO: Really this should be in the Inspector layer, but we would need a way
+                //       to setup the WatcherContext.Provider before the root component is rendered
+                //       for that to work, since components will use the WatcherContext.
+                await serviceContainer.addServiceAsync(WatcherServiceDefinition);
+
                 // Register the shell service (top level toolbar/side pane UI layout).
                 await serviceContainer.addServiceAsync(MakeShellServiceDefinition(options));
 
-                // Register a service that simply consumes the IRootComponentService and sets the root component as state so it can be rendered.
-                await serviceContainer.addServiceAsync<[], [IRootComponentService]>({
-                    friendlyName: "Root Component Bootstrapper",
-                    consumes: [RootComponentServiceIdentity],
-                    factory: (rootComponentService) => {
+                // Register a service that simply consumes the services we need before first render.
+                await serviceContainer.addServiceAsync<[], [IRootComponentService, IWatcherService]>({
+                    friendlyName: "Service Bootstrapper",
+                    consumes: [RootComponentServiceIdentity, WatcherServiceIdentity],
+                    factory: (rootComponentService, watcherService) => {
                         // Use function syntax for the state setter since the root component may be a function component.
-                        setRootComponent(() => rootComponentService.rootComponent);
+                        setBootstrapServices({ rootComponentService, watcherService });
                         return {
-                            dispose: () => setRootComponent(undefined),
+                            dispose: () => setBootstrapServices(undefined),
                         };
                     },
                 });
 
-                // Register the extension list service (for browsing/installing extensions) if extension feeds are provided.
-                if (extensionFeeds.length > 0) {
-                    await serviceContainer.addServiceAsync(ExtensionListServiceDefinition);
-                }
+                // Register the theme service (exposes the current theme to other services).
+                await serviceContainer.addServiceAsync(ThemeServiceDefinition);
 
                 // Register the theme selector service (for selecting the theme) if theming is configured.
-                if (isThemeable) {
+                if (showThemeSelector) {
                     await serviceContainer.addServiceAsync(ThemeSelectorServiceDefinition);
+                }
+
+                // Register the extension list service (for browsing/installing extensions) if extension feeds are provided.
+                if (extensionFeeds.length > 0) {
+                    const { ExtensionListServiceDefinition } = await import("./services/extensionsListService");
+                    await serviceContainer.addServiceAsync(ExtensionListServiceDefinition);
                 }
 
                 // Register all external services (that make up a unique tool).
                 await serviceContainer.addServicesAsync(...serviceDefinitions);
 
                 // Create the extension manager, passing along the registry for runtime changes to the registered services.
-                const extensionManager = await ExtensionManager.CreateAsync(serviceContainer, extensionFeeds);
+                const extensionManager = await ExtensionManager.CreateAsync(namespace, serviceContainer, extensionFeeds, setExtensionInstallError);
 
                 // Check query params for required extensions. This lets users share links with sets of extensions.
                 const queryParams = new URLSearchParams(window.location.search);
@@ -182,40 +238,91 @@ export function MakeModularTool(options: ModularToolOptions): IDisposable {
             requiredExtensionsDeferred?.resolve(false);
         }, [setRequiredExtensions, requiredExtensionsDeferred]);
 
-        // Show a spinner until a main view has been set.
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const Content: ComponentType = rootComponent ?? (() => <Spinner className={classes.spinner} />);
+        const onAcknowledgedExtensionInstallError = useCallback(() => {
+            setExtensionInstallError(undefined);
+        }, [setExtensionInstallError]);
 
-        return (
-            <ExtensionManagerContext.Provider value={extensionManagerContext}>
-                <FluentProvider className={classes.app} theme={isDarkMode ? DarkTheme : LightTheme}>
-                    <>
-                        <Dialog open={!!requiredExtensions} modalType="alert">
-                            <DialogSurface>
-                                <DialogBody>
-                                    <DialogTitle>Required Extensions</DialogTitle>
-                                    <DialogContent>
-                                        Opening this URL requires the following extensions to be installed and enabled:
-                                        <ul>{requiredExtensions?.map((name) => <li key={name}>{name}</li>)}</ul>
-                                    </DialogContent>
-                                    <DialogActions>
-                                        <Button appearance="primary" onClick={onAcceptRequiredExtensions}>
-                                            Install & Enable
-                                        </Button>
-                                        <Button appearance="secondary" onClick={onRejectRequiredExtensions}>
-                                            No Thanks
-                                        </Button>
-                                    </DialogActions>
-                                </DialogBody>
-                            </DialogSurface>
-                        </Dialog>
-                        <Suspense fallback={<Spinner className={classes.spinner} />}>
-                            <Content />
-                        </Suspense>
-                    </>
-                </FluentProvider>
-            </ExtensionManagerContext.Provider>
-        );
+        // Show a spinner until a main view has been set.
+        if (!bootstrapServices) {
+            return (
+                <SettingsStoreContext.Provider value={settingsStore}>
+                    <Theme className={classes.app}>
+                        <Spinner className={classes.spinner} />
+                    </Theme>
+                </SettingsStoreContext.Provider>
+            );
+        } else {
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            const Content: ComponentType = bootstrapServices.rootComponentService.rootComponent;
+
+            return (
+                // Expose the settings store as a React context so that UI components can read/write
+                // settings without the ISettingsService needing to be explicitly passed around.
+                <SettingsStoreContext.Provider value={settingsStore}>
+                    <WatcherContext.Provider value={bootstrapServices.watcherService}>
+                        <ExtensionManagerContext.Provider value={extensionManagerContext}>
+                            <Theme className={classes.app}>
+                                <ToastProvider>
+                                    <Dialog open={!!requiredExtensions} modalType="alert">
+                                        <DialogSurface>
+                                            <DialogBody>
+                                                <DialogTitle>Required Extensions</DialogTitle>
+                                                <DialogContent>
+                                                    Opening this URL requires the following extensions to be installed and enabled:
+                                                    <ul>
+                                                        {requiredExtensions?.map((name) => (
+                                                            <li key={name}>{name}</li>
+                                                        ))}
+                                                    </ul>
+                                                </DialogContent>
+                                                <DialogActions>
+                                                    <Button appearance="primary" onClick={onAcceptRequiredExtensions}>
+                                                        Install & Enable
+                                                    </Button>
+                                                    <Button appearance="secondary" onClick={onRejectRequiredExtensions}>
+                                                        No Thanks
+                                                    </Button>
+                                                </DialogActions>
+                                            </DialogBody>
+                                        </DialogSurface>
+                                    </Dialog>
+                                    <Dialog open={!!extensionInstallError} modalType="alert">
+                                        <DialogSurface>
+                                            <DialogBody>
+                                                <DialogTitle>
+                                                    <div className={classes.extensionErrorTitleDiv}>
+                                                        Extension Install Error
+                                                        <ErrorCircleRegular className={classes.extensionErrorIcon} />
+                                                    </div>
+                                                </DialogTitle>
+                                                <DialogContent>
+                                                    <List>
+                                                        <ListItem>
+                                                            <Body1>{`Extension "${extensionInstallError?.extension.name}" failed to install and was removed.`}</Body1>
+                                                        </ListItem>
+                                                        <ListItem>
+                                                            <Body1>{`${extensionInstallError?.error}`}</Body1>
+                                                        </ListItem>
+                                                    </List>
+                                                </DialogContent>
+                                                <DialogActions>
+                                                    <Button appearance="primary" onClick={onAcknowledgedExtensionInstallError}>
+                                                        Close
+                                                    </Button>
+                                                </DialogActions>
+                                            </DialogBody>
+                                        </DialogSurface>
+                                    </Dialog>
+                                    <Suspense fallback={<Spinner className={classes.spinner} />}>
+                                        <Content />
+                                    </Suspense>
+                                </ToastProvider>
+                            </Theme>
+                        </ExtensionManagerContext.Provider>
+                    </WatcherContext.Provider>
+                </SettingsStoreContext.Provider>
+            );
+        }
     };
 
     // Set the container element to be a flex container so that the tool can be displayed properly.
@@ -226,11 +333,15 @@ export function MakeModularTool(options: ModularToolOptions): IDisposable {
     const reactRoot = createRoot(containerElement);
     reactRoot.render(createElement(modularToolRootComponent));
 
+    let disposed = false;
     return {
         dispose: () => {
             // Unmount and restore the original container element display.
-            reactRoot.unmount();
-            containerElement.style.display = originalContainerElementDisplay;
+            if (!disposed) {
+                disposed = true;
+                reactRoot.unmount();
+                containerElement.style.display = originalContainerElementDisplay;
+            }
         },
     };
 }

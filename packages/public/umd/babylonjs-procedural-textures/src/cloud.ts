@@ -1,4 +1,4 @@
-/* eslint-disable import/no-internal-modules */
-import * as proceduralTexture from "@lts/procedural-textures/legacy/legacy-cloud";
+/* eslint-disable @typescript-eslint/no-restricted-imports */
+import * as proceduralTexture from "procedural-textures/legacy/legacy-cloud";
 export { proceduralTexture };
 export default proceduralTexture;

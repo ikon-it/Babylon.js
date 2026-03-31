@@ -1,10 +1,10 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { Vector2 } from "../Maths/math.vector";
-import type { PickingInfo } from "../Collisions/pickingInfo";
-import type { IMouseEvent, IPointerEvent } from "./deviceInputEvents";
-import type { InputManager } from "../Inputs/scene.inputManager";
+import { type PickingInfo } from "../Collisions/pickingInfo";
+import { type IMouseEvent, type IPointerEvent } from "./deviceInputEvents";
+import { type InputManager } from "../Inputs/scene.inputManager";
 
-import type { Ray } from "../Culling/ray";
+import { type Ray } from "../Culling/ray";
 
 /**
  * Gather the list of pointer event types as constants.
@@ -170,4 +170,8 @@ export interface PointerTouch {
      * Event type passed from DOM.
      */
     type: any;
+    /**
+     * The touch event's associated button ID (0: left, 1: middle, 2: right, etc.)
+     */
+    button?: number;
 }

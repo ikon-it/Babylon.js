@@ -1,8 +1,8 @@
 import { Camera } from "../../Cameras/camera";
 import { UniversalCamera } from "../../Cameras/universalCamera";
-import type { Scene } from "../../scene";
+import { type Scene } from "../../scene";
 import { Matrix, Vector3 } from "../../Maths/math.vector";
-import type { Nullable } from "../../types";
+import { type Nullable } from "../../types";
 import { TargetCamera } from "../targetCamera";
 import { TransformNode } from "../../Meshes/transformNode";
 import { Viewport } from "../../Maths/math.viewport";
@@ -86,7 +86,7 @@ export class StereoscopicScreenUniversalCamera extends UniversalCamera {
             cam.maxZ = this.maxZ;
             cam.fov = this.fov;
             cam.upVector.copyFrom(this.upVector);
-            if (cam.rotationQuaternion) {
+            if (cam.rotationQuaternion && this.rotationQuaternion) {
                 cam.rotationQuaternion.copyFrom(this.rotationQuaternion);
             } else {
                 cam.rotation.copyFrom(this.rotation);

@@ -1,24 +1,22 @@
 import { Constants } from "../Engines/constants";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
 import { Texture } from "../Materials/Textures/texture";
-import type { TextureSize } from "../Materials/Textures/textureCreationOptions";
-import { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
-import type { IProceduralTextureCreationOptions } from "../Materials/Textures/Procedurals/proceduralTexture";
-import { PostProcess } from "../PostProcesses/postProcess";
-import type { PostProcessOptions } from "../PostProcesses/postProcess";
+import { type TextureSize } from "../Materials/Textures/textureCreationOptions";
+import { ProceduralTexture, type IProceduralTextureCreationOptions } from "../Materials/Textures/Procedurals/proceduralTexture";
+import { PostProcess, type PostProcessOptions } from "../PostProcesses/postProcess";
 import { Vector3, Vector4 } from "../Maths/math.vector";
 import { RawTexture } from "../Materials/Textures/rawTexture";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Observable } from "../Misc/observable";
-import type { CubeTexture } from "../Materials/Textures/cubeTexture";
+import { type CubeTexture } from "../Materials/Textures/cubeTexture";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
-import { Engine } from "../Engines/engine";
 import { _WarnImport } from "../Misc/devTools";
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 import { EngineStore } from "../Engines/engineStore";
 import { Logger } from "../Misc/logger";
+import { _RetryWithInterval } from "../Misc/timingTools";
 
 /**
  * Build cdf maps to be used for IBL importance sampling.
@@ -169,7 +167,7 @@ export class IblCdfGenerator {
             return;
         }
         const blackPixels = new Uint16Array([0, 0, 0, 255]);
-        this._dummyTexture = new RawTexture(blackPixels, 1, 1, Engine.TEXTUREFORMAT_RGBA, sceneOrEngine, false, false, undefined, Constants.TEXTURETYPE_HALF_FLOAT);
+        this._dummyTexture = new RawTexture(blackPixels, 1, 1, Constants.TEXTUREFORMAT_RGBA, sceneOrEngine, false, false, undefined, Constants.TEXTURETYPE_HALF_FLOAT);
         if (this._scene) {
             IblCdfGenerator._SceneComponentInitialization(this._scene);
         }
@@ -372,30 +370,43 @@ export class IblCdfGenerator {
     // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/promise-function-async
     public renderWhenReady(): Promise<void> {
         this._cachedDominantDirection = null;
-        // Once the textures are generated, notify that they are ready to use.
-        this._icdfPT.onGeneratedObservable.addOnce(() => {
-            this.onGeneratedObservable.notifyObservers();
-        });
-        const promises: Array<Promise<void>> = [];
-        const renderTargets: Array<ProceduralTexture> = [this._cdfyPT, this._cdfxPT, this._scaledLuminancePT, this._icdfPT];
-        for (const target of renderTargets) {
-            promises.push(
-                new Promise((resolve) => {
-                    if (target.isReady()) {
-                        resolve();
-                    } else {
-                        target.getEffect().executeWhenCompiled(() => {
-                            resolve();
-                        });
-                    }
-                })
+
+        // Even if a IBL source must be set before calling this function, _icdfPT may not yet be created because the creation may be asynchronous (see @set iblSource).
+        const icdfPTPromise = new Promise((resolve, reject) => {
+            _RetryWithInterval(
+                () => !!this._icdfPT,
+                () => resolve(void 0),
+                () => reject(new Error("Waiting for _icdfPT creation failed"))
             );
-        }
-        // eslint-disable-next-line github/no-then
-        return Promise.all(promises).then(() => {
+        });
+
+        // eslint-disable-next-line github/no-then, @typescript-eslint/promise-function-async
+        return icdfPTPromise.then(() => {
+            // Once the textures are generated, notify that they are ready to use.
+            this._icdfPT.onGeneratedObservable.addOnce(() => {
+                this.onGeneratedObservable.notifyObservers();
+            });
+            const promises: Array<Promise<void>> = [];
+            const renderTargets: Array<ProceduralTexture> = [this._cdfyPT, this._cdfxPT, this._scaledLuminancePT, this._icdfPT];
             for (const target of renderTargets) {
-                target.render();
+                promises.push(
+                    new Promise((resolve) => {
+                        if (target.isReady()) {
+                            resolve();
+                        } else {
+                            target.getEffect().executeWhenCompiled(() => {
+                                resolve();
+                            });
+                        }
+                    })
+                );
             }
+            // eslint-disable-next-line github/no-then
+            return Promise.all(promises).then(() => {
+                for (const target of renderTargets) {
+                    target.render();
+                }
+            });
         });
     }
 

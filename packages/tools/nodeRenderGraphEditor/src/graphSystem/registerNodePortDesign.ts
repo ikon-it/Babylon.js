@@ -1,7 +1,7 @@
 import { BlockTools } from "../blockTools";
-import type { StateManager } from "shared-ui-components/nodeGraphSystem/stateManager";
-import type { IPortData } from "shared-ui-components/nodeGraphSystem/interfaces/portData";
-import type { ConnectionPointPortData } from "./connectionPointPortData";
+import { type StateManager } from "shared-ui-components/nodeGraphSystem/stateManager";
+import { type IPortData } from "shared-ui-components/nodeGraphSystem/interfaces/portData";
+import { type ConnectionPointPortData } from "./connectionPointPortData";
 import { NodeRenderGraphBlockConnectionPointTypes } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
 
 export const RegisterNodePortDesign = (stateManager: StateManager) => {
@@ -41,6 +41,7 @@ export const RegisterNodePortDesign = (stateManager: StateManager) => {
             case NodeRenderGraphBlockConnectionPointTypes.Texture:
             case NodeRenderGraphBlockConnectionPointTypes.TextureDepthStencilAttachment:
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewDepth:
+            case NodeRenderGraphBlockConnectionPointTypes.TextureNormalizedViewDepth:
             case NodeRenderGraphBlockConnectionPointTypes.TextureViewNormal:
             case NodeRenderGraphBlockConnectionPointTypes.TextureAlbedo:
             case NodeRenderGraphBlockConnectionPointTypes.TextureReflectivity:

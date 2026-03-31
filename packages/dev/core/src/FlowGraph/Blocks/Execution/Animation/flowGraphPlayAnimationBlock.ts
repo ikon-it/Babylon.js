@@ -1,11 +1,11 @@
-import type { FlowGraphContext } from "../../../flowGraphContext";
-import type { FlowGraphDataConnection } from "../../../flowGraphDataConnection";
+import { type FlowGraphContext } from "../../../flowGraphContext";
+import { type FlowGraphDataConnection } from "../../../flowGraphDataConnection";
 import { FlowGraphAsyncExecutionBlock } from "../../../flowGraphAsyncExecutionBlock";
 import { RichTypeAny, RichTypeNumber, RichTypeBoolean } from "../../../flowGraphRichTypes";
 import { RegisterClass } from "../../../../Misc/typeStore";
-import type { IFlowGraphBlockConfiguration } from "../../../flowGraphBlock";
+import { type IFlowGraphBlockConfiguration } from "../../../flowGraphBlock";
 import { AnimationGroup } from "core/Animations/animationGroup";
-import type { Animation } from "core/Animations/animation";
+import { type Animation } from "core/Animations/animation";
 import { FlowGraphBlockNames } from "../../flowGraphBlockNames";
 
 /**
@@ -87,7 +87,7 @@ export class FlowGraphPlayAnimationBlock extends FlowGraphAsyncExecutionBlock {
      * @internal
      * @param context
      */
-    public _preparePendingTasks(context: FlowGraphContext): void {
+    public override _preparePendingTasks(context: FlowGraphContext): void {
         const ag = this.animationGroup.getValue(context);
         const animation = this.animation.getValue(context);
         if (!ag && !animation) {
@@ -200,7 +200,13 @@ export class FlowGraphPlayAnimationBlock extends FlowGraphAsyncExecutionBlock {
     private _stopAnimationGroup(context: FlowGraphContext, animationGroup: AnimationGroup) {
         // stop, while skipping the on AnimationEndObservable to avoid the "done" signal
         animationGroup.stop(true);
-        animationGroup.dispose();
+        // Only dispose animation groups that were internally created by this block
+        // (i.e. built from individual animations). Scene-provided animation groups
+        // must not be disposed as that removes them from the scene catalog and
+        // breaks the editor dropdown / re-use on replay.
+        if (animationGroup.name.startsWith("flowGraphAnimationGroup-")) {
+            animationGroup.dispose();
+        }
         this._removeFromCurrentlyRunning(context, animationGroup);
     }
 
@@ -217,7 +223,7 @@ export class FlowGraphPlayAnimationBlock extends FlowGraphAsyncExecutionBlock {
      * @internal
      * Stop any currently running animations.
      */
-    public _cancelPendingTasks(context: FlowGraphContext): void {
+    public override _cancelPendingTasks(context: FlowGraphContext): void {
         const ag = this.currentAnimationGroup.getValue(context);
         if (ag) {
             this._stopAnimationGroup(context, ag);

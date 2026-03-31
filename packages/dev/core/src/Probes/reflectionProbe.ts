@@ -2,12 +2,12 @@ import { serializeAsMeshReference, serializeAsVector3 } from "../Misc/decorators
 import { SerializationHelper } from "../Misc/decorators.serialization";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { Matrix, Vector3 } from "../Maths/math.vector";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Nullable } from "../types";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Nullable } from "../types";
 import { Scene } from "../scene";
 import { Constants } from "../Engines/constants";
-import type { UniformBuffer } from "../Materials/uniformBuffer";
-import type { IAssetContainer } from "core/IAssetContainer";
+import { type UniformBuffer } from "../Materials/uniformBuffer";
+import { type IAssetContainer } from "core/IAssetContainer";
 
 declare module "../scene" {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -104,18 +104,18 @@ export class ReflectionProbe {
     ) {
         this._scene = scene;
 
-        if (scene.getEngine().supportsUniformBuffers) {
-            this._sceneUBOs = [];
-            for (let i = 0; i < 6; ++i) {
-                this._sceneUBOs.push(scene.createSceneUniformBuffer(`Scene for Reflection Probe (name "${name}") face #${i}`));
-            }
-        }
-
         // Create the scene field if not exist.
         if (!this._scene.reflectionProbes) {
             this._scene.reflectionProbes = [] as ReflectionProbe[];
         }
         this._scene.reflectionProbes.push(this);
+
+        if (scene.getEngine().supportsUniformBuffers) {
+            this._sceneUBOs = [];
+            for (let i = 0; i < 6; ++i) {
+                this._sceneUBOs.push(scene.createSceneUniformBuffer(`Scene for Reflection Probe (name "${name}") face #${i}`, { forceMono: true }));
+            }
+        }
 
         let textureType = Constants.TEXTURETYPE_UNSIGNED_BYTE;
         if (useFloat) {
@@ -182,14 +182,20 @@ export class ReflectionProbe {
                     this._renderTargetTexture.activeCamera = scene.activeCamera.rigParent || null;
                 }
             }
+            if (this._sceneUBOs) {
+                scene.finalizeSceneUbo();
+            }
             scene._forcedViewPosition = this.position;
         });
 
         let currentApplyByPostProcess: boolean;
 
         this._renderTargetTexture.onBeforeBindObservable.add(() => {
+            const engine = scene.getEngine();
             this._currentSceneUBO = scene.getSceneUniformBuffer();
-            scene.getEngine()._debugPushGroup?.(`reflection probe generation for ${name}`, 1);
+            if (engine._enableGPUDebugMarkers) {
+                engine._debugPushGroup?.(`reflection probe generation for ${name}`);
+            }
             currentApplyByPostProcess = this._scene.imageProcessingConfiguration.applyByPostProcess;
             if (linearSpace) {
                 scene.imageProcessingConfiguration.applyByPostProcess = true;
@@ -197,13 +203,16 @@ export class ReflectionProbe {
         });
 
         this._renderTargetTexture.onAfterUnbindObservable.add(() => {
+            const engine = scene.getEngine();
             scene.imageProcessingConfiguration.applyByPostProcess = currentApplyByPostProcess;
             scene._forcedViewPosition = null;
             if (this._sceneUBOs) {
                 scene.setSceneUniformBuffer(this._currentSceneUBO);
             }
             scene.updateTransformMatrix(true);
-            scene.getEngine()._debugPopGroup?.(1);
+            if (engine._enableGPUDebugMarkers) {
+                engine._debugPopGroup?.();
+            }
         });
     }
 

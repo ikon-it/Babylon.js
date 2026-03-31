@@ -1,13 +1,13 @@
 import { AbstractMesh } from "../Meshes/abstractMesh";
 import { Mesh } from "../Meshes/mesh";
-import type { Nullable } from "../types";
-import type { Observer } from "../Misc/observable";
-import type { Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Observer } from "../Misc/observable";
+import { type Scene } from "../scene";
 import { Vector3 } from "../Maths/math.vector";
 import { VertexBuffer } from "../Buffers/buffer";
 import { VertexData } from "../Meshes/mesh.vertexData";
 import { Lerp } from "../Maths/math.scalar.functions";
-import type { TransformNode } from "../Meshes/transformNode";
+import { type TransformNode } from "../Meshes/transformNode";
 
 Mesh._TrailMeshParser = (parsedMesh: any, scene: Scene) => {
     return TrailMesh.Parse(parsedMesh, scene);
@@ -95,8 +95,8 @@ export class TrailMesh extends Mesh {
             this._length = diameterOrOptions.length || 60;
             this._segments = diameterOrOptions.segments ? (diameterOrOptions.segments > this._length ? this._length : diameterOrOptions.segments) : this._length;
             this._sectionPolygonPointsCount = diameterOrOptions.sections || 4;
-            this._doNotTaper = diameterOrOptions.doNotTaper || false;
-            this._autoStart = diameterOrOptions.autoStart || true;
+            this._doNotTaper = diameterOrOptions.doNotTaper ?? false;
+            this._autoStart = diameterOrOptions.autoStart ?? true;
         } else {
             this.diameter = diameterOrOptions || 1;
             this._length = length;
@@ -128,7 +128,7 @@ export class TrailMesh extends Mesh {
         const normals: Array<number> = [];
         const indices: Array<number> = [];
         const uvs: Array<number> = [];
-        let meshCenter = Vector3.Zero();
+        let meshCenter: Vector3;
         if (this._generator instanceof AbstractMesh && this._generator.hasBoundingInfo) {
             meshCenter = this._generator.getBoundingInfo().boundingBox.centerWorld;
         } else {

@@ -1,18 +1,16 @@
 import { VertexBuffer } from "../Buffers/buffer";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { _InstancesBatch } from "../Meshes/mesh";
-import { Mesh } from "../Meshes/mesh";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type _InstancesBatch, Mesh } from "../Meshes/mesh";
 import { Scene } from "../scene";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { Constants } from "../Engines/constants";
-import type { ISceneComponent } from "../sceneComponent";
-import { SceneComponentConstants } from "../sceneComponent";
+import { type ISceneComponent, SceneComponentConstants } from "../sceneComponent";
 import { DrawWrapper } from "../Materials/drawWrapper";
 
 import { AddClipPlaneUniforms, BindClipPlane, PrepareStringDefinesForClipPlanes } from "core/Materials/clipPlaneMaterialHelper";
 import { BindBonesParameters, BindMorphTargetParameters, PrepareDefinesAndAttributesForMorphTargets, PushAttributesForInstances } from "../Materials/materialHelper.functions";
 import { EffectFallbacks } from "core/Materials/effectFallbacks";
-import type { IEffectCreationOptions } from "core/Materials/effect";
+import { type IEffectCreationOptions } from "core/Materials/effect";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 declare module "../scene" {
@@ -119,6 +117,11 @@ export class OutlineRenderer implements ISceneComponent {
      * Defines a zOffset default Unit to prevent zFighting between the overlay and the mesh.
      */
     public zOffsetUnits = 4; // 4 to account for projection a bit by default
+
+    /**
+     * Gets or sets a boolean indicating if the renderer is enabled
+     */
+    public enabled = true;
 
     private _engine: AbstractEngine;
     private _savedDepthWrite: boolean;
@@ -387,7 +390,7 @@ export class OutlineRenderer implements ISceneComponent {
                 "color",
                 "logarithmicDepthConstant",
                 "morphTargetInfluences",
-                "boneTextureWidth",
+                "boneTextureInfo",
                 "morphTargetCount",
                 "morphTargetTextureInfo",
                 "morphTargetTextureIndices",
@@ -432,6 +435,10 @@ export class OutlineRenderer implements ISceneComponent {
     }
 
     private _beforeRenderingMesh(mesh: Mesh, subMesh: SubMesh, batch: _InstancesBatch): void {
+        if (!this.enabled) {
+            return;
+        }
+
         // Outline - step 1
         this._savedDepthWrite = this._engine.getDepthWrite();
         if (mesh.renderOutline) {
@@ -467,6 +474,10 @@ export class OutlineRenderer implements ISceneComponent {
     }
 
     private _afterRenderingMesh(mesh: Mesh, subMesh: SubMesh, batch: _InstancesBatch): void {
+        if (!this.enabled) {
+            return;
+        }
+
         // Overlay
         if (mesh.renderOverlay) {
             const currentMode = this._engine.getAlphaMode();
@@ -475,7 +486,7 @@ export class OutlineRenderer implements ISceneComponent {
             this.render(subMesh, batch, true, this._passIdForDrawWrapper[3]);
             this._engine.setAlphaMode(currentMode);
             this._engine.setDepthWrite(this._savedDepthWrite);
-            this._engine.alphaState.alphaBlend = alphaBlendState;
+            this._engine.alphaState.setAlphaBlend(alphaBlendState);
         }
 
         // Outline - step 2

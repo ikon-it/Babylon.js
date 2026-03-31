@@ -1,7 +1,7 @@
-import type { Nullable, DataArray, FloatArray } from "../types";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable, type DataArray, type FloatArray } from "../types";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { DataBuffer } from "./dataBuffer";
-import type { Mesh } from "../Meshes/mesh";
+import { type Mesh } from "../Meshes/mesh";
 import { Logger } from "../Misc/logger";
 import { Constants } from "../Engines/constants";
 import { EnumerateFloatValues, GetFloatData, GetTypeByteLength } from "./bufferUtils";
@@ -528,7 +528,7 @@ export class VertexBuffer {
         divisor = 1,
         takeBufferOwnership = false
     ) {
-        let updatable = false;
+        let updatable: boolean;
 
         this.engine = engine;
 
@@ -623,15 +623,16 @@ export class VertexBuffer {
     }
 
     /**
-     * Gets current buffer's data
-     * @returns a DataArray or null
+     * Gets the raw data from the underlying buffer.
+     * Note: The data may include more than just this vertex buffer's values.
+     * @returns the buffer data as a DataArray, or null.
      */
     public getData(): Nullable<DataArray> {
         return this._buffer.getData();
     }
 
     /**
-     * Gets current buffer's data as a float array. Float data is constructed if the vertex buffer data cannot be returned directly.
+     * Gets this vertex buffer's data as a float array. Float data is constructed if the vertex buffer data cannot be returned directly.
      * @param totalVertices number of vertices in the buffer to take into account
      * @param forceCopy defines a boolean indicating that the returned array must be cloned upon returning it
      * @returns a float array containing vertex data

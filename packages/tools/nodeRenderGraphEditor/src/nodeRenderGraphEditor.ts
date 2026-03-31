@@ -2,14 +2,15 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 import { GlobalState } from "./globalState";
 import { GraphEditor } from "./graphEditor";
-import type { NodeRenderGraph } from "core/FrameGraph/Node/nodeRenderGraph";
+import { type NodeRenderGraph } from "core/FrameGraph/Node/nodeRenderGraph";
 import { SerializationTools } from "./serializationTools";
-import type { Observable } from "core/Misc/observable";
+import { type Observable } from "core/Misc/observable";
 import { RegisterToDisplayManagers } from "./graphSystem/registerToDisplayLedger";
 import { RegisterToPropertyTabManagers } from "./graphSystem/registerToPropertyLedger";
 import { RegisterTypeLedger } from "./graphSystem/registerToTypeLedger";
-import type { Scene } from "core/scene";
+import { type Scene } from "core/scene";
 import { CreatePopup } from "shared-ui-components/popupHelper";
+import { type INodeRenderGraphCustomBlockDescription } from "core/FrameGraph/Node/Types/nodeRenderGraphTypes";
 
 /**
  * Interface used to specify creation options for the node editor
@@ -20,6 +21,7 @@ export interface INodeEditorOptions {
     hostElement?: HTMLElement;
     customSave?: { label: string; action: (data: string) => Promise<void> };
     customLoadObservable?: Observable<any>;
+    customBlockDescriptions?: INodeRenderGraphCustomBlockDescription[];
 }
 
 /**
@@ -45,8 +47,6 @@ export class NodeRenderGraphEditor {
             }
         }
 
-        alert("Frame graph is currently in alpha phase, so don't use it in production code yet!");
-
         let hostElement = options.hostElement;
 
         if (!hostElement) {
@@ -61,10 +61,12 @@ export class NodeRenderGraphEditor {
         globalState.nodeRenderGraph = options.nodeRenderGraph;
         globalState.hostElement = hostElement;
         globalState.hostDocument = hostElement.ownerDocument!;
+        globalState.hostScene = options.hostScene;
         globalState.customSave = options.customSave;
         globalState.hostWindow = hostElement.ownerDocument.defaultView!;
         globalState.stateManager.hostDocument = globalState.hostDocument;
-        globalState.noAutoFillExternalInputs = options.hostScene !== undefined && options.hostScene !== null;
+        globalState.noAutoFillExternalInputs = options.nodeRenderGraph.options.autoFillExternalInputs === false;
+        globalState.customBlockDescriptions = options.customBlockDescriptions;
 
         const graphEditor = React.createElement(GraphEditor, {
             globalState: globalState,

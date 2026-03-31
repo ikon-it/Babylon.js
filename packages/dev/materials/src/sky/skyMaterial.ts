@@ -1,17 +1,16 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 import { serializeAsVector3, serialize } from "core/Misc/decorators";
 import { SerializationHelper } from "core/Misc/decorators.serialization";
-import type { Matrix } from "core/Maths/math.vector";
-import { Vector3, Quaternion } from "core/Maths/math.vector";
-import type { IAnimatable } from "core/Animations/animatable.interface";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type Matrix, Vector3, Quaternion, TmpVectors } from "core/Maths/math.vector";
+import { type IAnimatable } from "core/Animations/animatable.interface";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
 import { MaterialDefines } from "core/Materials/materialDefines";
 import { PushMaterial } from "core/Materials/pushMaterial";
 import { VertexBuffer } from "core/Buffers/buffer";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { SubMesh } from "core/Meshes/subMesh";
-import type { Mesh } from "core/Meshes/mesh";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import { type SubMesh } from "core/Meshes/subMesh";
+import { type Mesh } from "core/Meshes/mesh";
 import { Scene } from "core/scene";
 import { RegisterClass } from "core/Misc/typeStore";
 
@@ -199,7 +198,19 @@ export class SkyMaterial extends PushMaterial {
             return true;
         }
 
-        PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, false, defines);
+        PrepareDefinesForMisc(
+            mesh,
+            scene,
+            this._useLogarithmicDepth,
+            this.pointsCloud,
+            this.fogEnabled,
+            false,
+            defines,
+            undefined,
+            undefined,
+            undefined,
+            this._isVertexOutputInvariant
+        );
 
         // Attribs
         PrepareDefinesForAttributes(mesh, defines, true, false);
@@ -322,7 +333,7 @@ export class SkyMaterial extends PushMaterial {
             this._cameraPosition.x = cameraWorldMatrix.m[12];
             this._cameraPosition.y = cameraWorldMatrix.m[13];
             this._cameraPosition.z = cameraWorldMatrix.m[14];
-            this._activeEffect.setVector3("cameraPosition", this._cameraPosition);
+            this._activeEffect.setVector3("cameraPosition", TmpVectors.Vector3[0].copyFrom(this._cameraPosition).subtractInPlace(scene.floatingOriginOffset));
         }
 
         this._activeEffect.setVector3("cameraOffset", this.cameraOffset);

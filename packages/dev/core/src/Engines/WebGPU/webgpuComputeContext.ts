@@ -1,16 +1,16 @@
-import type { DataBuffer } from "core/Buffers/dataBuffer";
-import type { StorageBuffer } from "../../Buffers/storageBuffer";
-import type { IComputeContext } from "../../Compute/IComputeContext";
-import type { BaseTexture } from "../../Materials/Textures/baseTexture";
-import type { TextureSampler } from "../../Materials/Textures/textureSampler";
-import type { UniformBuffer } from "../../Materials/uniformBuffer";
+import { type DataBuffer } from "core/Buffers/dataBuffer";
+import { type StorageBuffer } from "../../Buffers/storageBuffer";
+import { type IComputeContext } from "../../Compute/IComputeContext";
+import { type BaseTexture } from "../../Materials/Textures/baseTexture";
+import { type TextureSampler } from "../../Materials/Textures/textureSampler";
+import { type UniformBuffer } from "../../Materials/uniformBuffer";
 import { Logger } from "../../Misc/logger";
-import type { ComputeBindingList, ComputeBindingMapping } from "../Extensions/engine.computeShader";
-import { ComputeBindingType } from "../Extensions/engine.computeShader";
-import type { WebGPUCacheSampler } from "./webgpuCacheSampler";
+import { type ComputeBindingList, type ComputeBindingMapping, ComputeBindingType } from "../Extensions/engine.computeShader";
+import { type WebGPUCacheSampler } from "./webgpuCacheSampler";
 import * as WebGPUConstants from "./webgpuConstants";
-import type { WebGPUHardwareTexture } from "./webgpuHardwareTexture";
-import type { ExternalTexture } from "core/Materials/Textures/externalTexture";
+import { type WebGPUHardwareTexture } from "./webgpuHardwareTexture";
+import { type ExternalTexture } from "core/Materials/Textures/externalTexture";
+import { type InternalTexture } from "core/Materials/Textures/internalTexture";
 
 /** @internal */
 export class WebGPUComputeContext implements IComputeContext {
@@ -75,6 +75,21 @@ export class WebGPUComputeContext implements IComputeContext {
                                     resource: this._cacheSampler.getSampler(texture._texture!),
                                 });
                             }
+                            entries.push({
+                                binding: index,
+                                resource: hardwareTexture.view!,
+                            });
+                        }
+                        break;
+                    }
+
+                    case ComputeBindingType.InternalTexture: {
+                        const texture = object as InternalTexture;
+                        const hardwareTexture = texture._hardwareTexture as WebGPUHardwareTexture;
+                        if (indexInGroupEntries !== undefined && bindGroupEntriesExist) {
+                            entries[indexInGroupEntries].resource = hardwareTexture.view!;
+                        } else {
+                            binding.indexInGroupEntries = entries.length;
                             entries.push({
                                 binding: index,
                                 resource: hardwareTexture.view!,

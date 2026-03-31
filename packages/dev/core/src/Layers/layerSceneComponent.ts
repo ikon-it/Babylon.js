@@ -1,12 +1,11 @@
-import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { ISceneComponent } from "../sceneComponent";
-import { SceneComponentConstants } from "../sceneComponent";
-import type { Layer } from "./layer";
-import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
+import { type Camera } from "../Cameras/camera";
+import { type Scene } from "../scene";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type ISceneComponent, SceneComponentConstants } from "../sceneComponent";
+import { type Layer } from "./layer";
+import { type RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { EngineStore } from "../Engines/engineStore";
-import type { IAssetContainer } from "core/IAssetContainer";
+import { type IAssetContainer } from "core/IAssetContainer";
 
 /**
  * Defines the layer scene component responsible to manage any layers
@@ -130,19 +129,19 @@ export class LayerSceneComponent implements ISceneComponent {
 
     private _drawRenderTargetBackground(renderTarget: RenderTargetTexture): void {
         this._draw((layer: Layer) => {
-            return this._drawRenderTargetPredicate(layer, true, true, this.scene.activeCamera!.layerMask, renderTarget);
+            return this._drawRenderTargetPredicate(layer, true, true, this.scene.activeCamera ? this.scene.activeCamera.layerMask : 0, renderTarget);
         });
     }
 
     private _drawRenderTargetForegroundWithPostProcessing(renderTarget: RenderTargetTexture): void {
         this._draw((layer: Layer) => {
-            return this._drawRenderTargetPredicate(layer, false, true, this.scene.activeCamera!.layerMask, renderTarget);
+            return this._drawRenderTargetPredicate(layer, false, true, this.scene.activeCamera ? this.scene.activeCamera.layerMask : 0, renderTarget);
         });
     }
 
     private _drawRenderTargetForegroundWithoutPostProcessing(renderTarget: RenderTargetTexture): void {
         this._draw((layer: Layer) => {
-            return this._drawRenderTargetPredicate(layer, false, false, this.scene.activeCamera!.layerMask, renderTarget);
+            return this._drawRenderTargetPredicate(layer, false, false, this.scene.activeCamera ? this.scene.activeCamera.layerMask : 0, renderTarget);
         });
     }
 

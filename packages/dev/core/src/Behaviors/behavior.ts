@@ -1,4 +1,4 @@
-import type { Nullable } from "../types";
+import { type Nullable } from "../types";
 
 /**
  * Interface used to define a behavior
@@ -21,6 +21,10 @@ export interface Behavior<T> {
      * Called when the behavior is detached from its target
      */
     detach(): void;
+    /**
+     * Gets the current attached target
+     */
+    attachedNode: Nullable<T>;
 }
 
 /**

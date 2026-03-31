@@ -1,8 +1,8 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
-import { MonacoComponent } from "./components/monacoComponent";
+import { MonacoComponent } from "./components/editor/monacoComponent";
 import { RenderingComponent } from "./components/rendererComponent";
-import { GlobalState, EditionMode, RuntimeMode } from "./globalState";
+import { GlobalState, EditionMode, RuntimeMode, type IEngineSwitchDialogRequest } from "./globalState";
 import { FooterComponent } from "./components/footerComponent";
 import { HeaderComponent } from "./components/headerComponent";
 import { SaveManager } from "./tools/saveManager";
@@ -10,6 +10,7 @@ import { LoadManager } from "./tools/loadManager";
 import { WaitRingComponent } from "./components/waitRingComponent";
 import { MetadataComponent } from "./components/metadataComponent";
 import { HamburgerMenuComponent } from "./components/hamburgerMenu";
+import { EngineSwitchDialog } from "./components/engineSwitchDialog";
 import { Utilities } from "./tools/utilities";
 import { ShortcutManager } from "./tools/shortcutManager";
 import { ErrorDisplayComponent } from "./components/errorDisplayComponent";
@@ -23,9 +24,30 @@ import { ControlledSize, SplitDirection } from "shared-ui-components/split/split
 
 interface IPlaygroundProps {
     runtimeMode: RuntimeMode;
+    version: string;
+    bundles: string[];
 }
 
-export class Playground extends React.Component<IPlaygroundProps, { errorMessage: string; mode: EditionMode }> {
+/**
+ *
+ */
+export class Playground extends React.Component<
+    IPlaygroundProps,
+    {
+        /**
+         *
+         */
+        errorMessage: string;
+        /**
+         *
+         */
+        mode: EditionMode;
+        /**
+         *
+         */
+        engineSwitchDialog: IEngineSwitchDialogRequest | null;
+    }
+> {
     private _monacoRef: React.RefObject<HTMLDivElement>;
     private _renderingRef: React.RefObject<HTMLDivElement>;
     private _splitterRef: React.RefObject<HTMLDivElement>;
@@ -33,8 +55,17 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
 
     private _globalState: GlobalState;
 
+    /**
+     *
+     */
     public saveManager: SaveManager;
+    /**
+     *
+     */
     public loadManager: LoadManager;
+    /**
+     *
+     */
     public shortcutManager: ShortcutManager;
 
     public constructor(props: IPlaygroundProps) {
@@ -42,6 +73,8 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
         this._globalState = new GlobalState();
 
         this._globalState.runtimeMode = props.runtimeMode || RuntimeMode.Editor;
+        this._globalState.version = props.version;
+        this._globalState.bundles = props.bundles;
 
         this._monacoRef = React.createRef();
         this._renderingRef = React.createRef();
@@ -50,7 +83,11 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
 
         const defaultDesktop = Utilities.ReadBoolFromStore("editor", true) ? EditionMode.Desktop : EditionMode.RenderingOnly;
 
-        this.state = { errorMessage: "", mode: window.innerWidth < this._globalState.MobileSizeTrigger ? this._globalState.mobileDefaultMode : defaultDesktop };
+        this.state = {
+            errorMessage: "",
+            mode: window.innerWidth < this._globalState.MobileSizeTrigger ? this._globalState.mobileDefaultMode : defaultDesktop,
+            engineSwitchDialog: null,
+        };
 
         window.addEventListener("resize", () => {
             const defaultDesktop = Utilities.ReadBoolFromStore("editor", true) ? EditionMode.Desktop : EditionMode.RenderingOnly;
@@ -63,6 +100,11 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
 
         this._globalState.onEditorDisplayChangedObservable.add((value) => {
             this.setState({ mode: value ? EditionMode.Desktop : EditionMode.RenderingOnly });
+        });
+
+        this._globalState.doNotRun = location.search.indexOf("norun") !== -1 || !Utilities.ReadBoolFromStore("auto-run", true);
+        this._globalState.onEngineSwitchDialogRequiredObservable.add((request) => {
+            this.setState({ engineSwitchDialog: request });
         });
 
         // Managers
@@ -91,12 +133,13 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
                 this._renderingRef.current!.classList.add("hidden");
                 this._splitterRef.current!.classList.add("hidden");
                 this._monacoRef.current!.classList.remove("hidden");
-                this._monacoRef.current!.style.width = "100%";
+                this._monacoRef.current!.classList.add("pg-monaco-wrapper__fullscreen");
                 break;
             case EditionMode.RenderingOnly:
                 this._splitContainerRef.current!.classList.add("disable-split-rendering");
                 this._splitContainerRef.current!.classList.remove("disable-split-code");
                 this._monacoRef.current!.classList.add("hidden");
+                this._monacoRef.current!.classList.remove("pg-monaco-wrapper__fullscreen");
                 this._splitterRef.current!.classList.add("hidden");
                 this._renderingRef.current!.classList.remove("hidden");
                 this._renderingRef.current!.style.width = "100%";
@@ -107,9 +150,28 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
                 this._renderingRef.current!.classList.remove("hidden");
                 this._splitterRef.current!.classList.remove("hidden");
                 this._monacoRef.current!.classList.remove("hidden");
+                this._monacoRef.current!.classList.remove("pg-monaco-wrapper__fullscreen");
                 break;
         }
     }
+
+    private _resolveEngineSwitchDialog = (shouldSwitch: boolean) => {
+        const request = this.state.engineSwitchDialog;
+        if (!request) {
+            return;
+        }
+
+        request.resolve(shouldSwitch);
+        this.setState({ engineSwitchDialog: null });
+    };
+
+    private _cancelEngineSwitchDialog = () => {
+        this._resolveEngineSwitchDialog(false);
+    };
+
+    private _confirmEngineSwitchDialog = () => {
+        this._resolveEngineSwitchDialog(true);
+    };
 
     public override render() {
         if (this._globalState.runtimeMode === RuntimeMode.Full) {
@@ -121,6 +183,12 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
                         <ErrorDisplayComponent globalState={this._globalState} />
                         <WaitRingComponent globalState={this._globalState} />
                     </div>
+                    <EngineSwitchDialog
+                        globalState={this._globalState}
+                        request={this.state.engineSwitchDialog}
+                        onCancel={this._cancelEngineSwitchDialog}
+                        onConfirm={this._confirmEngineSwitchDialog}
+                    />
                 </>
             );
         }
@@ -135,6 +203,12 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
                         <ErrorDisplayComponent globalState={this._globalState} />
                         <WaitRingComponent globalState={this._globalState} />
                     </div>
+                    <EngineSwitchDialog
+                        globalState={this._globalState}
+                        request={this.state.engineSwitchDialog}
+                        onCancel={this._cancelEngineSwitchDialog}
+                        onConfirm={this._confirmEngineSwitchDialog}
+                    />
                 </>
             );
         }
@@ -156,12 +230,18 @@ export class Playground extends React.Component<IPlaygroundProps, { errorMessage
                 <ErrorDisplayComponent globalState={this._globalState} />
                 <WaitRingComponent globalState={this._globalState} />
                 <MetadataComponent globalState={this._globalState} />
+                <EngineSwitchDialog
+                    globalState={this._globalState}
+                    request={this.state.engineSwitchDialog}
+                    onCancel={this._cancelEngineSwitchDialog}
+                    onConfirm={this._confirmEngineSwitchDialog}
+                />
             </div>
         );
     }
 
-    public static Show(hostElement: HTMLElement, mode: RuntimeMode) {
-        const playground = React.createElement(Playground, { runtimeMode: mode });
+    public static Show(hostElement: HTMLElement, mode: RuntimeMode, version: string, bundles: string[]) {
+        const playground = React.createElement(Playground, { runtimeMode: mode, version, bundles });
 
         const root = createRoot(hostElement);
         root.render(playground);

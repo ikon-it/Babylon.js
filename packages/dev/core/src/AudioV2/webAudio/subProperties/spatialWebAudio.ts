@@ -1,4 +1,4 @@
-import type { _AbstractAudioSubGraph } from "../../abstractAudio/subNodes/abstractAudioSubGraph";
+import { type _AbstractAudioSubGraph } from "../../abstractAudio/subNodes/abstractAudioSubGraph";
 import { _SpatialAudio } from "../../abstractAudio/subProperties/spatialAudio";
 import { _SpatialWebAudioUpdaterComponent } from "../components/spatialWebAudioUpdaterComponent";
 
@@ -24,7 +24,9 @@ export class _SpatialWebAudio extends _SpatialAudio {
     }
 
     /** @internal */
-    public dispose(): void {
+    public override dispose(): void {
+        super.dispose();
+
         this._updaterComponent.dispose();
         this._updaterComponent = null!;
     }

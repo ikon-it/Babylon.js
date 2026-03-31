@@ -1,16 +1,15 @@
-import type { Nullable } from "../types";
-import type { Matrix } from "../Maths/math.vector";
-import type { Camera } from "../Cameras/camera";
-import type { Effect } from "../Materials/effect";
-import type { PostProcessOptions } from "./postProcess";
-import { PostProcess } from "./postProcess";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable } from "../types";
+import { type Matrix } from "../Maths/math.vector";
+import { type Camera } from "../Cameras/camera";
+import { type PostProcessOptions, PostProcess } from "./postProcess";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 
 import { RegisterClass } from "../Misc/typeStore";
 import { serializeAsMatrix } from "../Misc/decorators";
 import { SerializationHelper } from "../Misc/decorators.serialization";
 
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
+import { ThinFilterPostProcess } from "./thinFilterPostProcess";
 
 /**
  * Applies a kernel filter to the image
@@ -18,7 +17,13 @@ import type { Scene } from "../scene";
 export class FilterPostProcess extends PostProcess {
     /** The matrix to be applied to the image */
     @serializeAsMatrix()
-    public kernelMatrix: Matrix;
+    public get kernelMatrix() {
+        return this._effectWrapper.kernelMatrix;
+    }
+
+    public set kernelMatrix(value: Matrix) {
+        this._effectWrapper.kernelMatrix = value;
+    }
 
     /**
      * Gets a string identifying the name of the class
@@ -27,6 +32,8 @@ export class FilterPostProcess extends PostProcess {
     public override getClassName(): string {
         return "FilterPostProcess";
     }
+
+    protected override _effectWrapper: ThinFilterPostProcess;
 
     /**
      *
@@ -47,23 +54,22 @@ export class FilterPostProcess extends PostProcess {
         engine?: AbstractEngine,
         reusable?: boolean
     ) {
-        super(name, "filter", ["kernelMatrix"], null, options, camera, samplingMode, engine, reusable);
-        this.kernelMatrix = kernelMatrix;
-
-        this.onApply = (effect: Effect) => {
-            effect.setMatrix("kernelMatrix", this.kernelMatrix);
+        const localOptions = {
+            uniforms: ThinFilterPostProcess.Uniforms,
+            size: typeof options === "number" ? options : undefined,
+            camera,
+            samplingMode,
+            engine,
+            reusable,
+            ...(options as PostProcessOptions),
         };
-    }
 
-    protected override _gatherImports(useWebGPU: boolean, list: Promise<any>[]) {
-        if (useWebGPU) {
-            this._webGPUReady = true;
-            list.push(Promise.all([import("../ShadersWGSL/filter.fragment")]));
-        } else {
-            list.push(Promise.all([import("../Shaders/filter.fragment")]));
-        }
+        super(name, ThinFilterPostProcess.FragmentUrl, {
+            effectWrapper: typeof options === "number" || !options.effectWrapper ? new ThinFilterPostProcess(name, engine, localOptions) : undefined,
+            ...localOptions,
+        });
 
-        super._gatherImports(useWebGPU, list);
+        this.kernelMatrix = kernelMatrix;
     }
 
     /**

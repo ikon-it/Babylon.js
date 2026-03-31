@@ -1,30 +1,27 @@
-import type { Nullable, FloatArray, DataArray, IndicesArray } from "../types";
-import type { Scene } from "../scene";
-import type { Vector2 } from "../Maths/math.vector";
-import { Vector3 } from "../Maths/math.vector";
+import { type Nullable, type FloatArray, type DataArray, type IndicesArray } from "../types";
+import { type Scene } from "../scene";
+import { type Vector2, Vector3 } from "../Maths/math.vector";
 import { Color4 } from "../Maths/math.color";
-import type { IGetSetVerticesData } from "../Meshes/mesh.vertexData";
-import { VertexData } from "../Meshes/mesh.vertexData";
-import { VertexBuffer } from "../Buffers/buffer";
+import { type IGetSetVerticesData, VertexData } from "../Meshes/mesh.vertexData";
+import { VertexBuffer, type Buffer } from "../Buffers/buffer";
 import { SubMesh } from "../Meshes/subMesh";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Effect } from "../Materials/effect";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Effect } from "../Materials/effect";
 import { SceneLoaderFlags } from "../Loading/sceneLoaderFlags";
 import { BoundingInfo } from "../Culling/boundingInfo";
 import { Constants } from "../Engines/constants";
 import { Tools } from "../Misc/tools";
 import { Tags } from "../Misc/tags";
-import type { DataBuffer } from "../Buffers/dataBuffer";
+import { type DataBuffer } from "../Buffers/dataBuffer";
 import { extractMinAndMax } from "../Maths/math.functions";
 import { EngineStore } from "../Engines/engineStore";
 import { useOpenGLOrientationForUV } from "../Compat/compatibilityOptions";
 
-import type { Mesh } from "../Meshes/mesh";
-import type { Buffer } from "../Buffers/buffer";
-import type { AbstractEngine } from "../Engines/abstractEngine";
-import type { ThinEngine } from "../Engines/thinEngine";
-import { CopyFloatData } from "../Buffers/bufferUtils";
-import type { IAssetContainer } from "core/IAssetContainer";
+import { type Mesh } from "../Meshes/mesh";
+import { type AbstractEngine } from "../Engines/abstractEngine";
+import { type ThinEngine } from "../Engines/thinEngine";
+import { CopyFloatData, GetTypedArrayData } from "../Buffers/bufferUtils";
+import { type IAssetContainer } from "core/IAssetContainer";
 
 /**
  * Class used to store geometry data (vertex buffers + index buffer)
@@ -142,8 +139,9 @@ export class Geometry implements IGetSetVerticesData {
      * @param vertexData defines the VertexData used to get geometry data
      * @param updatable defines if geometry must be updatable (false by default)
      * @param mesh defines the mesh that will be associated with the geometry
+     * @param totalVertices defines the total number of vertices (optional)
      */
-    constructor(id: string, scene?: Scene, vertexData?: VertexData, updatable: boolean = false, mesh: Nullable<Mesh> = null) {
+    constructor(id: string, scene?: Scene, vertexData?: VertexData, updatable: boolean = false, mesh: Nullable<Mesh> = null, totalVertices: Nullable<number> = null) {
         this._scene = scene || <Scene>EngineStore.LastCreatedScene;
         if (!this._scene) {
             return;
@@ -157,10 +155,14 @@ export class Geometry implements IGetSetVerticesData {
         this._indices = [];
         this._updatable = updatable;
 
+        if (totalVertices !== null) {
+            this._totalVertices = totalVertices;
+        }
+
         // vertexData
         if (vertexData) {
             this.setAllVerticesData(vertexData, updatable);
-        } else {
+        } else if (totalVertices === null) {
             this._totalVertices = 0;
         }
 
@@ -299,7 +301,7 @@ export class Geometry implements IGetSetVerticesData {
             this._vertexBuffers[kind].dispose();
         }
 
-        if (buffer._buffer) {
+        if (buffer._buffer && buffer._ownsBuffer) {
             buffer._buffer._increaseReferences();
         }
 
@@ -310,7 +312,7 @@ export class Geometry implements IGetSetVerticesData {
         if (kind === VertexBuffer.PositionKind) {
             this._totalVertices = totalVertices ?? buffer._maxVerticesCount;
 
-            this._updateExtend(buffer.getFloatData(this._totalVertices));
+            this._updateExtend(this.useBoundingInfoFromGeometry && this._boundingInfo ? null : buffer.getFloatData(this._totalVertices));
             this._resetPointsArrayCache();
 
             // this._extend can be empty if buffer.getFloatData(this._totalVertices) returned null
@@ -784,12 +786,11 @@ export class Geometry implements IGetSetVerticesData {
     }
 
     private _applyToMesh(mesh: Mesh): void {
-        const numOfMeshes = this._meshes.length;
-
         // vertexBuffers
         for (const kind in this._vertexBuffers) {
-            if (numOfMeshes === 1) {
-                this._vertexBuffers[kind].create();
+            const vertexBuffer = this._vertexBuffers[kind];
+            if (!vertexBuffer._buffer.getBuffer()) {
+                vertexBuffer.create();
             }
 
             if (kind === VertexBuffer.PositionKind) {
@@ -806,7 +807,7 @@ export class Geometry implements IGetSetVerticesData {
         }
 
         // indexBuffer
-        if (numOfMeshes === 1 && this._indices && this._indices.length > 0) {
+        if (!this._indexBuffer && this._indices && this._indices.length > 0) {
             this._indexBuffer = this._engine.createIndexBuffer(this._indices, this._updatable, "Geometry_" + this.id + "_IndexBuffer");
         }
 
@@ -1030,41 +1031,55 @@ export class Geometry implements IGetSetVerticesData {
      * @returns a new geometry object
      */
     public copy(id: string): Geometry {
-        const vertexData = new VertexData();
+        const geometry = new Geometry(id, this._scene);
 
-        vertexData.indices = [];
-
-        const indices = this.getIndices();
+        const indices = this.getIndices(undefined, true);
         if (indices) {
-            for (let index = 0; index < indices.length; index++) {
-                vertexData.indices.push(indices[index]);
-            }
+            geometry.setIndices(indices);
         }
 
         let updatable = false;
-        let stopChecking = false;
         let kind;
         for (kind in this._vertexBuffers) {
-            const data = this.getVerticesData(kind);
-            if (data) {
-                if (data instanceof Float32Array) {
-                    vertexData.set(new Float32Array(<Float32Array>data), kind);
-                } else {
-                    vertexData.set(data.slice(0), kind);
-                }
-
-                if (!stopChecking) {
-                    const vb = this.getVertexBuffer(kind);
-
-                    if (vb) {
-                        updatable = vb.isUpdatable();
-                        stopChecking = !updatable;
-                    }
-                }
+            const vb = this.getVertexBuffer(kind)!;
+            const bufferData = vb.getData();
+            if (!bufferData) {
+                continue;
             }
+
+            const isUpdatable = vb.isUpdatable();
+            const size = vb.getSize();
+            const { type, byteOffset, byteStride, normalized } = vb;
+            updatable = updatable || isUpdatable;
+
+            let numElements = this._totalVertices;
+            if (vb.getIsInstanced()) {
+                // Do our best with the data we have to find a number of instances when the vertex buffer is instanced...
+                let bufferDataByteSize: number;
+                if (bufferData instanceof Array) {
+                    bufferDataByteSize = bufferData.length * 4;
+                } else {
+                    bufferDataByteSize = bufferData.byteLength;
+                }
+                numElements = bufferDataByteSize / byteStride;
+            }
+            const copy = GetTypedArrayData(bufferData, size, type, byteOffset, byteStride, numElements, true);
+            const newVb = new VertexBuffer(this._engine, copy, kind, {
+                updatable: isUpdatable,
+                useBytes: false,
+                stride: size, // Copy is tightly-packed, so stride = size
+                size: size, // Component size stays the same
+                offset: 0, // Copy starts at beginning of its own buffer
+                type: type,
+                normalized: normalized,
+                takeBufferOwnership: true,
+                instanced: vb.getIsInstanced(),
+            });
+
+            geometry.setVerticesBuffer(newVb, numElements);
         }
 
-        const geometry = new Geometry(id, this._scene, vertexData, updatable);
+        geometry._updatable = updatable;
 
         geometry.delayLoadState = this.delayLoadState;
         geometry.delayLoadingFile = this.delayLoadingFile;
@@ -1114,6 +1129,7 @@ export class Geometry implements IGetSetVerticesData {
      * Vertex buffers will not store CPU data anymore (this will prevent picking, collisions or physics to work correctly)
      */
     public clearCachedData(): void {
+        this._totalIndices = this._indices.length; // save the current value so that getTotalIndices can still work
         this._indices = [];
         this._resetPointsArrayCache();
 
@@ -1545,7 +1561,7 @@ export class Geometry implements IGetSetVerticesData {
         if (!SceneLoaderFlags.CleanBoneMatrixWeights) {
             return;
         }
-        let noInfluenceBoneIndex = 0.0;
+        let noInfluenceBoneIndex: number;
         if (parsedGeometry.skeletonId > -1) {
             const skeleton = mesh.getScene().getLastSkeletonById(parsedGeometry.skeletonId);
 

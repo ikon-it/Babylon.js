@@ -1,20 +1,17 @@
-import type { Nullable } from "../types";
-import { Observable } from "../Misc/observable";
-import type { Observer } from "../Misc/observable";
-import type { IDisposable } from "../scene";
-import { Scene } from "../scene";
-import type { Camera } from "../Cameras/camera";
+import { type Nullable } from "../types";
+import { Observable, type Observer } from "../Misc/observable";
+import { Scene, type IDisposable } from "../scene";
+import { type Camera } from "../Cameras/camera";
 import { WebXRSessionManager } from "./webXRSessionManager";
 import { WebXRCamera } from "./webXRCamera";
-import type { WebXRRenderTarget } from "./webXRTypes";
-import { WebXRState } from "./webXRTypes";
+import { type WebXRRenderTarget, WebXRState } from "./webXRTypes";
 import { WebXRFeatureName, WebXRFeaturesManager } from "./webXRFeaturesManager";
 import { Logger } from "../Misc/logger";
 import { UniversalCamera } from "../Cameras/universalCamera";
 import { Quaternion, Vector3 } from "../Maths/math.vector";
-import type { Engine } from "../Engines/engine";
-import type { ThinEngine } from "../Engines/thinEngine";
+import { type ThinEngine } from "../Engines/thinEngine";
 import { AbstractEngine } from "core/Engines/abstractEngine";
+import { Engine } from "../Engines";
 
 /**
  * Options for setting up XR spectator camera.
@@ -48,6 +45,9 @@ export class WebXRExperienceHelper implements IDisposable {
      * assigned either in the constructor or _moveXRToScene when persistent
      */
     private _scene: Scene;
+    private _spectatorStateChangedObserver: Nullable<Observer<WebXRState>> = null;
+    private _spectatorXRFrameObserver: Nullable<Observer<XRFrame>> = null;
+    private _spectatorAfterRenderObserver: Nullable<Observer<Camera>> = null;
 
     /**
      * Indicates whether persistent mode is activated or not
@@ -155,6 +155,7 @@ export class WebXRExperienceHelper implements IDisposable {
         if (!this.persistent || all) {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             this.exitXRAsync();
+            this._clearSpectatorObservers();
             this.onStateChangedObservable.clear();
         }
 
@@ -360,7 +361,18 @@ export class WebXRExperienceHelper implements IDisposable {
         this._setState(WebXRState.NOT_IN_XR);
     }
 
+    private _clearSpectatorObservers() {
+        this.sessionManager.onXRFrameObservable.remove(this._spectatorXRFrameObserver);
+        this._spectatorXRFrameObserver = null;
+        this._scene.onAfterRenderCameraObservable.remove(this._spectatorAfterRenderObserver);
+        this._spectatorAfterRenderObserver = null;
+        this.onStateChangedObservable.remove(this._spectatorStateChangedObserver);
+        this._spectatorStateChangedObserver = null;
+    }
+
     private _switchSpectatorMode(options?: WebXRSpectatorModeOption): void {
+        this._clearSpectatorObservers();
+
         const fps = options?.fps ? options.fps : 1000.0;
         const refreshRate = (1.0 / fps) * 1000.0;
         const cameraIndex = options?.preferredCameraIndex ? options?.preferredCameraIndex : 0;
@@ -371,7 +383,7 @@ export class WebXRExperienceHelper implements IDisposable {
                 if (delta >= refreshRate) {
                     this._lastTimestamp = this.sessionManager.currentTimestamp;
                     this._spectatorCamera.position.copyFrom(this.camera.rigCameras[cameraIndex].globalPosition);
-                    this._spectatorCamera.rotationQuaternion.copyFrom(this.camera.rigCameras[cameraIndex].absoluteRotation);
+                    this._spectatorCamera.rotationQuaternion?.copyFrom(this.camera.rigCameras[cameraIndex].absoluteRotation);
                 }
             }
         };
@@ -381,25 +393,33 @@ export class WebXRExperienceHelper implements IDisposable {
             }
             const onStateChanged = () => {
                 if (this.state === WebXRState.IN_XR) {
+                    this._spectatorCamera?.dispose();
                     this._spectatorCamera = new UniversalCamera("webxr-spectator", Vector3.Zero(), this._scene);
                     this._spectatorCamera.rotationQuaternion = new Quaternion();
                     this._scene.activeCameras = [this.camera, this._spectatorCamera];
-                    this.sessionManager.onXRFrameObservable.add(updateSpectatorCamera);
-                    this._scene.onAfterRenderCameraObservable.add((camera) => {
+                    this._spectatorXRFrameObserver = this.sessionManager.onXRFrameObservable.add(updateSpectatorCamera);
+                    this._spectatorAfterRenderObserver = this._scene.onAfterRenderCameraObservable.add((camera) => {
                         if (camera === this.camera) {
                             // reset the dimensions object for correct resizing
                             (this._scene.getEngine() as ThinEngine).framebufferDimensionsObject = null;
                         }
                     });
                 } else if (this.state === WebXRState.EXITING_XR) {
-                    this.sessionManager.onXRFrameObservable.removeCallback(updateSpectatorCamera);
+                    this.sessionManager.onXRFrameObservable.remove(this._spectatorXRFrameObserver);
+                    this._spectatorXRFrameObserver = null;
+
+                    this._scene.onAfterRenderCameraObservable.remove(this._spectatorAfterRenderObserver);
+                    this._spectatorAfterRenderObserver = null;
+                    this._spectatorCamera?.dispose();
+                    this._spectatorCamera = null;
                     this._scene.activeCameras = null;
                 }
             };
-            this.onStateChangedObservable.add(onStateChanged);
+            this._spectatorStateChangedObserver = this.onStateChangedObservable.add(onStateChanged);
             onStateChanged();
         } else {
-            this.sessionManager.onXRFrameObservable.removeCallback(updateSpectatorCamera);
+            this._spectatorCamera?.dispose();
+            this._spectatorCamera = null;
             this._scene.activeCameras = [this.camera];
         }
     }

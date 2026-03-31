@@ -1,21 +1,24 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Logger } from "../Misc/logger";
-import type { Nullable, FloatArray, IndicesArray } from "../types";
+import { type Nullable, type FloatArray, type IndicesArray } from "../types";
 import { Engine } from "../Engines/engine";
-import type { RenderTargetCreationOptions } from "../Materials/Textures/textureCreationOptions";
-import type { VertexBuffer } from "../Buffers/buffer";
+import { type RenderTargetCreationOptions } from "../Materials/Textures/textureCreationOptions";
+import { type VertexBuffer } from "../Buffers/buffer";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
-import type { Effect } from "../Materials/effect";
+import { type Effect } from "../Materials/effect";
 import { Constants } from "./constants";
-import type { IPipelineContext } from "./IPipelineContext";
+import { type IPipelineContext } from "./IPipelineContext";
 import { DataBuffer } from "../Buffers/dataBuffer";
-import type { IColor4Like, IViewportLike } from "../Maths/math.like";
-import type { ISceneLike } from "./abstractEngine";
+import { type IColor4Like, type IViewportLike } from "../Maths/math.like";
+import { type ISceneLike } from "./abstractEngine";
 import { PerformanceConfigurator } from "./performanceConfigurator";
-import type { DrawWrapper } from "../Materials/drawWrapper";
+import { type DrawWrapper } from "../Materials/drawWrapper";
 import { RenderTargetWrapper } from "./renderTargetWrapper";
-import type { IStencilState } from "../States/IStencilState";
+import { type IStencilState } from "../States/IStencilState";
 import { IsWrapper } from "../Materials/drawWrapper.functions";
+
+import "./AbstractEngine/abstractEngine.loadFile";
+import "./AbstractEngine/abstractEngine.textureLoaders";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 declare const global: any;
@@ -133,6 +136,7 @@ export class NullEngine extends Engine {
             maxVaryingVectors: 16,
             maxFragmentUniformVectors: 16,
             maxVertexUniformVectors: 16,
+            shaderFloatPrecision: 10, // Minimum precision for mediump floats WebGL 1
             standardDerivatives: false,
             astc: null,
             pvrtc: null,
@@ -144,6 +148,7 @@ export class NullEngine extends Engine {
             fragmentDepthSupported: false,
             highPrecisionShaderSupported: true,
             colorBufferFloat: false,
+            blendFloat: false,
             supportFloatTexturesResolve: false,
             rg11b10ufColorRenderable: false,
             textureFloat: false,
@@ -171,6 +176,9 @@ export class NullEngine extends Engine {
             texture2DArrayMaxLayerCount: 128,
             disableMorphTargetTexture: false,
             textureNorm16: false,
+            blendParametersPerTarget: false,
+            dualSourceBlending: false,
+            supportReadWriteStorageTextures: false,
         };
 
         this._features = {
@@ -200,7 +208,6 @@ export class NullEngine extends Engine {
             supportSpriteInstancing: false,
             forceVertexBufferStrideAndOffsetMultiple4Bytes: false,
             _checkNonFloatVertexBuffersDontRecreatePipelineContext: false,
-            _collectUbosUpdatedInFrame: false,
         };
 
         if (options.renderingCanvas) {
@@ -582,19 +589,20 @@ export class NullEngine extends Engine {
      * Sets the current alpha mode
      * @param mode defines the mode to use (one of the Engine.ALPHA_XXX)
      * @param noDepthWriteChange defines if depth writing state should remains unchanged (false by default)
+     * @param targetIndex defines the index of the target to set the alpha mode for (default is 0)
      * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/advanced/transparent_rendering
      */
-    public override setAlphaMode(mode: number, noDepthWriteChange: boolean = false): void {
-        if (this._alphaMode === mode) {
+    public override setAlphaMode(mode: number, noDepthWriteChange: boolean = false, targetIndex = 0): void {
+        if (this._alphaMode[targetIndex] === mode) {
             return;
         }
 
-        this.alphaState.alphaBlend = mode !== Constants.ALPHA_DISABLE;
+        this.alphaState.setAlphaBlend(mode !== Constants.ALPHA_DISABLE, 0);
 
         if (!noDepthWriteChange) {
             this.setDepthWrite(mode === Constants.ALPHA_DISABLE);
         }
-        this._alphaMode = mode;
+        this._alphaMode[targetIndex] = mode;
     }
 
     /**
@@ -715,6 +723,10 @@ export class NullEngine extends Engine {
         if (format) {
             texture.format = format;
         }
+        // Store buffer to support export/serialization and other operations.
+        if (buffer) {
+            texture._buffer = buffer;
+        }
 
         texture.isReady = true;
 
@@ -767,6 +779,7 @@ export class NullEngine extends Engine {
             fullOptions.samplingMode = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE;
         }
         const texture = new InternalTexture(this, InternalTextureSource.RenderTarget);
+        rtWrapper.setTexture(texture);
 
         const width = size.width || size;
         const height = size.height || size;
