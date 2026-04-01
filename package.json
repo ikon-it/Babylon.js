@@ -106,10 +106,7 @@
         "update-all-dependencies": "npm update -ws",
         "prepare-snapshot": "npm run build:snapshot -w @tools/babylon-server && build-tools -c ps",
         "start": "npx nx run-many --targets watch:dev:skip-compile serve --projects @babylonjs/root @tools/babylon-server --parallel 2 --skipNxCache true --outputStyle stream",
-        "start:devhost": "npm run serve -w @tools/dev-host",
-        "hyve-01-update-version": "node scripts/updateVersion.js 'xr-session-migration'",
-        "hyve-02-build": "npm run build -ws",
-        "hyve-03-pack": "npm pack -ws -pack-destination=\"../Ikon.Hyve360/src/Ikon.Hyve.UiComponents.Layouts/LayoutScene/babylon-packages\""
+        "start:devhost": "npm run serve -w @tools/dev-host"
     },
     "engines": {
         "node": ">=20.11.0 <23.0.0",
