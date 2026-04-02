@@ -208,71 +208,6 @@ export class WebXRDefaultExperience {
             // eslint-disable-next-line require-atomic-updates
             result.baseExperience = xrHelper;
 
-            result.input = new WebXRInput(xrHelper.sessionManager, xrHelper.camera, {
-                controllerOptions: {
-                    renderingGroupId: options.renderingGroupId,
-                },
-                ...(options.inputOptions || {}),
-            });
-
-            if (!options.disablePointerSelection) {
-                // Add default pointer selection
-                const pointerSelectionOptions = {
-                    ...options.pointerSelectionOptions,
-                    xrInput: result.input,
-                    renderingGroupId: options.renderingGroupId,
-                };
-
-                result.pointerSelection = result.baseExperience.featuresManager.enableFeature(
-                    WebXRControllerPointerSelection.Name,
-                    options.useStablePlugins ? "stable" : "latest",
-                    <IWebXRControllerPointerSelectionOptions>pointerSelectionOptions
-                );
-
-                if (!options.disableTeleportation) {
-                    // Add default teleportation, including rotation
-                    result.teleportation = result.baseExperience.featuresManager.enableFeature(
-                        WebXRMotionControllerTeleportation.Name,
-                        options.useStablePlugins ? "stable" : "latest",
-                        <IWebXRTeleportationOptions>{
-                            floorMeshes: options.floorMeshes,
-                            xrInput: result.input,
-                            renderingGroupId: options.renderingGroupId,
-                            ...options.teleportationOptions,
-                        }
-                    );
-                    result.teleportation.setSelectionFeature(result.pointerSelection);
-                }
-            }
-
-            if (!options.disableNearInteraction) {
-                // Add default pointer selection
-                result.nearInteraction = result.baseExperience.featuresManager.enableFeature(WebXRNearInteraction.Name, options.useStablePlugins ? "stable" : "latest", <
-                    IWebXRNearInteractionOptions
-                >{
-                    xrInput: result.input,
-                    farInteractionFeature: result.pointerSelection,
-                    renderingGroupId: options.renderingGroupId,
-                    useUtilityLayer: true,
-                    enableNearInteractionOnAllControllers: true,
-                    ...options.nearInteractionOptions,
-                });
-            }
-
-            if (!options.disableHandTracking) {
-                // Add default hand tracking
-                result.baseExperience.featuresManager.enableFeature(
-                    WebXRHandTracking.Name,
-                    options.useStablePlugins ? "stable" : "latest",
-                    <IWebXRHandTrackingOptions>{
-                        xrInput: result.input,
-                        ...options.handSupportOptions,
-                    },
-                    undefined,
-                    false
-                );
-            }
-
             // Create the WebXR output target
             result.renderTarget = result.baseExperience.sessionManager.getWebXRRenderTarget(result.options.outputCanvasOptions);
 
@@ -432,7 +367,12 @@ export class WebXRDefaultExperience {
         await this.baseExperience.moveXRToScene(nextScene);
 
         // re-initialize for the next scene
-        await this._initializeSceneAsync();
+        try {
+            await this._initializeSceneAsync();
+        } catch (error) {
+            Logger.Error("Error initializing XR on new scene");
+            Logger.Error(error);
+        }
 
         // let session manager know new scene & what features / code needs to run on SessionInit
         await this.baseExperience.sessionManager.moveXRToScene(nextScene, this, hookUp);
